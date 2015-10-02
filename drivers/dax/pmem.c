@@ -14,6 +14,7 @@
 #include <linux/memremap.h>
 #include <linux/module.h>
 #include <linux/pfn_t.h>
+#include <linux/pmem.h>
 #include "../nvdimm/pfn.h"
 #include "../nvdimm/nd.h"
 #include "device-dax.h"
@@ -110,7 +111,8 @@ static int dax_pmem_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	addr = devm_memremap_pages(dev, &res, &dax_pmem->ref, altmap);
+	addr = devm_memremap_pages(dev, &res, &dax_pmem->ref, altmap,
+							ARCH_MEMREMAP_PMEM);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 

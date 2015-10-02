@@ -503,7 +503,7 @@ int p2pmem_add_resource(struct p2pmem_dev *p, struct resource *res)
 	void *addr;
 	int nid = dev_to_node(&p->dev);
 
-	addr = devm_memremap_pages(&p->dev, res, &p->ref, NULL);
+	addr = devm_memremap_pages(&p->dev, res, &p->ref, NULL, MEMREMAP_WC);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 

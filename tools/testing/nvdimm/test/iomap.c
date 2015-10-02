@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/pfn_t.h>
+#include <linux/pmem.h>
 #include <linux/acpi.h>
 #include <linux/io.h>
 #include <linux/mm.h>
@@ -112,7 +113,7 @@ void *__wrap_devm_memremap_pages(struct device *dev, struct resource *res,
 
 	if (nfit_res)
 		return nfit_res->buf + offset - nfit_res->res.start;
-	return devm_memremap_pages(dev, res, ref, altmap);
+	return devm_memremap_pages(dev, res, ref, altmap, ARCH_MEMREMAP_PMEM);
 }
 EXPORT_SYMBOL(__wrap_devm_memremap_pages);
 
