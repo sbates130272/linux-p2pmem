@@ -175,12 +175,40 @@ static RADIX_TREE(pgmap_radix, GFP_KERNEL);
 #define SECTION_MASK ~((1UL << PA_SECTION_SHIFT) - 1)
 #define SECTION_SIZE (1UL << PA_SECTION_SHIFT)
 
+enum {
+	PAGEMAP_IO_MEM = 1 << 0,
+};
+
 struct page_map {
 	struct resource res;
 	struct percpu_ref *ref;
 	struct dev_pagemap pgmap;
 	struct vmem_altmap altmap;
+	void *kaddr;
+	int flags;
 };
+
+static int add_zone_device_pages(int nid, u64 start, u64 size)
+{
+	struct pglist_data *pgdat = NODE_DATA(nid);
+	struct zone *zone = pgdat->node_zones + ZONE_DEVICE;
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+
+	return __add_pages(nid, zone, start_pfn, nr_pages);
+}
+
+static void remove_zone_device_pages(u64 start, u64 size)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+	struct zone *zone;
+	int ret;
+
+	zone = page_zone(pfn_to_page(start_pfn));
+	ret = __remove_pages(zone, start_pfn, nr_pages);
+	WARN_ON_ONCE(ret);
+}
 
 void get_zone_device_page(struct page *page)
 {
@@ -246,9 +274,17 @@ static void devm_memremap_pages_release(struct device *dev, void *data)
 	/* pages are dead and unused, undo the arch mapping */
 	align_start = res->start & ~(SECTION_SIZE - 1);
 	align_size = ALIGN(resource_size(res), SECTION_SIZE);
-	arch_remove_memory(align_start, align_size);
+
+	if (page_map->flags & PAGEMAP_IO_MEM) {
+		remove_zone_device_pages(align_start, align_size);
+		iounmap(page_map->kaddr);
+	} else {
+		arch_remove_memory(align_start, align_size);
+	}
+
 	untrack_pfn(NULL, PHYS_PFN(align_start), align_size);
 	pgmap_radix_release(res);
+
 	dev_WARN_ONCE(dev, pgmap->altmap && pgmap->altmap->alloc,
 			"%s: failed to free all reserved pages\n", __func__);
 }
@@ -270,6 +306,8 @@ struct dev_pagemap *find_dev_pagemap(resource_size_t phys)
  * @res: "host memory" address range
  * @ref: a live per-cpu reference count
  * @altmap: optional descriptor for allocating the memmap from @res
+ * @flags: either MEMREMAP_WB, MEMREMAP_WT and MEMREMAP_WC
+ *         see memremap() for a description of the flags
  *
  * Notes:
  * 1/ @ref must be 'live' on entry and 'dead' before devm_memunmap_pages() time
@@ -280,7 +318,8 @@ struct dev_pagemap *find_dev_pagemap(resource_size_t phys)
  *    this is not enforced.
  */
 void *devm_memremap_pages(struct device *dev, struct resource *res,
-		struct percpu_ref *ref, struct vmem_altmap *altmap)
+		struct percpu_ref *ref, struct vmem_altmap *altmap,
+		unsigned long flags)
 {
 	resource_size_t key, align_start, align_size, align_end;
 	pgprot_t pgprot = PAGE_KERNEL;
@@ -288,6 +327,8 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 	struct page_map *page_map;
 	int error, nid, is_ram;
 	unsigned long pfn;
+	void *addr = NULL;
+	enum page_cache_mode pcm;
 
 	align_start = res->start & ~(SECTION_SIZE - 1);
 	align_size = ALIGN(res->start + resource_size(res), SECTION_SIZE)
@@ -353,14 +394,43 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 	if (nid < 0)
 		nid = numa_mem_id();
 
+	if (flags & MEMREMAP_WB)
+		pcm = _PAGE_CACHE_MODE_WB;
+	else if (flags & MEMREMAP_WT)
+		pcm = _PAGE_CACHE_MODE_WT;
+	else if (flags & MEMREMAP_WC)
+		pcm = _PAGE_CACHE_MODE_WC;
+	else
+		pcm = _PAGE_CACHE_MODE_WB;
+
+	pgprot = __pgprot(pgprot_val(pgprot) | cachemode2protval(pcm));
+
 	error = track_pfn_remap(NULL, &pgprot, PHYS_PFN(align_start), 0,
 			align_size);
 	if (error)
 		goto err_pfn_remap;
 
-	error = arch_add_memory(nid, align_start, align_size, true);
+	if (flags & MEMREMAP_WB || !flags) {
+		error = arch_add_memory(nid, align_start, align_size, true);
+		addr = __va(res->start);
+	} else {
+		page_map->flags |= PAGEMAP_IO_MEM;
+		error = add_zone_device_pages(nid, align_start, align_size);
+	}
+
 	if (error)
 		goto err_add_memory;
+
+	if (!addr && (flags & MEMREMAP_WT))
+		addr = ioremap_wt(res->start, resource_size(res));
+
+	if (!addr && (flags & MEMREMAP_WC))
+		addr = ioremap_wc(res->start, resource_size(res));
+
+	if (!addr && page_map->flags & PAGEMAP_IO_MEM) {
+		remove_zone_device_pages(res->start, resource_size(res));
+		goto err_add_memory;
+	}
 
 	for_each_device_pfn(pfn, page_map) {
 		struct page *page = pfn_to_page(pfn);
@@ -374,8 +444,10 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 		list_del(&page->lru);
 		page->pgmap = pgmap;
 	}
+
+	page_map->kaddr = addr;
 	devres_add(dev, page_map);
-	return __va(res->start);
+	return addr;
 
  err_add_memory:
 	untrack_pfn(NULL, PHYS_PFN(align_start), align_size);
