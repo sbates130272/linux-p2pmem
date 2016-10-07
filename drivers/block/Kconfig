@@ -537,4 +537,31 @@ config BLK_DEV_RSXX
 	  To compile this driver as a module, choose M here: the
 	  module will be called rsxx.
 
+config BLK_DEV_IOPMEM
+	tristate "Persistent block device backed by PCIe Memory"
+	depends on ZONE_DEVICE
+	default n
+	help
+	  Say Y here if you want to include a generic device driver
+	  that can create a block device from persistent PCIe attached
+	  IO memory.
+
+	  To compile this driver as a module, choose M here: The
+	  module will be called iopmem. A block device will be created
+	  for each PCIe attached device that matches the vendor and
+	  device ID as specified in the module. Alternativel this
+	  driver can be bound to any aribtary PCIe function using the
+	  sysfs bind entry.
+
+	  This block device supports direct access (DAX) file systems
+	  and supports struct page backing for the IO Memory. This
+	  makes the underlying memory suitable for things like RDMA
+	  Memory Regions and Direct IO which is useful for PCIe
+	  peer-to-peer DMA operations.
+
+	  Note that persistent is only assured if the memory on the
+	  PCIe card has some form of power loss protection. This could
+	  be provided via some form of battery, a supercap/NAND combo
+	  or some exciting new persistent memory technology.
+
 endif # BLK_DEV

@@ -6510,6 +6510,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/iommu/
 F:	drivers/iommu/
 
+IOPMEM BLOCK DEVICE DRVIER
+M:	Stephen Bates <sbates@raithlin.com>
+L:	linux-block@vger.kernel.org
+S:	Maintained
+F:	drivers/block/iopmem.c
+F:	Documentation/blockdev/iopmem.txt
+
 IP MASQUERADING
 M:	Juanjo Ciarlante <jjciarla@raiz.uncu.edu.ar>
 S:	Maintained
