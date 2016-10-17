@@ -1,0 +1,62 @@
+IOPMEM Block Driver
+===================
+
+Logan Gunthorpe and Stephen Bates - October 2016
+
+Introduction
+------------
+
+The iopmem module creates a DAX capable block device from a BAR on a PCIe
+device. iopmem leverages heavily from the pmem driver although it utilizes IO
+memory rather than system memory as its backing store.
+
+Usage
+-----
+
+To include the iopmem module in your kernel please set CONFIG_BLK_DEV_IOPMEM
+to either y or m. A block device will be created for each PCIe attached device
+that matches the vendor and device ID as specified in the module. Currently an
+unallocated PMC PCIe ID is used as the default. Alternatively this driver can
+be bound to any aribtary PCIe function using the sysfs bind entry.
+
+The main purpose for an iopmem block device is expected to be for peer-2-peer
+PCIe transfers. We DO NOT RECCOMEND accessing a iopmem device using the local
+CPU unless you are doing one of the three following things:
+
+1. Creating a DAX capable filesystem on the iopmem device.
+2. Creating some files on the DAX capable filesystem.
+3. Interogating the files on said filesystem to obtain pointers that can be
+   passed to other PCIe devices for p2p DMA operations.
+
+Issues
+------
+
+1. Address Translation. Suggestions have been made that in certain
+architectures and topologies the dma_addr_t passed to the DMA master
+in a peer-2-peer transfer will not correctly route to the IO memory
+intended. However in our testing to date we have not seen this to be
+an issue, even in systems with IOMMUs and PCIe switches. It is our
+understanding that an IOMMU only maps system memory and would not
+interfere with device memory regions. (It certainly has no opportunity
+to do so if the transfer gets routed through a switch).
+
+2. Memory Segment Spacing. This patch has the same limitations that
+ZONE_DEVICE does in that memory regions must be spaces at least
+SECTION_SIZE bytes part. On x86 this is 128MB and there are cases where
+BARs can be placed closer together than this. Thus ZONE_DEVICE would not
+be usable on neighboring BARs. For our purposes, this is not an issue as
+we'd only be looking at enabling a single BAR in a given PCIe device.
+More exotic use cases may have problems with this.
+
+3. Coherency Issues. When IOMEM is written from both the CPU and a PCIe
+peer there is potential for coherency issues and for writes to occur out
+of order. This is something that users of this feature need to be
+cognizant of and may necessitate the use of CONFIG_EXPERT. Though really,
+this isn't much different than the existing situation with RDMA: if
+userspace sets up an MR for remote use, they need to be careful about
+using that memory region themselves.
+
+4. Architecture. Currently this patch is applicable only to x86
+architectures. The same is true for much of the code pertaining to
+PMEM and ZONE_DEVICE. It is hoped that the work will be extended to other
+ARCH over time.
