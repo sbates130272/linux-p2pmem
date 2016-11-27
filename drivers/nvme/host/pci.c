@@ -26,6 +26,7 @@
 #include <linux/once.h>
 #include <linux/pci.h>
 #include <linux/t10-pi.h>
+#include <linux/nvme-peer.h>
 #include <linux/types.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/sed-opal.h>
@@ -76,6 +77,10 @@ struct nvme_queue;
 
 static void nvme_process_cq(struct nvme_queue *nvmeq);
 static void nvme_dev_disable(struct nvme_dev *dev, bool shutdown);
+static int nvme_create_queue(struct nvme_queue *nvmeq, int qid);
+static int nvme_suspend_queue(struct nvme_queue *nvmeq);
+static int adapter_delete_sq(struct nvme_dev *dev, u16 sqid);
+static int adapter_delete_cq(struct nvme_dev *dev, u16 cqid);
 
 /*
  * Represents an NVM Express device.  Each nvme_dev is a PCI function.
@@ -176,6 +181,7 @@ struct nvme_queue {
 
 	/* p2p */
 	bool p2p;
+	struct nvme_peer_resource resource;
 };
 
 /*
@@ -197,6 +203,91 @@ struct nvme_iod {
 	struct scatterlist *sg;
 	struct scatterlist inline_sg[0];
 };
+
+static int nvme_peer_init_resource(struct nvme_queue *nvmeq,
+				   enum nvme_peer_resource_mask mask,
+				   void (* stop_master_peer)(struct pci_dev *pdev))
+{
+	struct nvme_dev *dev = nvmeq->dev;
+	int qid = nvmeq->qid;
+	int ret = 0;
+
+	if (mask & NVME_PEER_SQT_DBR)
+		/* Calculation from NVMe 1.2.1 SPEC */
+		nvmeq->resource.sqt_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid)) * (4 << NVME_CAP_STRIDE(lo_hi_readq(dev->bar + NVME_REG_CAP)))));
+
+	if (mask & NVME_PEER_CQH_DBR)
+		/* Calculation from NVMe 1.2.1 SPEC */
+		nvmeq->resource.cqh_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid) + 1) * (4 << NVME_CAP_STRIDE(lo_hi_readq(dev->bar + NVME_REG_CAP)))));
+
+	if (mask & NVME_PEER_SQ_PAS)
+		nvmeq->resource.sq_dma_addr = nvmeq->sq_dma_addr;
+
+	if (mask & NVME_PEER_CQ_PAS)
+		nvmeq->resource.cq_dma_addr = nvmeq->cq_dma_addr;
+
+	if (mask & NVME_PEER_SQ_SZ)
+		nvmeq->resource.nvme_sq_size = SQ_SIZE(dev->q_depth);
+
+	if (mask & NVME_PEER_CQ_SZ)
+		nvmeq->resource.nvme_cq_size = CQ_SIZE(dev->q_depth);
+
+	if (mask & NVME_PEER_MEM_LOG_PG_SZ)
+		nvmeq->resource.memory_log_page_size = __ffs(dev->ctrl.page_size >> 12); /* memory_log_page_size is in 4K granularity */
+
+	nvmeq->resource.flags = NVME_QUEUE_PHYS_CONTIG;
+	nvmeq->resource.stop_master_peer = stop_master_peer;
+
+	return ret;
+}
+
+void nvme_peer_put_resource(struct nvme_peer_resource *resource)
+{
+	struct nvme_queue *nvmeq = container_of(resource, struct nvme_queue,
+						resource);
+	mutex_lock(&resource->lock);
+	resource->in_use = false;
+	resource->stop_master_peer = NULL;
+
+	/* Restart the queue for future usage */
+	nvme_suspend_queue(nvmeq);
+	adapter_delete_sq(nvmeq->dev, nvmeq->qid);
+	adapter_delete_cq(nvmeq->dev, nvmeq->qid);
+
+	nvme_create_queue(nvmeq, nvmeq->qid);
+
+	mutex_unlock(&resource->lock);
+}
+EXPORT_SYMBOL_GPL(nvme_peer_put_resource);
+
+struct nvme_peer_resource *nvme_peer_get_resource(struct pci_dev *pdev,
+	enum nvme_peer_resource_mask mask,
+	void (* stop_master_peer)(struct pci_dev *pdev))
+{
+	struct nvme_dev *dev = pci_get_drvdata(pdev);
+	struct nvme_queue *nvmeq;
+	unsigned i;
+	int ret;
+
+	for (i = 0; i < dev->online_queues; i++) {
+		nvmeq = dev->queues[i];
+		if (nvmeq->p2p) {
+			mutex_lock(&nvmeq->resource.lock);
+			if (!nvmeq->resource.in_use) {
+				ret = nvme_peer_init_resource(nvmeq, mask, stop_master_peer);
+				if (!ret) {
+					nvmeq->resource.in_use = true;
+					mutex_unlock(&nvmeq->resource.lock);
+					return &nvmeq->resource;
+				}
+			}
+			mutex_unlock(&nvmeq->resource.lock);
+		}
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(nvme_peer_get_resource);
 
 /*
  * Check we didin't inadvertently grow the command struct
@@ -1448,6 +1539,8 @@ static struct nvme_queue *nvme_alloc_queue(struct nvme_dev *dev, int qid,
 	nvmeq->qid = qid;
 	nvmeq->cq_vector = -1;
 	nvmeq->p2p = qid > (dev->max_qid - dev->num_p2p_queues);
+	if (nvmeq->p2p)
+		mutex_init(&nvmeq->resource.lock);
 	dev->queues[qid] = nvmeq;
 	dev->ctrl.queue_count++;
 
