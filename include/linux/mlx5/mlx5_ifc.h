@@ -2052,6 +2052,7 @@ enum {
 
 enum {
 	MLX5_QPC_OFFLOAD_TYPE_RNDV  = 0x1,
+	MLX5_QPC_OFFLOAD_TYPE_NVMF  = 0x2,
 };
 
 enum {
@@ -3012,6 +3013,7 @@ enum {
 
 enum {
 	MLX5_XRQC_OFFLOAD_RNDV = 0x1,
+	MLX5_XRQC_OFFLOAD_NVMF = 0x2,
 };
 
 struct mlx5_ifc_tag_matching_topology_context_bits {
@@ -3023,6 +3025,34 @@ struct mlx5_ifc_tag_matching_topology_context_bits {
 	u8         hw_phase_cnt[0x10];
 
 	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_nvme_offload_context_bits {
+	u8         nvmf_offload_type[0x8];
+	u8         reserved_at_8[0x3];
+	u8         log_max_namespace[0x5];
+	u8         reserved_at_10[0x10];
+
+	u8         offloaded_capsules_count[0x20];
+
+	u8         ioccsz[0x20];
+
+	u8         icdoff[0x8];
+	u8         reserved_at_68[0x3];
+	u8         log_max_io_size[0x5];
+	u8         reserved_at_70[0xc];
+	u8         nvme_memory_log_page_size[0x4];
+
+	u8         reserved_at_80[0xb];
+	u8         staging_buffer_log_page_size[0x5];
+	u8         staging_buffer_number_of_pages[0x10];
+
+	u8         staging_buffer_page_offset[0x20];
+
+	u8         reserved_at_c0[0x10];
+	u8         nvme_queue_size[0x10];
+
+	u8         reserved_at_e0[0x120];
 };
 
 struct mlx5_ifc_xrqc_bits {
@@ -3042,8 +3072,9 @@ struct mlx5_ifc_xrqc_bits {
 	u8         reserved_at_60[0xa0];
 
 	struct mlx5_ifc_tag_matching_topology_context_bits tag_matching_topology_context;
+	struct mlx5_ifc_nvme_offload_context_bits nvme_offload_context;
 
-	u8         reserved_at_180[0x280];
+	u8         reserved_at_380[0x80];
 
 	struct mlx5_ifc_wq_bits wq;
 };
