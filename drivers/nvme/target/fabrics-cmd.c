@@ -117,6 +117,16 @@ static u16 nvmet_install_queue(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 	/* note: convert queue size from 0's-based value to 1's-based value */
 	nvmet_cq_setup(ctrl, req->cq, qid, sqsize + 1);
 	nvmet_sq_setup(ctrl, req->sq, qid, sqsize + 1);
+
+	if (ctrl->ops->install_queue) {
+		int ret = ctrl->ops->install_queue(req->sq);
+		if (ret) {
+			pr_err("failed to install queue %d cntlid %d ret %d\n",
+				qid, ret, ctrl->cntlid);
+			return NVME_SC_CONNECT_INVALID_PARAM | NVME_SC_DNR;
+		}
+	}
+
 	return 0;
 }
 
