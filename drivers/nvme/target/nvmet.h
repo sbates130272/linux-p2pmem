@@ -98,6 +98,10 @@ struct nvmet_port {
 	struct list_head		referrals;
 	void				*priv;
 	bool				enabled;
+
+	int				nr_cpus;
+	cpumask_var_t			cpumask;
+	int				*cpus;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)

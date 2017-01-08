@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/ctype.h>
+#include <linux/cpumask.h>
 
 #include "nvmet.h"
 
@@ -25,6 +26,56 @@ static struct config_item_type nvmet_subsys_type;
 static struct config_item_type nvmet_host_type;
 static struct config_item_type nvmet_pt_type;
 static struct config_item_type nvmet_subsys_type;
+
+static ssize_t nvmet_addr_cpulist_show(struct config_item *item,
+		char *page)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+
+	return sprintf(page, "%*pbl\n", cpumask_pr_args(port->cpumask));
+}
+
+static ssize_t nvmet_addr_cpulist_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	cpumask_var_t cpumask;
+	int i, err;
+
+	if (port->enabled) {
+		pr_err("Cannot specify cpulist while enabled\n");
+		pr_err("Disable the port before changing cores\n");
+		return -EACCES;
+	}
+
+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+		return -ENOMEM;
+
+	err = cpulist_parse(page, cpumask);
+	if (err) {
+		pr_err("bad cpumask given (%d): %s\n", err, page);
+		return err;
+	}
+
+	if (!cpumask_intersects(cpumask, cpu_online_mask)) {
+		pr_err("cpulist consists of offline cpus: %s\n", page);
+		return err;
+	}
+
+	/* copy cpumask */
+	cpumask_copy(port->cpumask, cpumask);
+	free_cpumask_var(cpumask);
+
+	/* clear port cpulist */
+	port->nr_cpus = 0;
+	/* reset port cpulist */
+	for_each_cpu(i, cpumask)
+		port->cpus[port->nr_cpus++] = i;
+
+	return count;
+}
+
+CONFIGFS_ATTR(nvmet_, addr_cpulist);
 
 /*
  * nvmet_port Generic ConfigFS definitions.
@@ -987,6 +1038,7 @@ static struct config_group *nvmet_referral_make(
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&port->entry);
+
 	config_group_init_type_name(&port->group, name, &nvmet_referral_type);
 
 	return &port->group;
@@ -1008,6 +1060,8 @@ static void nvmet_port_release(struct config_item *item)
 {
 	struct nvmet_port *port = to_nvmet_port(item);
 
+	kfree(port->cpus);
+	free_cpumask_var(port->cpumask);
 	kfree(port);
 }
 
@@ -1017,6 +1071,7 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_traddr,
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
+	&nvmet_attr_addr_cpulist,
 	NULL,
 };
 
@@ -1035,6 +1090,7 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 {
 	struct nvmet_port *port;
 	u16 portid;
+	int i;
 
 	if (kstrtou16(name, 0, &portid))
 		return ERR_PTR(-EINVAL);
@@ -1046,6 +1102,20 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 	INIT_LIST_HEAD(&port->entry);
 	INIT_LIST_HEAD(&port->subsystems);
 	INIT_LIST_HEAD(&port->referrals);
+
+	if (!alloc_cpumask_var(&port->cpumask, GFP_KERNEL))
+		goto err_free_port;
+
+	port->nr_cpus = num_possible_cpus();
+
+	port->cpus = kcalloc(sizeof(int), port->nr_cpus, GFP_KERNEL);
+	if (!port->cpus)
+		goto err_free_cpumask;
+
+	for_each_possible_cpu(i) {
+		cpumask_set_cpu(i, port->cpumask);
+		port->cpus[i] = i;
+	}
 
 	port->disc_addr.portid = cpu_to_le16(portid);
 	config_group_init_type_name(&port->group, name, &nvmet_port_type);
@@ -1059,6 +1129,11 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 	configfs_add_default_group(&port->referrals_group, &port->group);
 
 	return &port->group;
+
+err_free_cpumask:
+	free_cpumask_var(port->cpumask);
+err_free_port:
+	return ERR_PTR(-ENOMEM);
 }
 
 static struct configfs_group_operations nvmet_ports_group_ops = {
