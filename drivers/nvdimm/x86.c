@@ -34,3 +34,9 @@ void arch_wb_cache_pmem(void *addr, size_t size)
 		clwb(p);
 }
 EXPORT_SYMBOL_GPL(arch_wb_cache_pmem);
+
+void arch_invalidate_pmem(void *addr, size_t size)
+{
+	clflush_cache_range(addr, size);
+}
+EXPORT_SYMBOL_GPL(arch_invalidate_pmem);
