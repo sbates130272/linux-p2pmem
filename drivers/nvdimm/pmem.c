@@ -245,19 +245,19 @@ static size_t pmem_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 
 		if (bytes < 8) {
 			if (!IS_ALIGNED(dest, 4) || (bytes != 4))
-				wb_cache_pmem(addr, 1);
+				arch_wb_cache_pmem(addr, 1);
 		} else {
 			if (!IS_ALIGNED(dest, 8)) {
 				dest = ALIGN(dest, boot_cpu_data.x86_clflush_size);
-				wb_cache_pmem(addr, 1);
+				arch_wb_cache_pmem(addr, 1);
 			}
 
 			flushed = dest - (unsigned long) addr;
 			if (bytes > flushed && !IS_ALIGNED(bytes - flushed, 8))
-				wb_cache_pmem(addr + bytes - 1, 1);
+				arch_wb_cache_pmem(addr + bytes - 1, 1);
 		}
 	} else
-		wb_cache_pmem(addr, bytes);
+		arch_wb_cache_pmem(addr, bytes);
 
 	return len;
 }
@@ -279,11 +279,7 @@ static long pmem_dax_direct_access(struct dax_device *dax_dev,
 static void pmem_dax_flush(struct dax_device *dax_dev, pgoff_t pgoff,
 		void *addr, size_t size)
 {
-	/*
-	 * TODO: move arch specific cache management into the driver
-	 * directly.
-	 */
-	wb_cache_pmem(addr, size);
+	arch_wb_cache_pmem(addr, size);
 }
 
 static const struct dax_operations pmem_dax_ops = {
