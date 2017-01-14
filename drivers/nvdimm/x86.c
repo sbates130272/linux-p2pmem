@@ -10,6 +10,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/uio.h>
+#include <linux/uaccess.h>
+#include <linux/highmem.h>
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
 #include <asm/special_insns.h>
@@ -105,3 +108,48 @@ void arch_memcpy_to_pmem(void *_dst, void *_src, unsigned size)
 	}
 }
 EXPORT_SYMBOL_GPL(arch_memcpy_to_pmem);
+
+static int pmem_from_user(void *dst, const void __user *src, unsigned size)
+{
+	unsigned long flushed, dest = (unsigned long) dest;
+	int rc = __copy_from_user_nocache(dst, src, size);
+
+	/*
+	 * On x86_64 __copy_from_user_nocache() uses non-temporal stores
+	 * for the bulk of the transfer, but we need to manually flush
+	 * if the transfer is unaligned. A cached memory copy is used
+	 * when destination or size is not naturally aligned. That is:
+	 *   - Require 8-byte alignment when size is 8 bytes or larger.
+	 *   - Require 4-byte alignment when size is 4 bytes.
+	 */
+	if (size < 8) {
+		if (!IS_ALIGNED(dest, 4) || size != 4)
+			arch_wb_cache_pmem(dst, 1);
+	} else {
+		if (!IS_ALIGNED(dest, 8)) {
+			dest = ALIGN(dest, boot_cpu_data.x86_clflush_size);
+			arch_wb_cache_pmem(dst, 1);
+		}
+
+		flushed = dest - (unsigned long) dst;
+		if (size > flushed && !IS_ALIGNED(size - flushed, 8))
+			arch_wb_cache_pmem(dst + size - 1, 1);
+	}
+
+	return rc;
+}
+
+static void pmem_from_page(char *to, struct page *page, size_t offset, size_t len)
+{
+	char *from = kmap_atomic(page);
+
+	arch_memcpy_to_pmem(to, from + offset, len);
+	kunmap_atomic(from);
+}
+
+size_t arch_copy_from_iter_pmem(void *addr, size_t bytes, struct iov_iter *i)
+{
+	return copy_from_iter_ops(addr, bytes, i, pmem_from_user, pmem_from_page,
+			arch_memcpy_to_pmem);
+}
+EXPORT_SYMBOL_GPL(arch_copy_from_iter_pmem);

@@ -38,6 +38,7 @@ config BLK_DEV_PMEM
 
 config ARCH_HAS_PMEM_API
 	depends on X86_64
+	select COPY_FROM_ITER_OPS
 	def_bool y
 
 config ND_BLK
