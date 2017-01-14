@@ -20,7 +20,6 @@
 #include <linux/list.h>
 #include <linux/acpi.h>
 #include <linux/sort.h>
-#include <linux/pmem.h>
 #include <linux/io.h>
 #include <linux/nd.h>
 #include <asm/cacheflush.h>
@@ -1776,7 +1775,7 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk,
 		}
 
 		if (rw)
-			memcpy_to_pmem(mmio->addr.aperture + offset,
+			arch_memcpy_to_pmem(mmio->addr.aperture + offset,
 					iobuf + copied, c);
 		else {
 			if (nfit_blk->dimm_flags & NFIT_BLK_READ_FLUSH)

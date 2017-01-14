@@ -10,9 +10,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/libnvdimm.h>
 #include <linux/device.h>
 #include <linux/sizes.h>
-#include <linux/pmem.h>
 #include "nd-core.h"
 #include "pmem.h"
 #include "pfn.h"
@@ -267,7 +267,7 @@ static int nsio_rw_bytes(struct nd_namespace_common *ndns,
 			rc = -EIO;
 	}
 
-	memcpy_to_pmem(nsio->addr + offset, buf, size);
+	arch_memcpy_to_pmem(nsio->addr + offset, buf, size);
 	nvdimm_flush(to_nd_region(ndns->dev.parent));
 
 	return rc;

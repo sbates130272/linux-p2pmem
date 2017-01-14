@@ -14,7 +14,6 @@
 #include <linux/device.h>
 #include <linux/sort.h>
 #include <linux/slab.h>
-#include <linux/pmem.h>
 #include <linux/list.h>
 #include <linux/nd.h>
 #include "nd-core.h"

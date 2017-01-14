@@ -162,4 +162,13 @@ void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 u64 nd_fletcher64(void *addr, size_t len, bool le);
 void nvdimm_flush(struct nd_region *nd_region);
 int nvdimm_has_flush(struct nd_region *nd_region);
+#ifdef CONFIG_ARCH_HAS_PMEM_API
+void arch_memcpy_to_pmem(void *dst, void *src, unsigned size);
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WB
+#else
+static inline void arch_memcpy_to_pmem(void *dst, void *src, unsigned size)
+{
+}
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WT
+#endif /* CONFIG_ARCH_HAS_PMEM_API */
 #endif /* __LIBNVDIMM_H__ */
