@@ -220,6 +220,48 @@ __weak long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 	return PHYS_PFN(pmem->size - pmem->pfn_pad - offset);
 }
 
+static size_t pmem_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff,
+		void *addr, size_t bytes, struct iov_iter *i)
+{
+	size_t len;
+
+	/* TODO: skip the write-back by always using non-temporal stores */
+	len = copy_from_iter_nocache(addr, bytes, i);
+
+	/*
+	 * In the iovec case on x86_64 copy_from_iter_nocache() uses
+	 * non-temporal stores for the bulk of the transfer, but we need
+	 * to manually flush if the transfer is unaligned. A cached
+	 * memory copy is used when destination or size is not naturally
+	 * aligned. That is:
+	 *   - Require 8-byte alignment when size is 8 bytes or larger.
+	 *   - Require 4-byte alignment when size is 4 bytes.
+	 *
+	 * In the non-iovec case the entire destination needs to be
+	 * flushed.
+	 */
+	if (iter_is_iovec(i)) {
+		unsigned long flushed, dest = (unsigned long) addr;
+
+		if (bytes < 8) {
+			if (!IS_ALIGNED(dest, 4) || (bytes != 4))
+				wb_cache_pmem(addr, 1);
+		} else {
+			if (!IS_ALIGNED(dest, 8)) {
+				dest = ALIGN(dest, boot_cpu_data.x86_clflush_size);
+				wb_cache_pmem(addr, 1);
+			}
+
+			flushed = dest - (unsigned long) addr;
+			if (bytes > flushed && !IS_ALIGNED(bytes - flushed, 8))
+				wb_cache_pmem(addr + bytes - 1, 1);
+		}
+	} else
+		wb_cache_pmem(addr, bytes);
+
+	return len;
+}
+
 static const struct block_device_operations pmem_fops = {
 	.owner =		THIS_MODULE,
 	.rw_page =		pmem_rw_page,
@@ -236,6 +278,7 @@ static long pmem_dax_direct_access(struct dax_device *dax_dev,
 
 static const struct dax_operations pmem_dax_ops = {
 	.direct_access = pmem_dax_direct_access,
+	.copy_from_iter = pmem_copy_from_iter,
 };
 
 static void pmem_release_queue(void *q)
