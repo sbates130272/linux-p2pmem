@@ -275,6 +275,7 @@ static int pmem_attach_disk(struct device *dev,
 	struct vmem_altmap __altmap, *altmap = NULL;
 	struct resource *res = &nsio->res;
 	struct nd_pfn *nd_pfn = NULL;
+	int has_flush, fua = 0, wbc;
 	struct dax_device *dax_dev;
 	int nid = dev_to_node(dev);
 	struct nd_pfn_sb *pfn_sb;
@@ -302,8 +303,12 @@ static int pmem_attach_disk(struct device *dev,
 	dev_set_drvdata(dev, pmem);
 	pmem->phys_addr = res->start;
 	pmem->size = resource_size(res);
-	if (nvdimm_has_flush(nd_region) < 0)
+	has_flush = nvdimm_has_flush(nd_region);
+	if (has_flush < 0)
 		dev_warn(dev, "unable to guarantee persistence of writes\n");
+	else
+		fua = has_flush;
+	wbc = nvdimm_has_cache(nd_region);
 
 	if (!devm_request_mem_region(dev, res->start, resource_size(res),
 				dev_name(&ndns->dev))) {
@@ -344,7 +349,7 @@ static int pmem_attach_disk(struct device *dev,
 		return PTR_ERR(addr);
 	pmem->virt_addr = addr;
 
-	blk_queue_write_cache(q, true, true);
+	blk_queue_write_cache(q, wbc, fua);
 	blk_queue_make_request(q, pmem_make_request);
 	blk_queue_physical_block_size(q, PAGE_SIZE);
 	blk_queue_max_hw_sectors(q, UINT_MAX);
