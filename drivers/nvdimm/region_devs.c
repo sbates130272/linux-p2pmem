@@ -168,6 +168,11 @@ bool is_nd_blk(struct device *dev)
 	return dev ? dev->type == &nd_blk_device_type : false;
 }
 
+bool is_nd_volatile(struct device *dev)
+{
+	return dev ? dev->type == &nd_volatile_device_type : false;
+}
+
 struct nd_region *to_nd_region(struct device *dev)
 {
 	struct nd_region *nd_region = container_of(dev, struct nd_region, dev);
@@ -214,7 +219,7 @@ EXPORT_SYMBOL_GPL(nd_blk_region_set_provider_data);
  */
 int nd_region_to_nstype(struct nd_region *nd_region)
 {
-	if (is_nd_pmem(&nd_region->dev)) {
+	if (is_memory(&nd_region->dev)) {
 		u16 i, alias;
 
 		for (i = 0, alias = 0; i < nd_region->ndr_mappings; i++) {
@@ -242,7 +247,7 @@ static ssize_t size_show(struct device *dev,
 	struct nd_region *nd_region = to_nd_region(dev);
 	unsigned long long size = 0;
 
-	if (is_nd_pmem(dev)) {
+	if (is_memory(dev)) {
 		size = nd_region->ndr_size;
 	} else if (nd_region->ndr_mappings == 1) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[0];
@@ -278,7 +283,7 @@ static ssize_t set_cookie_show(struct device *dev,
 	struct nd_region *nd_region = to_nd_region(dev);
 	struct nd_interleave_set *nd_set = nd_region->nd_set;
 
-	if (is_nd_pmem(dev) && nd_set)
+	if (is_memory(dev) && nd_set)
 		/* pass, should be precluded by region_visible */;
 	else
 		return -ENXIO;
@@ -305,7 +310,7 @@ resource_size_t nd_region_available_dpa(struct nd_region *nd_region)
 		if (!ndd)
 			return 0;
 
-		if (is_nd_pmem(&nd_region->dev)) {
+		if (is_memory(&nd_region->dev)) {
 			available += nd_pmem_available_dpa(nd_region,
 					nd_mapping, &overlap);
 			if (overlap > blk_max_overlap) {
@@ -469,10 +474,10 @@ static umode_t region_visible(struct kobject *kobj, struct attribute *a, int n)
 	struct nd_interleave_set *nd_set = nd_region->nd_set;
 	int type = nd_region_to_nstype(nd_region);
 
-	if (!is_nd_pmem(dev) && a == &dev_attr_pfn_seed.attr)
+	if (!is_memory(dev) && a == &dev_attr_pfn_seed.attr)
 		return 0;
 
-	if (!is_nd_pmem(dev) && a == &dev_attr_dax_seed.attr)
+	if (!is_memory(dev) && a == &dev_attr_dax_seed.attr)
 		return 0;
 
 	if (a != &dev_attr_set_cookie.attr
@@ -483,7 +488,7 @@ static umode_t region_visible(struct kobject *kobj, struct attribute *a, int n)
 				|| type == ND_DEVICE_NAMESPACE_BLK)
 			&& a == &dev_attr_available_size.attr)
 		return a->mode;
-	else if (is_nd_pmem(dev) && nd_set)
+	else if (is_memory(dev) && nd_set)
 		return a->mode;
 
 	return 0;
@@ -535,7 +540,7 @@ static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 {
 	struct nd_region *nd_region;
 
-	if (!probe && (is_nd_pmem(dev) || is_nd_blk(dev))) {
+	if (!probe && is_nd_region(dev)) {
 		int i;
 
 		nd_region = to_nd_region(dev);
@@ -553,12 +558,8 @@ static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 			if (ndd)
 				atomic_dec(&nvdimm->busy);
 		}
-
-		if (is_nd_pmem(dev))
-			return;
 	}
-	if (dev->parent && (is_nd_blk(dev->parent) || is_nd_pmem(dev->parent))
-			&& probe) {
+	if (dev->parent && is_nd_region(dev->parent) && probe) {
 		nd_region = to_nd_region(dev->parent);
 		nvdimm_bus_lock(dev);
 		if (nd_region->ns_seed == dev)
