@@ -147,3 +147,11 @@ source "drivers/memory/samsung/Kconfig"
 source "drivers/memory/tegra/Kconfig"
 
 endif
+
+config P2PMEM
+	bool "Peer 2 Peer Memory Device Support"
+	depends on ZONE_DEVICE
+	depends on MEMORY # Hack to prevent set not build issue
+	select GENERIC_ALLOCATOR
+	help
+	  This driver is for peer 2 peer memory device managers.
