@@ -146,3 +146,8 @@ source "drivers/memory/samsung/Kconfig"
 source "drivers/memory/tegra/Kconfig"
 
 endif
+
+config P2PMEM
+	bool "Peer 2 Peer Memory Device Support"
+	help
+	  This driver is for peer 2 peer memory device managers.
