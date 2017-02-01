@@ -17,6 +17,8 @@
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/ctype.h>
+#include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 
 #include "nvmet.h"
 
@@ -1094,6 +1096,68 @@ static void nvmet_port_release(struct config_item *item)
 	kfree(port);
 }
 
+#ifdef CONFIG_PCI_P2PDMA
+static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+
+	if (!port->use_p2pmem)
+		return sprintf(page, "none\n");
+
+	if (!port->p2p_dev)
+		return sprintf(page, "auto\n");
+
+	return sprintf(page, "%s\n", pci_name(port->p2p_dev));
+}
+
+static ssize_t nvmet_p2pmem_store(struct config_item *item,
+				  const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	struct device *dev;
+	struct pci_dev *p2p_dev = NULL;
+	bool use_p2pmem;
+
+	dev = bus_find_device_by_name(&pci_bus_type, NULL, page);
+	if (dev) {
+		use_p2pmem = true;
+		p2p_dev = to_pci_dev(dev);
+
+		if (!pci_has_p2pmem(p2p_dev)) {
+			pr_err("PCI device has no peer-to-peer memory: %s\n",
+			       page);
+			pci_dev_put(p2p_dev);
+			return -ENODEV;
+		}
+	} else if (sysfs_streq(page, "auto")) {
+		use_p2pmem = 1;
+	} else if ((page[0] == '0' || page[0] == '1') && !iscntrl(page[1])) {
+		/*
+		 * If the user enters a PCI device that  doesn't exist
+		 * like "0000:01:00.1", we don't want strtobool to think
+		 * it's a '0' when it's clearly not what the user wanted.
+		 * So we require 0's and 1's to be exactly one character.
+		 */
+		goto no_such_pci_device;
+	} else if (strtobool(page, &use_p2pmem)) {
+		goto no_such_pci_device;
+	}
+
+	down_write(&nvmet_config_sem);
+	port->use_p2pmem = use_p2pmem;
+	pci_dev_put(port->p2p_dev);
+	port->p2p_dev = p2p_dev;
+	up_write(&nvmet_config_sem);
+
+	return count;
+
+no_such_pci_device:
+	pr_err("No such PCI device: %s\n", page);
+	return -ENODEV;
+}
+CONFIGFS_ATTR(nvmet_, p2pmem);
+#endif /* CONFIG_PCI_P2PDMA */
+
 static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_adrfam,
 	&nvmet_attr_addr_treq,
@@ -1101,6 +1165,9 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
 	&nvmet_attr_param_inline_data_size,
+#ifdef CONFIG_PCI_P2PDMA
+	&nvmet_attr_p2pmem,
+#endif
 	NULL,
 };
 
