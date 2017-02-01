@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/blkdev.h>
 #include <linux/module.h>
+#include <linux/pci-p2pdma.h>
 #include "nvmet.h"
 
 int nvmet_bdev_ns_enable(struct nvmet_ns *ns)
@@ -99,14 +100,14 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 			bio_set_op_attrs(bio, op, op_flags);
 
 			bio_chain(bio, prev);
-			submit_bio(prev);
+			pci_p2pdma_submit_bio(prev);
 		}
 
 		sector += sg->length >> 9;
 		sg_cnt--;
 	}
 
-	cookie = submit_bio(bio);
+	cookie = pci_p2pdma_submit_bio(bio);
 
 	blk_poll(bdev_get_queue(req->ns->bdev), cookie);
 }
