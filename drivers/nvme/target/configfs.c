@@ -867,12 +867,41 @@ static void nvmet_port_release(struct config_item *item)
 	kfree(port);
 }
 
+#ifdef CONFIG_PCI_P2PDMA
+static ssize_t nvmet_allow_p2pmem_show(struct config_item *item, char *page)
+{
+	return sprintf(page, "%d\n", to_nvmet_port(item)->allow_p2pmem);
+}
+
+static ssize_t nvmet_allow_p2pmem_store(struct config_item *item,
+					const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	bool allow;
+	int ret;
+
+	ret = strtobool(page, &allow);
+	if (ret)
+		return ret;
+
+	down_write(&nvmet_config_sem);
+	port->allow_p2pmem = allow;
+	up_write(&nvmet_config_sem);
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_, allow_p2pmem);
+#endif /* CONFIG_PCI_P2PDMA */
+
 static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_adrfam,
 	&nvmet_attr_addr_treq,
 	&nvmet_attr_addr_traddr,
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
+#ifdef CONFIG_PCI_P2PDMA
+	&nvmet_attr_allow_p2pmem,
+#endif
 	NULL,
 };
 
