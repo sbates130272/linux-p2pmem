@@ -23,6 +23,7 @@
 #include <linux/string.h>
 #include <linux/wait.h>
 #include <linux/inet.h>
+#include <linux/pci-p2pdma.h>
 #include <asm/unaligned.h>
 
 #include <rdma/ib_verbs.h>
@@ -68,6 +69,7 @@ struct nvmet_rdma_rsp {
 	u8			n_rdma;
 	u32			flags;
 	u32			invalidate_rkey;
+	struct pci_dev		*p2p_dev;
 
 	struct list_head	wait_list;
 	struct list_head	free_list;
@@ -479,12 +481,19 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 
 	if (rsp->n_rdma) {
 		rdma_rw_ctx_destroy(&rsp->rw, queue->cm_id->qp,
-				queue->cm_id->port_num, rsp->req.sg,
-				rsp->req.sg_cnt, nvmet_data_dir(&rsp->req), 0);
+			queue->cm_id->port_num, rsp->req.sg,
+			rsp->req.sg_cnt, nvmet_data_dir(&rsp->req),
+			rsp->p2p_dev ? RDMA_RW_CTX_FLAG_PCI_P2PDMA : 0);
 	}
 
-	if (rsp->req.sg != &rsp->cmd->inline_sg)
-		nvmet_rdma_free_sgl(rsp->req.sg, rsp->req.sg_cnt);
+	if (rsp->req.sg != &rsp->cmd->inline_sg) {
+		if (rsp->p2p_dev)
+			pci_p2pmem_free_sgl(rsp->p2p_dev, rsp->req.sg,
+					    rsp->req.sg_cnt);
+		else
+			nvmet_rdma_free_sgl(rsp->req.sg, rsp->req.sg_cnt);
+
+	}
 
 	if (unlikely(!list_empty_careful(&queue->rsp_wr_wait_list)))
 		nvmet_rdma_process_wr_wait_list(queue);
@@ -620,6 +629,7 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	u64 addr = le64_to_cpu(sgl->addr);
 	u32 len = get_unaligned_le24(sgl->length);
 	u32 key = get_unaligned_le32(sgl->key);
+	struct pci_dev *p2p_dev = NULL;
 	int ret;
 	u16 status;
 
@@ -627,14 +637,29 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	if (!len)
 		return 0;
 
-	status = nvmet_rdma_alloc_sgl(&rsp->req.sg, &rsp->req.sg_cnt,
-			len);
+	if (rsp->queue->nvme_sq.ctrl)
+		p2p_dev = rsp->queue->nvme_sq.ctrl->p2p_dev;
+
+	rsp->p2p_dev = NULL;
+	if (rsp->queue->nvme_sq.qid && p2p_dev) {
+		status = pci_p2pmem_alloc_sgl(p2p_dev, &rsp->req.sg,
+					      &rsp->req.sg_cnt, len);
+		if (!status)
+			rsp->p2p_dev = p2p_dev;
+	}
+
+	if (!rsp->p2p_dev) {
+		status = nvmet_rdma_alloc_sgl(&rsp->req.sg, &rsp->req.sg_cnt,
+				len);
+	}
+
 	if (status)
 		return status;
 
 	ret = rdma_rw_ctx_init(&rsp->rw, cm_id->qp, cm_id->port_num,
 			rsp->req.sg, rsp->req.sg_cnt, 0, addr, key,
-			nvmet_data_dir(&rsp->req), 0);
+			nvmet_data_dir(&rsp->req),
+			rsp->p2p_dev ? RDMA_RW_CTX_FLAG_PCI_P2PDMA : 0);
 	if (ret < 0)
 		return NVME_SC_INTERNAL;
 	rsp->req.transfer_len += len;
@@ -712,6 +737,8 @@ static void nvmet_rdma_handle_command(struct nvmet_rdma_queue *queue,
 	ib_dma_sync_single_for_cpu(queue->dev->device,
 		cmd->send_sge.addr, cmd->send_sge.length,
 		DMA_TO_DEVICE);
+
+	cmd->req.p2p_client = &queue->dev->device->dev;
 
 	if (!nvmet_req_init(&cmd->req, &queue->nvme_cq,
 			&queue->nvme_sq, &nvmet_rdma_ops))
