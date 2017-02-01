@@ -23,6 +23,7 @@
 #include <linux/string.h>
 #include <linux/wait.h>
 #include <linux/inet.h>
+#include <linux/pci-p2pdma.h>
 #include <asm/unaligned.h>
 
 #include <rdma/ib_verbs.h>
@@ -430,8 +431,13 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 				rsp->req.sg_cnt, nvmet_data_dir(&rsp->req));
 	}
 
-	if (rsp->req.sg != &rsp->cmd->inline_sg)
-		sgl_free(rsp->req.sg);
+	if (rsp->req.sg != &rsp->cmd->inline_sg) {
+		if (rsp->req.p2p_dev)
+			pci_p2pmem_free_sgl(rsp->req.p2p_dev, rsp->req.sg,
+					    rsp->req.sg_cnt);
+		else
+			sgl_free(rsp->req.sg);
+	}
 
 	if (unlikely(!list_empty_careful(&queue->rsp_wr_wait_list)))
 		nvmet_rdma_process_wr_wait_list(queue);
@@ -567,15 +573,29 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	u64 addr = le64_to_cpu(sgl->addr);
 	u32 len = get_unaligned_le24(sgl->length);
 	u32 key = get_unaligned_le32(sgl->key);
+	struct pci_dev *p2p_dev = NULL;
 	int ret;
 
 	/* no data command? */
 	if (!len)
 		return 0;
 
-	rsp->req.sg = sgl_alloc(len, GFP_KERNEL, &rsp->req.sg_cnt);
-	if (!rsp->req.sg)
-		return NVME_SC_INTERNAL;
+	if (rsp->queue->nvme_sq.ctrl)
+		p2p_dev = rsp->queue->nvme_sq.ctrl->p2p_dev;
+
+	rsp->req.p2p_dev = NULL;
+	if (rsp->queue->nvme_sq.qid && p2p_dev) {
+		ret = pci_p2pmem_alloc_sgl(p2p_dev, &rsp->req.sg,
+					   &rsp->req.sg_cnt, len);
+		if (!ret)
+			rsp->req.p2p_dev = p2p_dev;
+	}
+
+	if (!rsp->req.p2p_dev) {
+		rsp->req.sg = sgl_alloc(len, GFP_KERNEL, &rsp->req.sg_cnt);
+		if (!rsp->req.sg)
+			return NVME_SC_INTERNAL;
+	}
 
 	ret = rdma_rw_ctx_init(&rsp->rw, cm_id->qp, cm_id->port_num,
 			rsp->req.sg, rsp->req.sg_cnt, 0, addr, key,
@@ -657,6 +677,8 @@ static void nvmet_rdma_handle_command(struct nvmet_rdma_queue *queue,
 	ib_dma_sync_single_for_cpu(queue->dev->device,
 		cmd->send_sge.addr, cmd->send_sge.length,
 		DMA_TO_DEVICE);
+
+	cmd->req.p2p_client = &queue->dev->device->dev;
 
 	if (!nvmet_req_init(&cmd->req, &queue->nvme_cq,
 			&queue->nvme_sq, &nvmet_rdma_ops))

@@ -17,6 +17,8 @@
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/ctype.h>
+#include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 
 #include "nvmet.h"
 
@@ -867,12 +869,77 @@ static void nvmet_port_release(struct config_item *item)
 	kfree(port);
 }
 
+#ifdef CONFIG_PCI_P2PDMA
+static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+
+	if (!port->use_p2pmem)
+		return sprintf(page, "none\n");
+
+	if (!port->p2p_dev)
+		return sprintf(page, "auto\n");
+
+	return sprintf(page, "%s\n", pci_name(port->p2p_dev));
+}
+
+static ssize_t nvmet_p2pmem_store(struct config_item *item,
+				  const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	struct device *dev;
+	struct pci_dev *p2p_dev = NULL;
+	bool use_p2pmem;
+
+	switch (page[0]) {
+	case 'y':
+	case 'Y':
+	case 'a':
+	case 'A':
+		use_p2pmem = true;
+		break;
+	case 'n':
+	case 'N':
+		use_p2pmem = false;
+		break;
+	default:
+		dev = bus_find_device_by_name(&pci_bus_type, NULL, page);
+		if (!dev) {
+			pr_err("No such PCI device: %s\n", page);
+			return -ENODEV;
+		}
+
+		use_p2pmem = true;
+		p2p_dev = to_pci_dev(dev);
+
+		if (!pci_has_p2pmem(p2p_dev)) {
+			pr_err("PCI device has no peer-to-peer memory: %s\n",
+			       page);
+			pci_dev_put(p2p_dev);
+			return -ENODEV;
+		}
+	}
+
+	down_write(&nvmet_config_sem);
+	port->use_p2pmem = use_p2pmem;
+	pci_dev_put(port->p2p_dev);
+	port->p2p_dev = p2p_dev;
+	up_write(&nvmet_config_sem);
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_, p2pmem);
+#endif /* CONFIG_PCI_P2PDMA */
+
 static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_adrfam,
 	&nvmet_attr_addr_treq,
 	&nvmet_attr_addr_traddr,
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
+#ifdef CONFIG_PCI_P2PDMA
+	&nvmet_attr_p2pmem,
+#endif
 	NULL,
 };
 
