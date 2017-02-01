@@ -4640,6 +4640,42 @@ static int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs)
 }
 #endif
 
+static int init_p2pmem(struct adapter *adapter)
+{
+	unsigned int mem_size = t4_read_reg(adapter, CIM_EXTMEM2_ADDR_SIZE_A);
+	struct p2pmem_dev *p;
+	int rc;
+	struct resource res;
+
+	if (!mem_size)
+		return 0;
+
+	mem_size = roundup_pow_of_two(mem_size);
+
+	/*
+	 * Create a subset of BAR4 for the p2pmem region based on the
+	 * exported memory size.
+	 */
+	memcpy(&res, &adapter->pdev->resource[4], sizeof res);
+	res.start += mem_size;
+	res.end = res.start + mem_size - 1;
+	dev_info(adapter->pdev_dev, "p2pmem resource start 0x%llx end 0x%llx size %lluB\n",
+		 res.start, res.end, resource_size(&res));
+
+	p = p2pmem_create(&adapter->pdev->dev);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
+
+	rc = p2pmem_add_resource(p, &res);
+	if (rc) {
+		p2pmem_unregister(p);
+		return rc;
+	}
+	adapter->p2pmem = p;
+
+	return 0;
+}
+
 static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int func, i, err, s_qpp, qpp, num_seg;
@@ -5005,6 +5041,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	print_adapter_info(adapter);
 	setup_fw_sge_queues(adapter);
+	init_p2pmem(adapter);
 	return 0;
 
 sriov:
@@ -5076,6 +5113,8 @@ static void remove_one(struct pci_dev *pdev)
 		pci_release_regions(pdev);
 		return;
 	}
+
+	p2pmem_unregister(adapter->p2pmem);
 
 	if (adapter->pf == 4) {
 		int i;
