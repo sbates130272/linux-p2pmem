@@ -95,6 +95,7 @@ struct nvmet_port {
 	struct list_head		referrals;
 	void				*priv;
 	bool				enabled;
+	bool				allow_p2pmem;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)
