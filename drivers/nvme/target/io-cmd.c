@@ -56,6 +56,9 @@ static void nvmet_execute_rw(struct nvmet_req *req)
 		op = REQ_OP_READ;
 	}
 
+	if (is_pci_p2p_page(sg_page(req->sg)))
+		op_flags |= REQ_PCI_P2P;
+
 	sector = le64_to_cpu(req->cmd->rw.slba);
 	sector <<= (req->ns->blksize_shift - 9);
 
