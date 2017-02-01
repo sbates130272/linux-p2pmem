@@ -64,6 +64,11 @@ static inline struct nvmet_ns *to_nvmet_ns(struct config_item *item)
 	return container_of(to_config_group(item), struct nvmet_ns, group);
 }
 
+static inline struct device *nvmet_ns_dev(struct nvmet_ns *ns)
+{
+	return disk_to_dev(ns->bdev->bd_disk);
+}
+
 struct nvmet_cq {
 	u16			qid;
 	u16			size;
@@ -98,6 +103,7 @@ struct nvmet_port {
 	struct list_head		referrals;
 	void				*priv;
 	bool				enabled;
+	bool				allow_p2pmem;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)
@@ -131,6 +137,8 @@ struct nvmet_ctrl {
 	struct work_struct	fatal_err_work;
 
 	struct nvmet_fabrics_ops *ops;
+	struct pci_dev		*p2p_dev;
+	struct list_head	p2p_clients;
 
 	char			subsysnqn[NVMF_NQN_FIELD_LEN];
 	char			hostnqn[NVMF_NQN_FIELD_LEN];
@@ -232,6 +240,8 @@ struct nvmet_req {
 
 	void (*execute)(struct nvmet_req *req);
 	struct nvmet_fabrics_ops *ops;
+
+	struct device *p2p_client;
 };
 
 static inline void nvmet_set_status(struct nvmet_req *req, u16 status)
