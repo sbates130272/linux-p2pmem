@@ -64,6 +64,7 @@ struct nvmet_rdma_rsp {
 	struct rdma_rw_ctx	rw;
 
 	struct nvmet_req	req;
+	struct p2pmem_dev       *p2pmem;
 
 	u8			n_rdma;
 	u32			flags;
@@ -185,7 +186,8 @@ nvmet_rdma_put_rsp(struct nvmet_rdma_rsp *rsp)
 	spin_unlock_irqrestore(&rsp->queue->rsps_lock, flags);
 }
 
-static void nvmet_rdma_free_sgl(struct scatterlist *sgl, unsigned int nents)
+static void nvmet_rdma_free_sgl(struct scatterlist *sgl, unsigned int nents,
+				struct p2pmem_dev *p2pmem)
 {
 	struct scatterlist *sg;
 	int count;
@@ -193,13 +195,17 @@ static void nvmet_rdma_free_sgl(struct scatterlist *sgl, unsigned int nents)
 	if (!sgl || !nents)
 		return;
 
-	for_each_sg(sgl, sg, nents, count)
-		__free_page(sg_page(sg));
+	for_each_sg(sgl, sg, nents, count) {
+		if (p2pmem)
+			p2pmem_free_page(p2pmem, sg_page(sg));
+		else
+			__free_page(sg_page(sg));
+	}
 	kfree(sgl);
 }
 
 static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
-		u32 length)
+		u32 length, struct p2pmem_dev *p2pmem)
 {
 	struct scatterlist *sg;
 	struct page *page;
@@ -216,7 +222,11 @@ static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 	while (length) {
 		u32 page_len = min_t(u32, length, PAGE_SIZE);
 
-		page = alloc_page(GFP_KERNEL);
+		if (p2pmem)
+			page = p2pmem_alloc_page(p2pmem);
+		else
+			page = alloc_page(GFP_KERNEL);
+
 		if (!page)
 			goto out_free_pages;
 
@@ -231,7 +241,10 @@ static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 out_free_pages:
 	while (i > 0) {
 		i--;
-		__free_page(sg_page(&sg[i]));
+		if (p2pmem)
+			p2pmem_free_page(p2pmem, sg_page(&sg[i]));
+		else
+			__free_page(sg_page(&sg[i]));
 	}
 	kfree(sg);
 out:
@@ -484,7 +497,8 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 	}
 
 	if (rsp->req.sg != &rsp->cmd->inline_sg)
-		nvmet_rdma_free_sgl(rsp->req.sg, rsp->req.sg_cnt);
+		nvmet_rdma_free_sgl(rsp->req.sg, rsp->req.sg_cnt,
+				    rsp->p2pmem);
 
 	if (unlikely(!list_empty_careful(&queue->rsp_wr_wait_list)))
 		nvmet_rdma_process_wr_wait_list(queue);
@@ -624,9 +638,9 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	/* no data command? */
 	if (!len)
 		return 0;
-
+	rsp->p2pmem = rsp->queue->port->p2pmem;
 	status = nvmet_rdma_alloc_sgl(&rsp->req.sg, &rsp->req.sg_cnt,
-			len);
+			len, rsp->p2pmem);
 	if (status)
 		return status;
 
