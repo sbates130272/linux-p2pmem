@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/rculist.h>
+#include <linux/pci-p2pdma.h>
 
 #include "nvmet.h"
 
@@ -365,9 +366,29 @@ static void nvmet_ns_dev_disable(struct nvmet_ns *ns)
 	nvmet_file_ns_disable(ns);
 }
 
+static int nvmet_p2pdma_add_client(struct nvmet_ctrl *ctrl,
+		struct nvmet_ns *ns)
+{
+	int ret;
+
+	if (!blk_queue_pci_p2pdma(ns->bdev->bd_queue)) {
+		pr_err("peer-to-peer DMA is not supported by %s\n",
+		       ns->device_path);
+		return -EINVAL;
+	}
+
+	ret = pci_p2pdma_add_client(&ctrl->p2p_clients, nvmet_ns_dev(ns));
+	if (ret)
+		pr_err("failed to add peer-to-peer DMA client %s: %d\n",
+		       ns->device_path, ret);
+
+	return ret;
+}
+
 int nvmet_ns_enable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
+	struct nvmet_ctrl *ctrl;
 	int ret;
 
 	mutex_lock(&subsys->lock);
@@ -388,6 +409,14 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 				0, GFP_KERNEL);
 	if (ret)
 		goto out_dev_put;
+
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
+		if (ctrl->p2p_dev) {
+			ret = nvmet_p2pdma_add_client(ctrl, ns);
+			if (ret)
+				goto out_remove_clients;
+		}
+	}
 
 	if (ns->nsid > subsys->max_nsid)
 		subsys->max_nsid = ns->nsid;
@@ -417,6 +446,9 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 out_unlock:
 	mutex_unlock(&subsys->lock);
 	return ret;
+out_remove_clients:
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
+		pci_p2pdma_remove_client(&ctrl->p2p_clients, nvmet_ns_dev(ns));
 out_dev_put:
 	nvmet_ns_dev_disable(ns);
 	goto out_unlock;
@@ -425,6 +457,7 @@ out_dev_put:
 void nvmet_ns_disable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
+	struct nvmet_ctrl *ctrl;
 
 	mutex_lock(&subsys->lock);
 	if (!ns->enabled)
@@ -450,6 +483,12 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 	percpu_ref_exit(&ns->ref);
 
 	mutex_lock(&subsys->lock);
+
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
+		pci_p2pdma_remove_client(&ctrl->p2p_clients, nvmet_ns_dev(ns));
+		nvmet_add_async_event(ctrl, NVME_AER_TYPE_NOTICE, 0, 0);
+	}
+
 	subsys->nr_namespaces--;
 	nvmet_ns_changed(subsys, ns->nsid);
 	nvmet_ns_dev_disable(ns);
@@ -727,6 +766,23 @@ EXPORT_SYMBOL_GPL(nvmet_req_execute);
 
 int nvmet_req_alloc_sgl(struct nvmet_req *req, struct nvmet_sq *sq)
 {
+	struct pci_dev *p2p_dev = NULL;
+
+	if (IS_ENABLED(CONFIG_PCI_P2PDMA)) {
+		if (sq->ctrl)
+			p2p_dev = sq->ctrl->p2p_dev;
+
+		req->p2p_dev = NULL;
+		if (sq->qid && p2p_dev) {
+			req->sg = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg_cnt,
+						       req->transfer_len);
+			if (req->sg) {
+				req->p2p_dev = p2p_dev;
+				return 0;
+			}
+		}
+	}
+
 	req->sg = sgl_alloc(req->transfer_len, GFP_KERNEL, &req->sg_cnt);
 	if (!req->sg)
 		return -ENOMEM;
@@ -737,7 +793,11 @@ EXPORT_SYMBOL_GPL(nvmet_req_alloc_sgl);
 
 void nvmet_req_free_sgl(struct nvmet_req *req)
 {
-	sgl_free(req->sg);
+	if (req->p2p_dev)
+		pci_p2pmem_free_sgl(req->p2p_dev, req->sg);
+	else
+		sgl_free(req->sg);
+
 	req->sg = NULL;
 	req->sg_cnt = 0;
 }
@@ -939,6 +999,74 @@ bool nvmet_host_allowed(struct nvmet_req *req, struct nvmet_subsys *subsys,
 		return __nvmet_host_allowed(subsys, hostnqn);
 }
 
+/*
+ * If allow_p2pmem is set, we will try to use P2P memory for the SGL lists for
+ * Ι/O commands. This requires the PCI p2p device to be compatible with the
+ * backing device for every namespace on this controller.
+ */
+static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
+{
+	struct nvmet_ns *ns;
+	int ret;
+
+	if (!req->port->use_p2pmem || !req->p2p_client)
+		return;
+
+	mutex_lock(&ctrl->subsys->lock);
+
+	ret = pci_p2pdma_add_client(&ctrl->p2p_clients, req->p2p_client);
+	if (ret) {
+		pr_err("failed adding peer-to-peer DMA client %s: %d\n",
+		       dev_name(req->p2p_client), ret);
+		goto free_devices;
+	}
+
+	list_for_each_entry_rcu(ns, &ctrl->subsys->namespaces, dev_link) {
+		ret = nvmet_p2pdma_add_client(ctrl, ns);
+		if (ret)
+			goto free_devices;
+	}
+
+	if (req->port->p2p_dev) {
+		if (!pci_p2pdma_assign_provider(req->port->p2p_dev,
+						&ctrl->p2p_clients)) {
+			pr_info("peer-to-peer memory on %s is not supported\n",
+				pci_name(req->port->p2p_dev));
+			goto free_devices;
+		}
+		ctrl->p2p_dev = pci_dev_get(req->port->p2p_dev);
+	} else {
+		ctrl->p2p_dev = pci_p2pmem_find(&ctrl->p2p_clients);
+		if (!ctrl->p2p_dev) {
+			pr_info("no supported peer-to-peer memory devices found\n");
+			goto free_devices;
+		}
+	}
+
+	mutex_unlock(&ctrl->subsys->lock);
+
+	pr_info("using peer-to-peer memory on %s\n", pci_name(ctrl->p2p_dev));
+	return;
+
+free_devices:
+	pci_p2pdma_client_list_free(&ctrl->p2p_clients);
+	mutex_unlock(&ctrl->subsys->lock);
+}
+
+static void nvmet_release_p2pmem(struct nvmet_ctrl *ctrl)
+{
+	if (!ctrl->p2p_dev)
+		return;
+
+	mutex_lock(&ctrl->subsys->lock);
+
+	pci_p2pdma_client_list_free(&ctrl->p2p_clients);
+	pci_dev_put(ctrl->p2p_dev);
+	ctrl->p2p_dev = NULL;
+
+	mutex_unlock(&ctrl->subsys->lock);
+}
+
 u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		struct nvmet_req *req, u32 kato, struct nvmet_ctrl **ctrlp)
 {
@@ -980,6 +1108,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 
 	INIT_WORK(&ctrl->async_event_work, nvmet_async_event_work);
 	INIT_LIST_HEAD(&ctrl->async_events);
+	INIT_LIST_HEAD(&ctrl->p2p_clients);
 
 	memcpy(ctrl->subsysnqn, subsysnqn, NVMF_NQN_SIZE);
 	memcpy(ctrl->hostnqn, hostnqn, NVMF_NQN_SIZE);
@@ -1041,6 +1170,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		ctrl->kato = DIV_ROUND_UP(kato, 1000);
 	}
 	nvmet_start_keep_alive_timer(ctrl);
+	nvmet_setup_p2pmem(ctrl, req);
 
 	mutex_lock(&subsys->lock);
 	list_add_tail(&ctrl->subsys_entry, &subsys->ctrls);
@@ -1079,6 +1209,7 @@ static void nvmet_ctrl_free(struct kref *ref)
 	flush_work(&ctrl->async_event_work);
 	cancel_work_sync(&ctrl->fatal_err_work);
 
+	nvmet_release_p2pmem(ctrl);
 	ida_simple_remove(&cntlid_ida, ctrl->cntlid);
 
 	kfree(ctrl->sqs);
