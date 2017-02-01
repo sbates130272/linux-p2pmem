@@ -17,6 +17,8 @@
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/ctype.h>
+#include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 
 #include "nvmet.h"
 
@@ -1094,6 +1096,37 @@ static void nvmet_port_release(struct config_item *item)
 	kfree(port);
 }
 
+#ifdef CONFIG_PCI_P2PDMA
+static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+
+	return pci_p2pdma_enable_show(page, port->p2p_dev, port->use_p2pmem);
+}
+
+static ssize_t nvmet_p2pmem_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	struct pci_dev *p2p_dev = NULL;
+	bool use_p2pmem;
+	int error;
+
+	error = pci_p2pdma_enable_store(page, &p2p_dev, &use_p2pmem);
+	if (error)
+		return error;
+
+	down_write(&nvmet_config_sem);
+	port->use_p2pmem = use_p2pmem;
+	pci_dev_put(port->p2p_dev);
+	port->p2p_dev = p2p_dev;
+	up_write(&nvmet_config_sem);
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_, p2pmem);
+#endif /* CONFIG_PCI_P2PDMA */
+
 static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_adrfam,
 	&nvmet_attr_addr_treq,
@@ -1101,6 +1134,9 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
 	&nvmet_attr_param_inline_data_size,
+#ifdef CONFIG_PCI_P2PDMA
+	&nvmet_attr_p2pmem,
+#endif
 	NULL,
 };
 
