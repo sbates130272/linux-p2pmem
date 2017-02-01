@@ -730,6 +730,10 @@ static void nvmet_referral_release(struct config_item *item)
 	struct nvmet_port *port = to_nvmet_port(item);
 
 	nvmet_referral_disable(port);
+
+	if (port->p2pmem)
+		p2pmem_put(port->p2pmem);
+
 	kfree(port);
 }
 
@@ -774,8 +778,39 @@ static void nvmet_port_release(struct config_item *item)
 {
 	struct nvmet_port *port = to_nvmet_port(item);
 
+	if (port->p2pmem)
+		p2pmem_put(port->p2pmem);
+
 	kfree(port);
 }
+
+#ifdef CONFIG_P2PMEM
+static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
+{
+	struct p2pmem_dev *p2pmem = to_nvmet_port(item)->p2pmem;
+
+	return snprintf(page, PAGE_SIZE, "%s\n", p2pmem_name(p2pmem));
+}
+
+static ssize_t nvmet_p2pmem_store(struct config_item *item,
+				  const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	struct p2pmem_dev *p2pmem;
+
+	p2pmem = p2pmem_find_by_name(page);
+	if (!p2pmem)
+		return -EINVAL;
+
+	if (port->p2pmem)
+		p2pmem_put(port->p2pmem);
+
+	port->p2pmem = p2pmem;
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_, p2pmem);
+#endif
 
 static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_adrfam,
@@ -783,6 +818,11 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_traddr,
 	&nvmet_attr_addr_trsvcid,
 	&nvmet_attr_addr_trtype,
+
+	#ifdef CONFIG_P2PMEM
+	&nvmet_attr_p2pmem,
+	#endif
+
 	NULL,
 };
 

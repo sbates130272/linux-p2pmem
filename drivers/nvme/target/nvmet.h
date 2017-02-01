@@ -25,6 +25,7 @@
 #include <linux/configfs.h>
 #include <linux/rcupdate.h>
 #include <linux/blkdev.h>
+#include <linux/p2pmem.h>
 
 #define NVMET_ASYNC_EVENTS		4
 #define NVMET_ERROR_LOG_SLOTS		128
@@ -94,6 +95,7 @@ struct nvmet_port {
 	struct list_head		referrals;
 	void				*priv;
 	bool				enabled;
+	struct p2pmem_dev		*p2pmem;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)
