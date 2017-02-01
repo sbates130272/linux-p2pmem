@@ -735,6 +735,11 @@
 
 #define PCIE_MEM_ACCESS_OFFSET_A 0x306c
 
+#define MEMOFST_S    7
+#define MEMOFST_M    0x1ffffffU
+#define MEMOFST_V(x) ((x) << MEMOFST_S)
+#define MEMOFST_G(x) (((x) >> MEMOFST_S) & MEMOFST_M)
+
 #define ENABLE_S    30
 #define ENABLE_V(x) ((x) << ENABLE_S)
 #define ENABLE_F    ENABLE_V(1U)
