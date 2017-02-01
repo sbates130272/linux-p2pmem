@@ -172,6 +172,11 @@ module_param(select_queue, int, 0644);
 MODULE_PARM_DESC(select_queue,
 		 "Select between kernel provided method of selecting or driver method of selecting TX queue. Default is kernel method.");
 
+static bool use_p2pmem;
+module_param(use_p2pmem, bool, 0644);
+MODULE_PARM_DESC(use_p2pmem,
+		 "Enable registering a p2pmem device with bar space (if available)");
+
 static struct dentry *cxgb4_debugfs_root;
 
 LIST_HEAD(adapter_list);
@@ -2827,6 +2832,54 @@ static void setup_memwin_rdma(struct adapter *adap)
 	}
 }
 
+static void setup_memwin_p2pmem(struct adapter *adap)
+{
+	unsigned int mem_base = t4_read_reg(adap, CIM_EXTMEM2_BASE_ADDR_A);
+	unsigned int mem_size = t4_read_reg(adap, CIM_EXTMEM2_ADDR_SIZE_A);
+
+	if (!use_p2pmem)
+		return;
+
+	if (mem_base != 0 && mem_size != 0) {
+		unsigned int sz_kb, pcieofst;
+
+		sz_kb = roundup_pow_of_two(mem_size) >> 10;
+
+		/*
+		 * The start offset must be aligned to the window size.
+		 * Also, BAR4 has MSIX vectors using the first 8KB.
+		 * Further, the min allowed p2pmem region size is 1MB,
+		 * so set the start offset to the memory size and we're aligned
+		 * as well as past the 8KB vector table.
+		 */
+		pcieofst = sz_kb << 10;
+
+		dev_info(adap->pdev_dev,
+			 "p2pmem base 0x%x, size %uB, ilog2(sk_kb) 0x%x, "
+			 "pcieofst 0x%X\n", mem_base, mem_size, ilog2(sz_kb),
+			 pcieofst);
+
+		/* Write the window offset and size */
+		t4_write_reg(adap,
+			PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_BASE_WIN_A,
+					    MEMWIN_RSVD4),
+			pcieofst | BIR_V(2) | WINDOW_V(ilog2(sz_kb)));
+
+		/* Write the adapter memory base/start */
+		t4_write_reg(adap,
+			PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A,
+					    MEMWIN_RSVD4),
+			MEMOFST_V((mem_base >> MEMOFST_S)) | PFNUM_V(adap->pf));
+
+		/* Read it back to flush it */
+		t4_read_reg(adap,
+			PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A,
+					    MEMWIN_RSVD4));
+	} else
+		dev_info(adap->pdev_dev, "p2pmem memory not reserved, "
+			 "base 0x%x size %uB\n", mem_base, mem_size);
+}
+
 static int adap_init1(struct adapter *adap, struct fw_caps_config_cmd *c)
 {
 	u32 v;
@@ -4625,6 +4678,42 @@ static int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs)
 }
 #endif
 
+static int init_p2pmem(struct adapter *adapter)
+{
+	unsigned int mem_size = t4_read_reg(adapter, CIM_EXTMEM2_ADDR_SIZE_A);
+	struct p2pmem_dev *p;
+	int rc;
+	struct resource res;
+
+	if (!mem_size || !use_p2pmem)
+		return 0;
+
+	mem_size = roundup_pow_of_two(mem_size);
+
+	/*
+	 * Create a subset of BAR4 for the p2pmem region based on the
+	 * exported memory size.
+	 */
+	memcpy(&res, &adapter->pdev->resource[4], sizeof(res));
+	res.start += mem_size;
+	res.end = res.start + mem_size - 1;
+	dev_info(adapter->pdev_dev, "p2pmem resource start %pa[p] end %pa[p] size %luB\n",
+		 &res.start, &res.end, (unsigned long)resource_size(&res));
+
+	p = p2pmem_create(&adapter->pdev->dev);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
+
+	rc = p2pmem_add_resource(p, &res);
+	if (rc) {
+		p2pmem_unregister(p);
+		return rc;
+	}
+	adapter->p2pmem = p;
+
+	return 0;
+}
+
 static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int func, i, err, s_qpp, qpp, num_seg;
@@ -4787,8 +4876,8 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bitmap_zero(adapter->sge.blocked_fl, adapter->sge.egr_sz);
 #endif
 	setup_memwin_rdma(adapter);
-	if (err)
-		goto out_unmap_bar;
+
+	setup_memwin_p2pmem(adapter);
 
 	/* configure SGE_STAT_CFG_A to read WC stats */
 	if (!is_t4(adapter->params.chip))
@@ -4992,6 +5081,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	print_adapter_info(adapter);
 	setup_fw_sge_queues(adapter);
+	init_p2pmem(adapter);
 	return 0;
 
 sriov:
@@ -5050,7 +5140,6 @@ sriov:
 		free_msix_info(adapter);
 	if (adapter->num_uld || adapter->num_ofld_uld)
 		t4_uld_mem_free(adapter);
- out_unmap_bar:
 	if (!is_t4(adapter->params.chip))
 		iounmap(adapter->bar2);
  out_free_adapter:
@@ -5077,6 +5166,8 @@ static void remove_one(struct pci_dev *pdev)
 		pci_release_regions(pdev);
 		return;
 	}
+
+	p2pmem_unregister(adapter->p2pmem);
 
 	if (adapter->pf == 4) {
 		int i;

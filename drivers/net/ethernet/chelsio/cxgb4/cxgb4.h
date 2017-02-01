@@ -48,6 +48,7 @@
 #include <linux/vmalloc.h>
 #include <linux/etherdevice.h>
 #include <linux/net_tstamp.h>
+#include <linux/p2pmem.h>
 #include <asm/io.h>
 #include "t4_chip_type.h"
 #include "cxgb4_uld.h"
@@ -868,6 +869,8 @@ struct adapter {
 
 	/* TC u32 offload */
 	struct cxgb4_tc_u32_table *tc_u32;
+
+	struct p2pmem_dev *p2pmem;
 };
 
 /* Support for "sched-class" command to allow a TX Scheduling Class to be
