@@ -782,6 +782,10 @@ struct vf_info {
 	bool pf_set_mac;
 };
 
+struct mbox_list {
+	struct list_head list;
+};
+
 struct adapter {
 	void __iomem *regs;
 	void __iomem *bar2;
@@ -843,6 +847,10 @@ struct adapter {
 	struct work_struct db_full_task;
 	struct work_struct db_drop_task;
 	bool tid_release_task_busy;
+
+	/* lock for mailbox cmd list */
+	spinlock_t mbox_lock;
+	struct mbox_list mlist;
 
 	/* support for mailbox command/reply logging */
 #define T4_OS_LOG_MBOX_CMDS 256
