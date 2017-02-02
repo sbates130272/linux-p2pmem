@@ -26,6 +26,8 @@ struct p2pmem_dev {
 	struct percpu_ref ref;
 	struct completion cmp;
 	struct gen_pool *pool;
+
+	struct dentry *debugfs_root;
 };
 
 #ifdef CONFIG_P2PMEM
