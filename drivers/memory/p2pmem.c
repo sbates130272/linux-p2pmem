@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/genalloc.h>
 #include <linux/memremap.h>
+#include <linux/debugfs.h>
 
 MODULE_DESCRIPTION("Peer 2 Peer Memory Device");
 MODULE_VERSION("0.1");
@@ -27,6 +28,8 @@ MODULE_AUTHOR("Microsemi Corporation");
 static struct class *p2pmem_class;
 static DEFINE_IDA(p2pmem_ida);
 
+static struct dentry *p2pmem_debugfs_root;
+
 struct p2pmem_dev {
 	struct device dev;
 	int id;
@@ -34,7 +37,40 @@ struct p2pmem_dev {
 	struct percpu_ref ref;
 	struct completion cmp;
 	struct gen_pool *pool;
+	struct dentry *debugfs_root;
 };
+
+static int stats_show(struct seq_file *seq, void *v)
+{
+	struct p2pmem_dev *p = seq->private;
+
+	if (p->pool) {
+		seq_printf(seq, "total size: %lu\n", gen_pool_size(p->pool));
+		seq_printf(seq, "available:  %lu\n", gen_pool_avail(p->pool));
+	}
+	return 0;
+}
+
+static int stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, stats_show, inode->i_private);
+}
+
+static const struct file_operations stats_debugfs_fops = {
+	.owner   = THIS_MODULE,
+	.open    = stats_open,
+	.release = single_release,
+	.read 	 = seq_read,
+	.llseek  = seq_lseek,
+};
+
+static void setup_debugfs(struct p2pmem_dev *p)
+{
+	struct dentry *de;
+
+	de = debugfs_create_file("stats", S_IWUSR, p->debugfs_root,
+				 (void *)p, &stats_debugfs_fops);
+}
 
 static struct p2pmem_dev *to_p2pmem(struct device *dev)
 {
@@ -71,8 +107,12 @@ static void p2pmem_release(struct device *dev)
 {
 	struct p2pmem_dev *p = to_p2pmem(dev);
 
-	if (p->pool)
+	debugfs_remove_recursive(p->debugfs_root);
+
+	if (p->pool) {
 		gen_pool_destroy(p->pool);
+		p->pool = NULL;
+	}
 
 	ida_simple_remove(&p2pmem_ida, p->id);
 	kfree(p);
@@ -123,6 +163,11 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 	if (rc)
 		goto err_dev;
 
+	if (p2pmem_debugfs_root) {
+		p->debugfs_root = debugfs_create_dir(dev_name(&p->dev), p2pmem_debugfs_root);
+		if (p->debugfs_root)
+			setup_debugfs(p);
+	}
 	dev_info(dev, "created");
 
 	return p;
@@ -274,12 +319,17 @@ static int __init p2pmem_init(void)
 	if (IS_ERR(p2pmem_class))
 		return PTR_ERR(p2pmem_class);
 
+	p2pmem_debugfs_root = debugfs_create_dir("p2pmem", NULL);
+	if (!p2pmem_debugfs_root)
+		pr_info("could not create debugfs entry, continuing\n");
+
 	return 0;
 }
 module_init(p2pmem_init);
 
 static void __exit p2pmem_exit(void)
 {
+	debugfs_remove_recursive(p2pmem_debugfs_root);
 	class_destroy(p2pmem_class);
 
 	pr_info(KBUILD_MODNAME ": unloaded.\n");
