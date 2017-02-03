@@ -19,20 +19,29 @@
 #include <linux/genalloc.h>
 #include <linux/memremap.h>
 #include <linux/debugfs.h>
+#include <linux/cdev.h>
+#include <linux/pfn_t.h>
 
 MODULE_DESCRIPTION("Peer 2 Peer Memory Device");
 MODULE_VERSION("0.1");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Microsemi Corporation");
 
+static int max_devices = 16;
+module_param(max_devices, int, 0444);
+MODULE_PARM_DESC(max_devices, "Maximum number of char devices");
+
 static struct class *p2pmem_class;
 static DEFINE_IDA(p2pmem_ida);
+static dev_t p2pmem_devt;
 
 static struct dentry *p2pmem_debugfs_root;
 
 struct p2pmem_dev {
 	struct device dev;
 	int id;
+
+	struct cdev cdev;
 
 	struct percpu_ref ref;
 	struct completion cmp;
@@ -77,6 +86,130 @@ static struct p2pmem_dev *to_p2pmem(struct device *dev)
 	return container_of(dev, struct p2pmem_dev, dev);
 }
 
+struct p2pmem_vma {
+	struct p2pmem_dev *p2pmem_dev;
+	atomic_t mmap_count;
+	size_t nr_pages;
+
+	/* Protects the used_pages array */
+	struct mutex mutex;
+	struct page *used_pages[];
+};
+
+static void p2pmem_vma_open(struct vm_area_struct *vma)
+{
+	struct p2pmem_vma *pv = vma->vm_private_data;
+
+	atomic_inc(&pv->mmap_count);
+}
+
+static void p2pmem_vma_close(struct vm_area_struct *vma)
+{
+	struct p2pmem_vma *pv = vma->vm_private_data;
+	int i;
+
+	if (!atomic_dec_and_test(&pv->mmap_count))
+		return;
+
+	mutex_lock(&pv->mutex);
+	dev_dbg(&pv->p2pmem_dev->dev, "vma close");
+
+	for (i = 0; i < pv->nr_pages; i++) {
+		if (pv->used_pages[i])
+			p2pmem_free_page(pv->p2pmem_dev, pv->used_pages[i]);
+	}
+
+	mutex_unlock(&pv->mutex);
+	kfree(pv);
+}
+
+static int p2pmem_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct p2pmem_vma *pv = vma->vm_private_data;
+	unsigned int pg_idx;
+	struct page *pg;
+	pfn_t pfn;
+	int rc;
+
+	pg_idx = (vmf->address - vma->vm_start) / PAGE_SIZE;
+
+	mutex_lock(&pv->mutex);
+
+	if (pv->used_pages[pg_idx])
+		pg = pv->used_pages[pg_idx];
+	else
+		pg = p2pmem_alloc_page(pv->p2pmem_dev);
+
+	if (!pg)
+		return VM_FAULT_OOM;
+
+	pv->used_pages[pg_idx] = pg;
+
+	pfn = phys_to_pfn_t(page_to_phys(pg), PFN_DEV | PFN_MAP);
+	rc = vm_insert_mixed(vma, vmf->address, pfn);
+
+	mutex_unlock(&pv->mutex);
+
+	if (rc == -ENOMEM)
+		return VM_FAULT_OOM;
+	if (rc < 0 && rc != -EBUSY)
+		return VM_FAULT_SIGBUS;
+
+	return VM_FAULT_NOPAGE;
+}
+
+const struct vm_operations_struct p2pmem_vmops = {
+	.open = p2pmem_vma_open,
+	.close = p2pmem_vma_close,
+	.fault = p2pmem_vma_fault,
+};
+
+static int p2pmem_open(struct inode *inode, struct file *filp)
+{
+	struct p2pmem_dev *p;
+
+	p = container_of(inode->i_cdev, struct p2pmem_dev, cdev);
+	filp->private_data = p;
+
+	return 0;
+}
+
+static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	struct p2pmem_dev *p = filp->private_data;
+	struct p2pmem_vma *pv;
+	size_t nr_pages = (vma->vm_end - vma->vm_start) / PAGE_SIZE;
+
+	if ((vma->vm_flags & VM_MAYSHARE) != VM_MAYSHARE) {
+		dev_warn(&p->dev, "mmap failed: can't create private mapping\n");
+		return -EINVAL;
+	}
+
+	dev_dbg(&p->dev, "Allocating mmap with %zd pages.\n", nr_pages);
+
+	pv = kzalloc(sizeof(*pv) + sizeof(pv->used_pages[0]) * nr_pages,
+		     GFP_KERNEL);
+	if (!pv)
+		return -ENOMEM;
+
+	mutex_init(&pv->mutex);
+	pv->nr_pages = nr_pages;
+	pv->p2pmem_dev = p;
+	atomic_set(&pv->mmap_count, 1);
+
+	vma->vm_private_data = pv;
+	vma->vm_ops = &p2pmem_vmops;
+	vma->vm_flags |= VM_MIXEDMAP;
+
+	return 0;
+}
+
+static const struct file_operations p2pmem_fops = {
+	.owner = THIS_MODULE,
+	.open = p2pmem_open,
+	.mmap = p2pmem_mmap,
+};
+
 static void p2pmem_percpu_release(struct percpu_ref *ref)
 {
 	struct p2pmem_dev *p = container_of(ref, struct p2pmem_dev, ref);
@@ -114,6 +247,8 @@ static void p2pmem_release(struct device *dev)
 		p->pool = NULL;
 	}
 
+	cdev_del(&p->cdev);
+
 	ida_simple_remove(&p2pmem_ida, p->id);
 	kfree(p);
 }
@@ -124,6 +259,7 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 	struct device *dev;
 	int nid = dev_to_node(parent);
 	int rc;
+	dev_t devt;
 
 	p = kzalloc_node(sizeof(*p), GFP_KERNEL, nid);
 	if (!p)
@@ -135,19 +271,31 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 		goto err_id;
 	}
 
-	init_completion(&p->cmp);
-	rc = percpu_ref_init(&p->ref, p2pmem_percpu_release, 0,
-			     GFP_KERNEL);
-	if (rc)
-		goto err_ref;
-
 	dev = &p->dev;
+	init_completion(&p->cmp);
+	device_initialize(dev);
+
+	devt = MKDEV(MAJOR(p2pmem_devt), p->id);
+
+	cdev_init(&p->cdev, &p2pmem_fops);
+	p->cdev.owner = parent->driver->owner;
+	p->cdev.kobj.parent = &dev->kobj;
+	rc = cdev_add(&p->cdev, devt, 1);
+	if (rc)
+		goto err_cdev;
+
+	dev->devt = devt;
 	dev->class = p2pmem_class;
 	dev->parent = parent;
 	dev->release = p2pmem_release;
 	dev_set_name(dev, "p2pmem%d", p->id);
 
-	rc = device_register(dev);
+	rc = percpu_ref_init(&p->ref, p2pmem_percpu_release, 0,
+			     GFP_KERNEL);
+	if (rc)
+		goto err_cdev;
+
+	rc = device_add(dev);
 	if (rc) {
 		put_device(dev);
 		return ERR_PTR(rc);
@@ -172,7 +320,7 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 
 	return p;
 
-err_ref:
+err_cdev:
 	ida_simple_remove(&p2pmem_ida, p->id);
 
 err_id:
@@ -315,21 +463,32 @@ EXPORT_SYMBOL(p2pmem_name);
 
 static int __init p2pmem_init(void)
 {
+	int rc;
+
 	p2pmem_class = class_create(THIS_MODULE, "p2pmem");
 	if (IS_ERR(p2pmem_class))
 		return PTR_ERR(p2pmem_class);
+
+	rc = alloc_chrdev_region(&p2pmem_devt, 0, max_devices, "iopmemc");
+	if (rc)
+		goto err_chrdev;
 
 	p2pmem_debugfs_root = debugfs_create_dir("p2pmem", NULL);
 	if (!p2pmem_debugfs_root)
 		pr_info("could not create debugfs entry, continuing\n");
 
 	return 0;
+
+err_chrdev:
+	class_destroy(p2pmem_class);
+	return rc;
 }
 module_init(p2pmem_init);
 
 static void __exit p2pmem_exit(void)
 {
 	debugfs_remove_recursive(p2pmem_debugfs_root);
+	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 
 	pr_info(KBUILD_MODNAME ": unloaded.\n");
