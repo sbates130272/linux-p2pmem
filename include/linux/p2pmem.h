@@ -18,6 +18,7 @@
 
 #include <linux/device.h>
 #include <linux/pci.h>
+#include <linux/cdev.h>
 
 struct p2pmem_dev {
 	struct device dev;
@@ -32,6 +33,9 @@ struct p2pmem_dev {
 
 	struct mutex remove_mutex;	/* protects the remove callback list */
 	struct list_head remove_list;
+
+	struct cdev cdev;
+	struct inode *inode;
 };
 
 #ifdef CONFIG_P2PMEM
