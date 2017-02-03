@@ -18,11 +18,13 @@
 
 #include <linux/device.h>
 #include <linux/pci.h>
+#include <linux/cdev.h>
 
 struct p2pmem_dev {
 	struct device dev;
 	int id;
 
+	struct cdev cdev;
 	struct percpu_ref ref;
 	struct completion cmp;
 	struct gen_pool *pool;
