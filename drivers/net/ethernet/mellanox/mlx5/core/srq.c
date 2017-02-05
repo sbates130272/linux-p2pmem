@@ -78,6 +78,60 @@ static int get_pas_size(struct mlx5_srq_attr *in)
 	return rq_num_pas * sizeof(u64);
 }
 
+static int get_nvmf_pas_size(struct mlx5_nvmf_attr *nvmf)
+{
+	return nvmf->staging_buffer_number_of_pages * sizeof(u64);
+}
+
+static void set_nvmf_srq_pas(struct mlx5_nvmf_attr *nvmf, void *start,
+			     int align)
+{
+	int i;
+	dma_addr_t dma_addr_be;
+
+	for (i = 0; i < nvmf->staging_buffer_number_of_pages; i++) {
+		dma_addr_be = cpu_to_be64(nvmf->staging_buffer_pas[i]);
+		memcpy(start + i * align, &dma_addr_be, sizeof(u64));
+	}
+}
+
+static void set_nvmf_xrq_context(struct mlx5_nvmf_attr *nvmf, void *xrqc)
+{
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.nvmf_offload_type,
+		 nvmf->type);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.log_max_namespace,
+		 nvmf->log_max_namespace);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.offloaded_capsules_count,
+		 nvmf->offloaded_capsules_count);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.ioccsz,
+		 nvmf->ioccsz);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.icdoff,
+		 nvmf->icdoff);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.log_max_io_size,
+		 nvmf->log_max_io_size);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.nvme_memory_log_page_size,
+		 nvmf->nvme_memory_log_page_size);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.staging_buffer_log_page_size,
+		 nvmf->staging_buffer_log_page_size);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.staging_buffer_number_of_pages,
+		 nvmf->staging_buffer_number_of_pages);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.staging_buffer_page_offset,
+		 nvmf->staging_buffer_page_offset);
+	MLX5_SET(xrqc, xrqc,
+		 nvme_offload_context.nvme_queue_size,
+		 nvmf->nvme_queue_size);
+}
+
 static void set_wq(void *wq, struct mlx5_srq_attr *in)
 {
 	MLX5_SET(wq,   wq, wq_signature,  !!(in->flags
@@ -442,11 +496,21 @@ static int create_xrq_cmd(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 	void *create_in;
 	void *xrqc;
 	void *wq;
-	int pas_size;
+	int pas_size, rq_pas_size;
 	int inlen;
+	void *rq_pas_addr;
 	int err;
 
-	pas_size = get_pas_size(in);
+	rq_pas_size = get_pas_size(in);
+	if (in->type == IB_EXP_SRQT_NVMF)
+		pas_size = roundup(rq_pas_size, MLX5_PAS_ALIGN) +
+			   roundup(get_nvmf_pas_size(&in->nvmf), MLX5_PAS_ALIGN);
+	else if (in->type == IB_SRQT_TM)
+		pas_size = rq_pas_size;
+	else
+		return -EINVAL;
+
+
 	inlen = MLX5_ST_SZ_BYTES(create_xrq_in) + pas_size;
 	create_in = kvzalloc(inlen, GFP_KERNEL);
 	if (!create_in)
@@ -456,7 +520,8 @@ static int create_xrq_cmd(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 	wq = MLX5_ADDR_OF(xrqc, xrqc, wq);
 
 	set_wq(wq, in);
-	memcpy(MLX5_ADDR_OF(xrqc, xrqc, wq.pas), in->pas, pas_size);
+	rq_pas_addr = MLX5_ADDR_OF(xrqc, xrqc, wq.pas);
+	memcpy(rq_pas_addr, in->pas, rq_pas_size);
 
 	if (in->type == IB_SRQT_TM) {
 		MLX5_SET(xrqc, xrqc, topology, MLX5_XRQC_TOPOLOGY_TAG_MATCHING);
@@ -465,7 +530,14 @@ static int create_xrq_cmd(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 		MLX5_SET(xrqc, xrqc,
 			 tag_matching_topology_context.log_matching_list_sz,
 			 in->tm_log_list_size);
+	} else if (in->type == IB_EXP_SRQT_NVMF) {
+		MLX5_SET(xrqc, xrqc, offload, MLX5_XRQC_OFFLOAD_NVMF);
+		set_nvmf_srq_pas(&in->nvmf,
+				 rq_pas_addr + roundup(rq_pas_size, MLX5_PAS_ALIGN),
+				 sizeof(u64));
+		set_nvmf_xrq_context(&in->nvmf, xrqc);
 	}
+
 	MLX5_SET(xrqc, xrqc, user_index, in->user_index);
 	MLX5_SET(xrqc, xrqc, cqn, in->cqn);
 	MLX5_SET(create_xrq_in, create_in, opcode, MLX5_CMD_OP_CREATE_XRQ);
@@ -585,6 +657,7 @@ int mlx5_core_create_srq(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 		srq->common.res = MLX5_RES_XSRQ;
 		break;
 	case IB_SRQT_TM:
+	case IB_EXP_SRQT_NVMF:
 		srq->common.res = MLX5_RES_XRQ;
 		break;
 	default:
