@@ -74,6 +74,8 @@ do {									\
 #define mlx5_core_info(__dev, format, ...)				\
 	dev_info(&(__dev)->pdev->dev, format, ##__VA_ARGS__)
 
+#define MLX5_PAS_ALIGN 64
+
 enum {
 	MLX5_CMD_DATA, /* print command payload only */
 	MLX5_CMD_TIME, /* print command execution time */
