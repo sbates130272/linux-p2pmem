@@ -217,7 +217,7 @@ void ssi_buffer_mgr_copy_scatterlist_portion(
 
 	nents = ssi_buffer_mgr_get_sgl_nents(sg, end, &lbytes, NULL);
 	sg_copy_buffer(sg, nents, (void *)dest, (end - to_skip + 1), to_skip,
-		       (direct == SSI_SG_TO_BUF));
+		       (direct == SSI_SG_TO_BUF), false);
 }
 
 static inline int ssi_buffer_mgr_render_buff_to_mlli(
@@ -1871,4 +1871,3 @@ int ssi_buffer_mgr_fini(struct ssi_drvdata *drvdata)
 	}
 	return 0;
 }
-
