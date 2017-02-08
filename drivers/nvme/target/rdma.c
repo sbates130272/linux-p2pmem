@@ -233,7 +233,11 @@ static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 		if (!page)
 			goto out_free_pages;
 
-		sg_set_page(&sg[i], page, page_len, 0);
+		if (p2pmem)
+			sg_set_iomem_page(&sg[i], page, page_len, 0);
+		else
+			sg_set_page(&sg[i], page, page_len, 0);
+
 		length -= page_len;
 		i++;
 	}
