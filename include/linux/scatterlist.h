@@ -267,7 +267,7 @@ int sg_alloc_table_from_pages(struct sg_table *sgt,
 	gfp_t gfp_mask);
 
 size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
-		      size_t buflen, off_t skip, bool to_buffer);
+		      size_t buflen, off_t skip, bool to_buffer, bool iomem);
 
 size_t sg_copy_from_buffer(struct scatterlist *sgl, unsigned int nents,
 			   const void *buf, size_t buflen);
@@ -278,6 +278,11 @@ size_t sg_pcopy_from_buffer(struct scatterlist *sgl, unsigned int nents,
 			    const void *buf, size_t buflen, off_t skip);
 size_t sg_pcopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 			  void *buf, size_t buflen, off_t skip);
+
+size_t sg_iocopy_from_buffer(struct scatterlist *sgl, unsigned int nents,
+			     const void *buf, size_t buflen);
+size_t sg_iocopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
+			   void *buf, size_t buflen);
 
 /*
  * Maximum number of entries that will be allocated in one piece, if
