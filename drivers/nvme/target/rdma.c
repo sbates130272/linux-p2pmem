@@ -64,7 +64,6 @@ struct nvmet_rdma_rsp {
 	struct rdma_rw_ctx	rw;
 
 	struct nvmet_req	req;
-	struct p2pmem_dev       *p2pmem;
 
 	u8			n_rdma;
 	u32			flags;
@@ -498,7 +497,7 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 
 	if (rsp->req.sg != &rsp->cmd->inline_sg)
 		nvmet_rdma_free_sgl(rsp->req.sg, rsp->req.sg_cnt,
-				    rsp->p2pmem);
+				    rsp->req.p2pmem);
 
 	if (unlikely(!list_empty_careful(&queue->rsp_wr_wait_list)))
 		nvmet_rdma_process_wr_wait_list(queue);
@@ -638,9 +637,9 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	/* no data command? */
 	if (!len)
 		return 0;
-	rsp->p2pmem = rsp->queue->port->p2pmem;
+	rsp->req.p2pmem = rsp->queue->port->p2pmem;
 	status = nvmet_rdma_alloc_sgl(&rsp->req.sg, &rsp->req.sg_cnt,
-			len, rsp->p2pmem);
+			len, rsp->req.p2pmem);
 	if (status)
 		return status;
 
