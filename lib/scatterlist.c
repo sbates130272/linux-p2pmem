@@ -633,6 +633,40 @@ void sg_miter_stop(struct sg_mapping_iter *miter)
 }
 EXPORT_SYMBOL(sg_miter_stop);
 
+static void ugly_dword_memcpy_fromio(void *dst, void *src, ssize_t len)
+{
+	u32 *u32dst = dst;
+	u32 *u32src = src;
+
+	WARN_ON(len & 3);
+	WARN_ON(((unsigned long)src) & 3);
+	WARN_ON(((unsigned long)dst) & 3);
+
+	while (len > 0) {
+		*u32dst = ioread32(u32src);
+		u32dst++;
+		u32src++;
+		len -= sizeof(u32);
+	}
+}
+
+static void ugly_dword_memcpy_toio(void *dst, void *src, ssize_t len)
+{
+	u32 *u32dst = dst;
+	u32 *u32src = src;
+
+	WARN_ON(len & 3);
+	WARN_ON(((unsigned long)src) & 3);
+	WARN_ON(((unsigned long)dst) & 3);
+
+	while (len > 0) {
+		iowrite32(*u32src, u32dst);
+		u32dst++;
+		u32src++;
+		len -= sizeof(u32);
+	}
+}
+
 /**
  * sg_copy_buffer - Copy data between a linear buffer and an SG list
  * @sgl:		 The SG list
@@ -647,7 +681,7 @@ EXPORT_SYMBOL(sg_miter_stop);
  *
  **/
 size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
-		      size_t buflen, off_t skip, bool to_buffer)
+		      size_t buflen, off_t skip, bool to_buffer, bool iomem)
 {
 	unsigned int offset = 0;
 	struct sg_mapping_iter miter;
@@ -671,10 +705,19 @@ size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
 
 		len = min(miter.length, buflen - offset);
 
-		if (to_buffer)
-			memcpy(buf + offset, miter.addr, len);
-		else
-			memcpy(miter.addr, buf + offset, len);
+		if (iomem) {
+			if (to_buffer)
+				ugly_dword_memcpy_fromio(buf + offset,
+							 miter.addr, len);
+			else
+				ugly_dword_memcpy_toio(miter.addr,
+						       buf + offset, len);
+		} else {
+			if (to_buffer)
+				memcpy(buf + offset, miter.addr, len);
+			else
+				memcpy(miter.addr, buf + offset, len);
+		}
 
 		offset += len;
 	}
@@ -699,7 +742,8 @@ EXPORT_SYMBOL(sg_copy_buffer);
 size_t sg_copy_from_buffer(struct scatterlist *sgl, unsigned int nents,
 			   const void *buf, size_t buflen)
 {
-	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, 0, false);
+	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, 0, false,
+			      false);
 }
 EXPORT_SYMBOL(sg_copy_from_buffer);
 
@@ -716,7 +760,7 @@ EXPORT_SYMBOL(sg_copy_from_buffer);
 size_t sg_copy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 			 void *buf, size_t buflen)
 {
-	return sg_copy_buffer(sgl, nents, buf, buflen, 0, true);
+	return sg_copy_buffer(sgl, nents, buf, buflen, 0, true, false);
 }
 EXPORT_SYMBOL(sg_copy_to_buffer);
 
@@ -734,7 +778,8 @@ EXPORT_SYMBOL(sg_copy_to_buffer);
 size_t sg_pcopy_from_buffer(struct scatterlist *sgl, unsigned int nents,
 			    const void *buf, size_t buflen, off_t skip)
 {
-	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, skip, false);
+	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, skip, false,
+			      false);
 }
 EXPORT_SYMBOL(sg_pcopy_from_buffer);
 
@@ -752,6 +797,6 @@ EXPORT_SYMBOL(sg_pcopy_from_buffer);
 size_t sg_pcopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 			  void *buf, size_t buflen, off_t skip)
 {
-	return sg_copy_buffer(sgl, nents, buf, buflen, skip, true);
+	return sg_copy_buffer(sgl, nents, buf, buflen, skip, true, false);
 }
 EXPORT_SYMBOL(sg_pcopy_to_buffer);
