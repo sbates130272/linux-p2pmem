@@ -580,6 +580,9 @@ bool sg_miter_next(struct sg_mapping_iter *miter)
 	if (!sg_miter_get_next_page(miter))
 		return false;
 
+	if (!(miter->__flags & SG_MITER_IOMEM))
+		WARN_ON(sg_is_iomem(miter->piter.sg));
+
 	miter->page = sg_page_iter_page(&miter->piter);
 	miter->consumed = miter->length = miter->__remaining;
 
@@ -651,7 +654,7 @@ size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
 {
 	unsigned int offset = 0;
 	struct sg_mapping_iter miter;
-	unsigned int sg_flags = SG_MITER_ATOMIC;
+	unsigned int sg_flags = SG_MITER_ATOMIC | SG_MITER_IOMEM;
 
 	if (to_buffer)
 		sg_flags |= SG_MITER_FROM_SG;
@@ -668,10 +671,17 @@ size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
 
 		len = min(miter.length, buflen - offset);
 
-		if (to_buffer)
-			memcpy(buf + offset, miter.addr, len);
-		else
-			memcpy(miter.addr, buf + offset, len);
+		if (sg_is_iomem(miter.piter.sg)) {
+			if (to_buffer)
+				memcpy_fromio(buf + offset,  miter.addr, len);
+			else
+				memcpy_toio(miter.addr, buf + offset, len);
+		} else {
+			if (to_buffer)
+				memcpy(buf + offset, miter.addr, len);
+			else
+				memcpy(miter.addr, buf + offset, len);
+		}
 
 		offset += len;
 	}

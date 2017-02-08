@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/bug.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <asm/io.h>
 
 struct scatterlist {
@@ -53,6 +54,9 @@ struct sg_table {
  *
  * If bit 1 is set, then this sg entry is the last element in a list.
  *
+ * We also use bit 2 to indicate whether the page_link points to an
+ * iomem page or not.
+ *
  * See sg_next().
  *
  */
@@ -64,10 +68,17 @@ struct sg_table {
  * a valid sg entry, or whether it points to the start of a new scatterlist.
  * Those low bits are there for everyone! (thanks mason :-)
  */
-#define sg_is_chain(sg)		((sg)->page_link & 0x01)
-#define sg_is_last(sg)		((sg)->page_link & 0x02)
+#define PAGE_LINK_MASK	0x7
+#define PAGE_LINK_CHAIN	0x1
+#define PAGE_LINK_LAST	0x2
+#define PAGE_LINK_IOMEM	0x4
+
+#define sg_is_chain(sg)		((sg)->page_link & PAGE_LINK_CHAIN)
+#define sg_is_last(sg)		((sg)->page_link & PAGE_LINK_LAST)
 #define sg_chain_ptr(sg)	\
-	((struct scatterlist *) ((sg)->page_link & ~0x03))
+	((struct scatterlist *) ((sg)->page_link & ~(PAGE_LINK_CHAIN | \
+						     PAGE_LINK_LAST)))
+#define sg_is_iomem(sg)		((sg)->page_link & PAGE_LINK_IOMEM)
 
 /**
  * sg_assign_page - Assign a given page to an SG entry
@@ -81,13 +92,13 @@ struct sg_table {
  **/
 static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 {
-	unsigned long page_link = sg->page_link & 0x3;
+	unsigned long page_link = sg->page_link & PAGE_LINK_MASK;
 
 	/*
 	 * In order for the low bit stealing approach to work, pages
-	 * must be aligned at a 32-bit boundary as a minimum.
+	 * must be aligned at a 64-bit boundary as a minimum.
 	 */
-	BUG_ON((unsigned long) page & 0x03);
+	BUG_ON((unsigned long) page & PAGE_LINK_MASK);
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg->sg_magic != SG_MAGIC);
 	BUG_ON(sg_is_chain(sg));
@@ -117,13 +128,56 @@ static inline void sg_set_page(struct scatterlist *sg, struct page *page,
 	sg->length = len;
 }
 
+/**
+ * sg_set_page - Set sg entry to point at given iomem page
+ * @sg:		 SG entry
+ * @page:	 The page
+ * @len:	 Length of data
+ * @offset:	 Offset into page
+ *
+ * Description:
+ *   Same as sg_set_page but used when the page is a ZONE_DEVICE page that
+ *   points to IO memory.
+ *
+ **/
+static inline void sg_set_iomem_page(struct scatterlist *sg, struct page *page,
+				     unsigned int len, unsigned int offset)
+{
+	sg_set_page(sg, page, len, offset);
+	sg->page_link |= PAGE_LINK_IOMEM;
+}
+
 static inline struct page *sg_page(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg->sg_magic != SG_MAGIC);
 	BUG_ON(sg_is_chain(sg));
 #endif
-	return (struct page *)((sg)->page_link & ~0x3);
+	return (struct page *)((sg)->page_link & ~PAGE_LINK_MASK);
+}
+
+static inline void *sg_kmap(struct scatterlist *sg)
+{
+	WARN_ON(sg_is_iomem(sg));
+
+	return kmap(sg_page(sg));
+}
+
+static inline void sg_kunmap(struct scatterlist *sg, void *addr)
+{
+	kunmap(addr);
+}
+
+static inline void *sg_kmap_atomic(struct scatterlist *sg)
+{
+	WARN_ON(sg_is_iomem(sg));
+
+	return kmap(sg_page(sg));
+}
+
+static inline void sg_kunmap_atomic(struct scatterlist *sg, void *addr)
+{
+	kunmap_atomic(addr);
 }
 
 /**
@@ -171,7 +225,8 @@ static inline void sg_chain(struct scatterlist *prv, unsigned int prv_nents,
 	 * Set lowest bit to indicate a link pointer, and make sure to clear
 	 * the termination bit if it happens to be set.
 	 */
-	prv[prv_nents - 1].page_link = ((unsigned long) sgl | 0x01) & ~0x02;
+	prv[prv_nents - 1].page_link =
+		((unsigned long) sgl & ~PAGE_LINK_MASK) | PAGE_LINK_CHAIN;
 }
 
 /**
@@ -191,8 +246,8 @@ static inline void sg_mark_end(struct scatterlist *sg)
 	/*
 	 * Set termination bit, clear potential chain bit
 	 */
-	sg->page_link |= 0x02;
-	sg->page_link &= ~0x01;
+	sg->page_link &= ~PAGE_LINK_MASK;
+	sg->page_link |= PAGE_LINK_LAST;
 }
 
 /**
@@ -208,7 +263,7 @@ static inline void sg_unmark_end(struct scatterlist *sg)
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg->sg_magic != SG_MAGIC);
 #endif
-	sg->page_link &= ~0x02;
+	sg->page_link &= ~PAGE_LINK_LAST;
 }
 
 /**
@@ -383,6 +438,7 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
 #define SG_MITER_ATOMIC		(1 << 0)	 /* use kmap_atomic */
 #define SG_MITER_TO_SG		(1 << 1)	/* flush back to phys on unmap */
 #define SG_MITER_FROM_SG	(1 << 2)	/* nop */
+#define SG_MITER_IOMEM		(1 << 3)	/* support iomem in miter ops */
 
 struct sg_mapping_iter {
 	/* the following three fields can be accessed directly */
