@@ -1,0 +1,30 @@
+cxgb4: fix bug in cim_la debugfs handler
+
+From: Steve Wise <swise@opengridcomputing.com>
+
+
+---
+
+ drivers/net/ethernet/chelsio/cxgb4/t4_hw.c |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+
+diff --git a/drivers/net/ethernet/chelsio/cxgb4/t4_hw.c b/drivers/net/ethernet/chelsio/cxgb4/t4_hw.c
+index 4447f1e..3f6041b 100644
+--- a/drivers/net/ethernet/chelsio/cxgb4/t4_hw.c
++++ b/drivers/net/ethernet/chelsio/cxgb4/t4_hw.c
+@@ -8231,6 +8231,14 @@ int t4_cim_read_la(struct adapter *adap, u32 *la_buf, unsigned int *wrptr)
+ 		if (ret)
+ 			break;
+ 		idx = (idx + 1) & UPDBGLARDPTR_M;
++
++		/*
++		 * Bits 0-3 of UpDbgLaRdPtr can be between 0000 to 1001 to
++		 * identify the 32-bit portion of the full 312-bit data
++		 */
++		if (is_t6(adap->params.chip))
++			while ((idx & 0xf) > 9)
++				idx = (idx + 1) % UPDBGLARDPTR_M;
+ 	}
+ restart:
+ 	if (cfg & UPDBGLAEN_F) {

@@ -1,0 +1,54 @@
+cxgb4: advertise the p2p info to ULDs
+
+From: Steve Wise <swise@opengridcomputing.com>
+
+Allows iw_cxgb4 to detect sge's utilizing p2pmem.
+---
+
+ drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.c |    9 +++++++++
+ drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.h |    4 ++++
+ 2 files changed, 13 insertions(+)
+
+
+diff --git a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.c b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.c
+index d0868c2..7a9c251 100644
+--- a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.c
++++ b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.c
+@@ -611,6 +611,7 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
+ {
+ 	int i;
+ 
++	memset(lld, 0, sizeof *lld);
+ 	lld->pdev = adap->pdev;
+ 	lld->pf = adap->pf;
+ 	lld->l2t = adap->l2t;
+@@ -648,6 +649,14 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
+ 	lld->ulptx_memwrite_dsgl = adap->params.ulptx_memwrite_dsgl;
+ 	lld->nodeid = dev_to_node(adap->pdev_dev);
+ 	lld->fr_nsmr_tpte_wr_support = adap->params.fr_nsmr_tpte_wr_support;
++	if (adap->p2pmem) {
++		lld->p2pmem_dev_addr = t4_read_reg(adap, CIM_EXTMEM2_BASE_ADDR_A);
++		lld->p2pmem_dev_size = t4_read_reg(adap, CIM_EXTMEM2_ADDR_SIZE_A);
++		lld->p2pmem_dma_addr = adap->pdev->resource[4].start + lld->p2pmem_dev_size;
++		dev_info(adap->pdev_dev,
++			"p2pmem dma_addr 0x%llx dev_addr 0x%x dev_size %d\n",
++			lld->p2pmem_dma_addr, lld->p2pmem_dev_addr, lld->p2pmem_dev_size);
++	}
+ }
+ 
+ static void uld_attach(struct adapter *adap, unsigned int uld)
+diff --git a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.h b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.h
+index 4c85660..e0045da 100644
+--- a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.h
++++ b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_uld.h
+@@ -324,6 +324,10 @@ struct cxgb4_lld_info {
+ 	void **iscsi_ppm;		     /* iscsi page pod manager */
+ 	int nodeid;			     /* device numa node id */
+ 	bool fr_nsmr_tpte_wr_support;	     /* FW supports FR_NSMR_TPTE_WR */
++
++	u64 p2pmem_dma_addr;
++	u32 p2pmem_dev_addr;
++	u32 p2pmem_dev_size;
+ };
+ 
+ struct cxgb4_uld_info {

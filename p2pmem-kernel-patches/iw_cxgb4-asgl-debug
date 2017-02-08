@@ -1,0 +1,72 @@
+iw_cxgb4: asgl debug
+
+From: Steve Wise <swise@opengridcomputing.com>
+
+
+---
+
+ drivers/infiniband/hw/cxgb4/qp.c                |   15 +++++++++++++--
+ drivers/net/ethernet/chelsio/cxgb4/cxgb4_main.c |    2 +-
+ 2 files changed, 14 insertions(+), 3 deletions(-)
+
+
+diff --git a/drivers/infiniband/hw/cxgb4/qp.c b/drivers/infiniband/hw/cxgb4/qp.c
+index eecf766..a48f8c6 100644
+--- a/drivers/infiniband/hw/cxgb4/qp.c
++++ b/drivers/infiniband/hw/cxgb4/qp.c
+@@ -527,7 +527,7 @@ static __u32 dev_memaddr(struct cxgb4_lld_info *lip, u64 sge_addr)
+ {
+ 	__u32 a = sge_addr - lip->p2pmem_dma_addr;
+ 
+-	pr_info_ratelimited("%s sge_addr 0x%llx dev_memaddr 0x%x\n", __func__, sge_addr, a);
++	pr_info("%s sge_addr 0x%llx dev_memaddr 0x%x\n", __func__, sge_addr, a);
+ 	return a;
+ }
+ 
+@@ -538,7 +538,7 @@ static bool addr_is_p2pmem(struct cxgb4_lld_info *lip, struct ib_sge *sgep)
+ 	ret = !sgep->lkey && lip->p2pmem_dev_size &&
+ 	       sgep->addr >= lip->p2pmem_dma_addr &&
+ 	       (sgep->addr + sgep->length - 1) < (lip->p2pmem_dma_addr + lip->p2pmem_dev_size);
+-	pr_info_ratelimited("%s sgep->addr 0x%llx length %d ret %d\n", __func__, sgep->addr, sgep->length, ret);
++	pr_info("%s sgep->addr 0x%llx length %d ret %d\n", __func__, sgep->addr, sgep->length, ret);
+ 	return ret;
+ }
+ 
+@@ -599,6 +599,14 @@ static int build_asgl(struct cxgb4_lld_info *lip, __be64 *queue_start,
+ 	return 0;
+ }
+ 
++static void dump_wr(__be64 *p, u8 len16)
++{
++	u8 i;
++
++	for (i=0; i < len16; i++, p += 2)
++		pr_info("%02u: %016llx %016llx\n", i, be64_to_cpu(p[0]), be64_to_cpu(p[1]));
++}
++
+ static int build_rdma_write(struct c4iw_qp *qhp, union t4_wr *wqe,
+ 			    struct ib_send_wr *wr, u8 *len16)
+ {
+@@ -1067,6 +1075,9 @@ int c4iw_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+ 
+ 		init_wr_hdr(wqe, qhp->wq.sq.pidx, fw_opcode, fw_flags, len16);
+ 
++		if (wr->opcode == IB_WR_RDMA_WRITE)
++			dump_wr((__be64 *)wqe, len16);
++
+ 		PDBG("%s cookie 0x%llx pidx 0x%x opcode 0x%x read_len %u\n",
+ 		     __func__, (unsigned long long)wr->wr_id, qhp->wq.sq.pidx,
+ 		     swsqe->opcode, swsqe->read_len);
+diff --git a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_main.c b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_main.c
+index dcff2ae..16e1320 100644
+--- a/drivers/net/ethernet/chelsio/cxgb4/cxgb4_main.c
++++ b/drivers/net/ethernet/chelsio/cxgb4/cxgb4_main.c
+@@ -172,7 +172,7 @@ module_param(select_queue, int, 0644);
+ MODULE_PARM_DESC(select_queue,
+ 		 "Select between kernel provided method of selecting or driver method of selecting TX queue. Default is kernel method.");
+ 
+-static bool use_p2pmem;
++static bool use_p2pmem = 1;
+ module_param(use_p2pmem, bool, 0644);
+ MODULE_PARM_DESC(use_p2pmem,
+ 		 "Enable registering a p2pmem device with bar space (if available)");

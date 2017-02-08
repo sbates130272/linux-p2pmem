@@ -1,0 +1,195 @@
+iw_cxgb4: FW_RI_DATA_ASGL support
+
+From: Steve Wise <swise@opengridcomputing.com>
+
+
+---
+
+ drivers/infiniband/hw/cxgb4/qp.c          |  102 +++++++++++++++++++++++++++--
+ drivers/infiniband/hw/cxgb4/t4fw_ri_api.h |   27 +++++++-
+ 2 files changed, 120 insertions(+), 9 deletions(-)
+
+
+diff --git a/drivers/infiniband/hw/cxgb4/qp.c b/drivers/infiniband/hw/cxgb4/qp.c
+index d4fd2f5..eecf766 100644
+--- a/drivers/infiniband/hw/cxgb4/qp.c
++++ b/drivers/infiniband/hw/cxgb4/qp.c
+@@ -523,9 +523,86 @@ static int build_rdma_send(struct t4_sq *sq, union t4_wr *wqe,
+ 	return 0;
+ }
+ 
+-static int build_rdma_write(struct t4_sq *sq, union t4_wr *wqe,
++static __u32 dev_memaddr(struct cxgb4_lld_info *lip, u64 sge_addr)
++{
++	__u32 a = sge_addr - lip->p2pmem_dma_addr;
++
++	pr_info_ratelimited("%s sge_addr 0x%llx dev_memaddr 0x%x\n", __func__, sge_addr, a);
++	return a;
++}
++
++static bool addr_is_p2pmem(struct cxgb4_lld_info *lip, struct ib_sge *sgep)
++{
++	bool ret;
++
++	ret = !sgep->lkey && lip->p2pmem_dev_size &&
++	       sgep->addr >= lip->p2pmem_dma_addr &&
++	       (sgep->addr + sgep->length - 1) < (lip->p2pmem_dma_addr + lip->p2pmem_dev_size);
++	pr_info_ratelimited("%s sgep->addr 0x%llx length %d ret %d\n", __func__, sgep->addr, sgep->length, ret);
++	return ret;
++}
++
++static int build_asgl(struct cxgb4_lld_info *lip, __be64 *queue_start,
++		      __be64 *queue_end, struct fw_ri_asgl *asglp,
++		      struct ib_sge *sg_list, int num_sge, u32 *plenp)
++{
++	struct fw_ri_memaddr *map = (struct fw_ri_memaddr *)asglp->addrs;
++	u32 plen = 0;
++	int i;
++
++	for (i = 0; i < num_sge; i++) {
++		u32 len = sg_list[i].length;
++		u64 addr = sg_list[i].addr;
++
++		/* All entries must be p2pmem */
++		if (!addr_is_p2pmem(lip, &sg_list[i]))
++			return -EINVAL;
++
++		/* Only support STAG0 */
++		if (sg_list[i].lkey)
++			return -EINVAL;
++
++		if ((plen + len) < plen)
++			return -EMSGSIZE;
++
++		/* FIXME: length alignment restriction */
++		if (len & 15) {
++			pr_debug("length %u not aligned!\n", len);
++			return -EINVAL;
++		}
++
++		plen += len;
++
++		map->len = cpu_to_be32(len);
++
++		/* FIXME: address alignment restriction */
++		if (addr & 31) {
++			pr_debug("addr 0x%llx not aligned!\n", addr);
++			return -EINVAL;
++		}
++
++		map->addr = cpu_to_be32(dev_memaddr(lip, addr));
++
++		pr_debug("sge: addr 0x%x len %u\n", be32_to_cpu(map->addr), be32_to_cpu(len));
++
++		if (++map == (struct fw_ri_memaddr *)queue_end)
++			map = (struct fw_ri_memaddr *)queue_start;
++	}
++
++	asglp->op = FW_RI_DATA_ASGL;
++	asglp->r1 = 0;
++	asglp->naddr = cpu_to_be16(num_sge);
++	asglp->r2 = 0;
++
++	*plenp = plen;
++
++	return 0;
++}
++
++static int build_rdma_write(struct c4iw_qp *qhp, union t4_wr *wqe,
+ 			    struct ib_send_wr *wr, u8 *len16)
+ {
++	struct t4_sq *sq = &qhp->wq.sq;
+ 	u32 plen;
+ 	int size;
+ 	int ret;
+@@ -544,14 +621,23 @@ static int build_rdma_write(struct t4_sq *sq, union t4_wr *wqe,
+ 			size = sizeof wqe->write + sizeof(struct fw_ri_immd) +
+ 			       plen;
+ 		} else {
+-			ret = build_isgl((__be64 *)sq->queue,
++			ret = build_asgl(&qhp->rhp->rdev.lldi, (__be64 *)sq->queue,
+ 					 (__be64 *)&sq->queue[sq->size],
+-					 wqe->write.u.isgl_src,
++					 wqe->write.u.asgl_src,
+ 					 wr->sg_list, wr->num_sge, &plen);
+-			if (ret)
+-				return ret;
+-			size = sizeof wqe->write + sizeof(struct fw_ri_isgl) +
+-			       wr->num_sge * sizeof(struct fw_ri_sge);
++			if (!ret) {
++				size = sizeof wqe->write + sizeof(struct fw_ri_asgl) +
++				       wr->num_sge * sizeof(struct fw_ri_sge);
++			} else {
++				ret = build_isgl((__be64 *)sq->queue,
++						 (__be64 *)&sq->queue[sq->size],
++						 wqe->write.u.isgl_src,
++						 wr->sg_list, wr->num_sge, &plen);
++				if (ret)
++					return ret;
++				size = sizeof wqe->write + sizeof(struct fw_ri_isgl) +
++				       wr->num_sge * sizeof(struct fw_ri_sge);
++			}
+ 		}
+ 	} else {
+ 		wqe->write.u.immd_src[0].op = FW_RI_DATA_IMMD;
+@@ -910,7 +996,7 @@ int c4iw_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+ 		case IB_WR_RDMA_WRITE:
+ 			fw_opcode = FW_RI_RDMA_WRITE_WR;
+ 			swsqe->opcode = FW_RI_RDMA_WRITE;
+-			err = build_rdma_write(&qhp->wq.sq, wqe, wr, &len16);
++			err = build_rdma_write(qhp, wqe, wr, &len16);
+ 			break;
+ 		case IB_WR_RDMA_READ:
+ 		case IB_WR_RDMA_READ_WITH_INV:
+diff --git a/drivers/infiniband/hw/cxgb4/t4fw_ri_api.h b/drivers/infiniband/hw/cxgb4/t4fw_ri_api.h
+index 010c709..7b53f66d 100644
+--- a/drivers/infiniband/hw/cxgb4/t4fw_ri_api.h
++++ b/drivers/infiniband/hw/cxgb4/t4fw_ri_api.h
+@@ -101,7 +101,8 @@ enum fw_ri_stag_type {
+ enum fw_ri_data_op {
+ 	FW_RI_DATA_IMMD			= 0x81,
+ 	FW_RI_DATA_DSGL			= 0x82,
+-	FW_RI_DATA_ISGL			= 0x83
++	FW_RI_DATA_ISGL			= 0x83,
++	FW_RI_DATA_ASGL			= 0x86
+ };
+ 
+ enum fw_ri_sgl_depth {
+@@ -141,6 +142,29 @@ struct fw_ri_isgl {
+ #endif
+ };
+ 
++#if 0
++struct fw_ri_memaddr {
++	__u8	r1[3];
++	__u8	len16; /* in units of 16 bytes. 0-1KB */
++	__be32	addr; /* 32B aligned */
++};
++#else
++struct fw_ri_memaddr {
++	__be32	len;
++	__be32	addr;
++};
++#endif
++
++struct fw_ri_asgl {
++	__u8	op;  /* FW_RI_DATA_ASGL */
++	__u8	r1;
++	__be16	naddr;
++	__be32	r2;
++#ifndef C99_NOT_SUPPORTED
++	struct fw_ri_memaddr addrs[0];
++#endif
++};
++
+ struct fw_ri_immd {
+ 	__u8	op;
+ 	__u8	r1;
+@@ -539,6 +563,7 @@ struct fw_ri_rdma_write_wr {
+ 	union {
+ 		struct fw_ri_immd immd_src[0];
+ 		struct fw_ri_isgl isgl_src[0];
++		struct fw_ri_asgl asgl_src[0];
+ 	} u;
+ #endif
+ };
