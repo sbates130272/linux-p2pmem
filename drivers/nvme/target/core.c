@@ -45,15 +45,29 @@ static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
 u16 nvmet_copy_to_sgl(struct nvmet_req *req, off_t off, const void *buf,
 		size_t len)
 {
-	if (sg_pcopy_from_buffer(req->sg, req->sg_cnt, buf, len, off) != len)
+	bool iomem = req->p2pmem;
+	size_t ret;
+
+	ret = sg_copy_buffer(req->sg, req->sg_cnt, (void *)buf, len, off,
+			     false, iomem);
+
+	if (ret != len)
 		return NVME_SC_SGL_INVALID_DATA | NVME_SC_DNR;
+
 	return 0;
 }
 
 u16 nvmet_copy_from_sgl(struct nvmet_req *req, off_t off, void *buf, size_t len)
 {
-	if (sg_pcopy_to_buffer(req->sg, req->sg_cnt, buf, len, off) != len)
+	bool iomem = req->p2pmem;
+	size_t ret;
+
+	ret = sg_copy_buffer(req->sg, req->sg_cnt, buf, len, off, true,
+			     iomem);
+
+	if (ret != len)
 		return NVME_SC_SGL_INVALID_DATA | NVME_SC_DNR;
+
 	return 0;
 }
 
