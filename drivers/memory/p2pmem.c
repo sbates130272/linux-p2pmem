@@ -247,8 +247,6 @@ static void p2pmem_release(struct device *dev)
 		p->pool = NULL;
 	}
 
-	cdev_del(&p->cdev);
-
 	ida_simple_remove(&p2pmem_ida, p->id);
 	kfree(p);
 }
@@ -338,7 +336,8 @@ void p2pmem_unregister(struct p2pmem_dev *p)
 	if (!p)
 		return;
 
-	dev_info(&p->dev, "released");
+	dev_info(&p->dev, "unregistered");
+	cdev_del(&p->cdev);
 	device_unregister(&p->dev);
 }
 EXPORT_SYMBOL(p2pmem_unregister);
