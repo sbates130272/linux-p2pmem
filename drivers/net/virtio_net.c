@@ -570,7 +570,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 	u16 num_buf;
 	struct page *page;
 	int offset;
-	struct sk_buff *head_skb, *curr_skb;
+	struct sk_buff *head_skb = NULL, *curr_skb;
 	struct bpf_prog *xdp_prog;
 	unsigned int truesize;
 
