@@ -97,6 +97,7 @@ struct rdma_conn_param {
 	u8 flow_control;
 	u8 retry_count;		/* ignored when accepting */
 	u8 rnr_retry_count;
+	enum ib_rnr_timeout min_rnr_timer;
 	/* Fields below ignored if a QP is created on the rdma_cm_id. */
 	u8 srq;
 	u32 qp_num;
