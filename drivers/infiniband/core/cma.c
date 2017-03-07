@@ -927,8 +927,10 @@ static int cma_modify_qp_rtr(struct rdma_id_private *id_priv,
 
 	BUG_ON(id_priv->cma_dev->device != id_priv->id.device);
 
-	if (conn_param)
+	if (conn_param) {
 		qp_attr.max_dest_rd_atomic = conn_param->responder_resources;
+		qp_attr.min_rnr_timer = conn_param->min_rnr_timer;
+	}
 	ret = ib_modify_qp(id_priv->id.qp, &qp_attr, qp_attr_mask);
 out:
 	mutex_unlock(&id_priv->qp_mutex);
