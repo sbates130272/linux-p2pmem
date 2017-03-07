@@ -1214,6 +1214,9 @@ static int nvmet_rdma_cm_accept(struct rdma_cm_id *cm_id,
 	int ret = -ENOMEM;
 
 	param.rnr_retry_count = 7;
+	if (queue->offload)
+		param.min_rnr_timer = IB_RNR_TIMER_000_01;
+
 	param.flow_control = 1;
 	param.initiator_depth = min_t(u8, p->initiator_depth,
 		queue->dev->device->attrs.max_qp_init_rd_atom);
