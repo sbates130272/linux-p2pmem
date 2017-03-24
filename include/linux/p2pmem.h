@@ -22,12 +22,16 @@
 struct p2pmem_dev {
 	struct device dev;
 	int id;
+	bool alive;
 
 	struct percpu_ref ref;
 	struct completion cmp;
 	struct gen_pool *pool;
 
 	struct dentry *debugfs_root;
+
+	struct mutex remove_mutex;	/* protects the remove callback list */
+	struct list_head remove_list;
 };
 
 #ifdef CONFIG_P2PMEM
@@ -44,8 +48,12 @@ int p2pmem_add_pci_region(struct p2pmem_dev *p, struct pci_dev *pdev, int bar);
 void *p2pmem_alloc(struct p2pmem_dev *p, size_t size);
 void p2pmem_free(struct p2pmem_dev *p, void *addr, size_t size);
 
-struct p2pmem_dev *p2pmem_find_compat(struct device **dma_devices);
-void p2pmem_put(struct p2pmem_dev *p);
+struct p2pmem_dev *
+p2pmem_find_compat(struct device **dma_devices,
+		   void (*unregister_callback)(void *context),
+		   void *context);
+
+void p2pmem_put(struct p2pmem_dev *p, void *context);
 
 #else
 
@@ -79,12 +87,15 @@ static inline void p2pmem_free(struct p2pmem_dev *p, void *addr, size_t size)
 {
 }
 
-static inline struct p2pmem_dev *p2pmem_find_compat(struct device **dma_devs)
+static inline struct p2pmem_dev *
+p2pmem_find_compat(struct device **dma_devices,
+		   void (*unregister_callback)(void *context),
+		   void *context)
 {
 	return NULL;
 }
 
-static inline void p2pmem_put(struct p2pmem_dev *p)
+static inline void p2pmem_put(struct p2pmem_dev *p, void *context)
 {
 }
 
