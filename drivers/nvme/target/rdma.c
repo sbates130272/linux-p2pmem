@@ -1009,7 +1009,7 @@ static void nvmet_rdma_free_queue(struct nvmet_rdma_queue *queue)
 				!queue->host_qid);
 	}
 	nvmet_rdma_free_rsps(queue);
-	p2pmem_put(queue->p2pmem);
+	p2pmem_put(queue->p2pmem, queue);
 	ida_simple_remove(&nvmet_rdma_queue_ida, queue->idx);
 	kfree(queue);
 }
@@ -1205,6 +1205,58 @@ static int nvmet_rdma_cm_accept(struct rdma_cm_id *cm_id,
 	return ret;
 }
 
+static void __nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
+{
+	bool disconnect = false;
+	unsigned long flags;
+
+	pr_debug("cm_id= %p queue->state= %d\n", queue->cm_id, queue->state);
+
+	spin_lock_irqsave(&queue->state_lock, flags);
+	switch (queue->state) {
+	case NVMET_RDMA_Q_CONNECTING:
+	case NVMET_RDMA_Q_LIVE:
+		queue->state = NVMET_RDMA_Q_DISCONNECTING;
+	case NVMET_RDMA_IN_DEVICE_REMOVAL:
+		disconnect = true;
+		break;
+	case NVMET_RDMA_Q_DISCONNECTING:
+		break;
+	}
+	spin_unlock_irqrestore(&queue->state_lock, flags);
+
+	if (disconnect) {
+		rdma_disconnect(queue->cm_id);
+		schedule_work(&queue->release_work);
+	}
+}
+
+static void nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
+{
+	bool disconnect = false;
+
+	mutex_lock(&nvmet_rdma_queue_mutex);
+	if (!list_empty(&queue->queue_list)) {
+		list_del_init(&queue->queue_list);
+		disconnect = true;
+	}
+	mutex_unlock(&nvmet_rdma_queue_mutex);
+
+	if (disconnect)
+		__nvmet_rdma_queue_disconnect(queue);
+}
+
+static void nvmet_rdma_p2pmem_remove(void *context)
+{
+	struct nvmet_rdma_queue *queue = context;
+
+	if (!queue->p2pmem)
+		return;
+
+	nvmet_rdma_queue_disconnect(queue);
+	flush_scheduled_work();
+}
+
 /*
  * If allow_p2pmem is set, we will try to use P2P memory for our
  * sgl lists. This requires the p2pmem device to be compatible with
@@ -1242,7 +1294,8 @@ static void nvmet_rdma_queue_setup_p2pmem(struct nvmet_rdma_queue *queue)
 
 	dma_devs[i++] = NULL;
 
-	queue->p2pmem = p2pmem_find_compat(dma_devs);
+	queue->p2pmem = p2pmem_find_compat(dma_devs, nvmet_rdma_p2pmem_remove,
+					   queue);
 
 	if (queue->p2pmem)
 		pr_debug("using %s for rdma nvme target queue",
@@ -1321,47 +1374,6 @@ static void nvmet_rdma_queue_established(struct nvmet_rdma_queue *queue)
 
 out_unlock:
 	spin_unlock_irqrestore(&queue->state_lock, flags);
-}
-
-static void __nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
-{
-	bool disconnect = false;
-	unsigned long flags;
-
-	pr_debug("cm_id= %p queue->state= %d\n", queue->cm_id, queue->state);
-
-	spin_lock_irqsave(&queue->state_lock, flags);
-	switch (queue->state) {
-	case NVMET_RDMA_Q_CONNECTING:
-	case NVMET_RDMA_Q_LIVE:
-		queue->state = NVMET_RDMA_Q_DISCONNECTING;
-	case NVMET_RDMA_IN_DEVICE_REMOVAL:
-		disconnect = true;
-		break;
-	case NVMET_RDMA_Q_DISCONNECTING:
-		break;
-	}
-	spin_unlock_irqrestore(&queue->state_lock, flags);
-
-	if (disconnect) {
-		rdma_disconnect(queue->cm_id);
-		schedule_work(&queue->release_work);
-	}
-}
-
-static void nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
-{
-	bool disconnect = false;
-
-	mutex_lock(&nvmet_rdma_queue_mutex);
-	if (!list_empty(&queue->queue_list)) {
-		list_del_init(&queue->queue_list);
-		disconnect = true;
-	}
-	mutex_unlock(&nvmet_rdma_queue_mutex);
-
-	if (disconnect)
-		__nvmet_rdma_queue_disconnect(queue);
 }
 
 static void nvmet_rdma_queue_connect_fail(struct rdma_cm_id *cm_id,
