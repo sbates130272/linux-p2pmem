@@ -105,6 +105,21 @@ static void p2pmem_release(struct device *dev)
 	kfree(p);
 }
 
+struct remove_callback {
+	struct list_head list;
+	void (*callback)(void *context);
+	void *context;
+};
+
+static void p2pmem_remove(struct p2pmem_dev *p)
+{
+	struct remove_callback *remove_call, *tmp;
+
+	p->alive = false;
+	list_for_each_entry_safe(remove_call, tmp, &p->remove_list, list)
+		remove_call->callback(remove_call->context);
+}
+
 /**
  * p2pmem_create() - create a new p2pmem device
  * @parent: the parent device to create it under
@@ -123,6 +138,10 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 		return ERR_PTR(-ENOMEM);
 
 	init_completion(&p->cmp);
+	mutex_init(&p->remove_mutex);
+	INIT_LIST_HEAD(&p->remove_list);
+	p->alive = true;
+
 	device_initialize(&p->dev);
 	p->dev.class = p2pmem_class;
 	p->dev.parent = parent;
@@ -187,6 +206,7 @@ void p2pmem_unregister(struct p2pmem_dev *p)
 
 	dev_info(&p->dev, "unregistered");
 	device_del(&p->dev);
+	p2pmem_remove(p);
 	ida_simple_remove(&p2pmem_ida, p->id);
 	put_device(&p->dev);
 }
@@ -295,6 +315,9 @@ EXPORT_SYMBOL(p2pmem_add_pci_region);
  */
 void *p2pmem_alloc(struct p2pmem_dev *p, size_t size)
 {
+	if (!p->alive)
+		return NULL;
+
 	return (void *)gen_pool_alloc(p->pool, size);
 }
 EXPORT_SYMBOL(p2pmem_alloc);
@@ -353,6 +376,9 @@ static int upstream_bridges_match(struct device *p2pmem,
 	struct pci_dev *p2p_up;
 	struct pci_dev *dma_up;
 
+	if (!to_p2pmem(p2pmem)->alive)
+		return false;
+
 	p2p_up = get_upstream_switch_port(p2pmem);
 	if (!p2p_up) {
 		dev_warn(p2pmem, "p2pmem is not behind a pci switch");
@@ -387,6 +413,8 @@ static int upstream_bridges_match(struct device *p2pmem,
  *	specified devices
  * @dma_devices: a null terminated array of device pointers which
  *	all must be compatible with the returned p2pmem device
+ * @remove_callback: this callback will be called if the p2pmem
+ *	device is removed.
  *
  * For now, we only support cases where all the devices that
  * will transfer to the p2pmem device are on the same switch.
@@ -404,9 +432,13 @@ static int upstream_bridges_match(struct device *p2pmem,
  * (use p2pmem_put to return the reference) or NULL if no compatible
  * p2pmem device is found.
  */
-struct p2pmem_dev *p2pmem_find_compat(struct device **dma_devices)
+struct p2pmem_dev *p2pmem_find_compat(struct device **dma_devices,
+				      void (*remove_callback)(void *context),
+				      void *context)
 {
 	struct device *dev;
+	struct p2pmem_dev *p;
+	struct remove_callback *remove_call;
 
 	dev = class_find_device(p2pmem_class, NULL, dma_devices,
 				upstream_bridges_match);
@@ -414,21 +446,54 @@ struct p2pmem_dev *p2pmem_find_compat(struct device **dma_devices)
 	if (!dev)
 		return NULL;
 
-	return to_p2pmem(dev);
+	p = to_p2pmem(dev);
+	mutex_lock(&p->remove_mutex);
+
+	if (!p->alive) {
+		p = NULL;
+		goto out;
+	}
+
+	remove_call = kzalloc(sizeof(*remove_call), GFP_KERNEL);
+	remove_call->callback = remove_callback;
+	remove_call->context = context;
+	INIT_LIST_HEAD(&remove_call->list);
+	list_add(&remove_call->list, &p->remove_list);
+
+out:
+	mutex_unlock(&p->remove_mutex);
+	return p;
 }
 EXPORT_SYMBOL(p2pmem_find_compat);
 
 /**
  * p2pmem_put() - decrement a p2pmem device reference
  * @p: p2pmem device to return
+ * @data: data pointer that was passed to p2pmem_find_compat
  *
  * Dereference and free (if last) the device's reference counter.
  * It's safe to pass a NULL pointer to this function.
  */
-void p2pmem_put(struct p2pmem_dev *p)
+void p2pmem_put(struct p2pmem_dev *p, void *context)
 {
-	if (p)
-		put_device(&p->dev);
+	struct remove_callback *remove_call;
+
+	if (!p)
+		return;
+
+	mutex_lock(&p->remove_mutex);
+
+	list_for_each_entry(remove_call, &p->remove_list, list) {
+		if (remove_call->context != context)
+			continue;
+
+		list_del(&remove_call->list);
+		kfree(remove_call);
+		break;
+	}
+
+	mutex_unlock(&p->remove_mutex);
+	put_device(&p->dev);
 }
 EXPORT_SYMBOL(p2pmem_put);
 
