@@ -272,7 +272,7 @@ static void alloc_and_scatter_data_area(struct tcmu_dev *udev,
 
 	for_each_sg(data_sg, sg, data_nents, i) {
 		int sg_remaining = sg->length;
-		from = kmap_atomic(sg_page(sg)) + sg->offset;
+		from = sg_kmap_atomic(sg);
 		while (sg_remaining > 0) {
 			if (block_remaining == 0) {
 				block = find_first_zero_bit(udev->data_bitmap,
@@ -301,7 +301,7 @@ static void alloc_and_scatter_data_area(struct tcmu_dev *udev,
 			sg_remaining -= copy_bytes;
 			block_remaining -= copy_bytes;
 		}
-		kunmap_atomic(from - sg->offset);
+		sg_kunmap_atomic(sg, from - sg->offset);
 	}
 }
 
@@ -322,7 +322,7 @@ static void gather_data_area(struct tcmu_dev *udev, unsigned long *cmd_bitmap,
 
 	for_each_sg(data_sg, sg, data_nents, i) {
 		int sg_remaining = sg->length;
-		to = kmap_atomic(sg_page(sg)) + sg->offset;
+		to = sg_kmap_atomic(sg);
 		while (sg_remaining > 0) {
 			if (block_remaining == 0) {
 				block = find_first_bit(cmd_bitmap,
@@ -342,7 +342,7 @@ static void gather_data_area(struct tcmu_dev *udev, unsigned long *cmd_bitmap,
 			sg_remaining -= copy_bytes;
 			block_remaining -= copy_bytes;
 		}
-		kunmap_atomic(to - sg->offset);
+		sg_kunmap_atomic(sg, to - sg->offset);
 	}
 }
 
