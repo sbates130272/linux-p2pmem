@@ -44,7 +44,10 @@ struct p2pmem_dev *p2pmem_create(struct device *parent);
 void p2pmem_unregister(struct p2pmem_dev *p);
 
 int p2pmem_add_resource(struct p2pmem_dev *p, struct resource *res);
+
+#ifdef CONFIG_PCI
 int p2pmem_add_pci_region(struct p2pmem_dev *p, struct pci_dev *pdev, int bar);
+#endif
 
 void *p2pmem_alloc(struct p2pmem_dev *p, size_t size);
 void p2pmem_free(struct p2pmem_dev *p, void *addr, size_t size);

@@ -20,6 +20,7 @@
 #include <linux/memremap.h>
 #include <linux/debugfs.h>
 #include <linux/pfn_t.h>
+#include <linux/pci.h>
 
 MODULE_DESCRIPTION("Peer 2 Peer Memory Device");
 MODULE_VERSION("0.1");
@@ -414,6 +415,8 @@ int p2pmem_add_resource(struct p2pmem_dev *p, struct resource *res)
 }
 EXPORT_SYMBOL(p2pmem_add_resource);
 
+#ifdef CONFIG_PCI
+
 struct pci_region {
 	struct pci_dev *pdev;
 	int bar;
@@ -470,6 +473,8 @@ err_pci:
 	return rc;
 }
 EXPORT_SYMBOL(p2pmem_add_pci_region);
+
+#endif
 
 /**
  * p2pmem_alloc() - allocate some p2p memory
