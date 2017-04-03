@@ -4694,8 +4694,8 @@ static int init_p2pmem(struct adapter *adapter)
 	memcpy(&res, &adapter->pdev->resource[4], sizeof(res));
 	res.start += mem_size;
 	res.end = res.start + mem_size - 1;
-	dev_info(adapter->pdev_dev, "p2pmem resource start 0x%llx end 0x%llx size %lluB\n",
-		 res.start, res.end, resource_size(&res));
+	dev_info(adapter->pdev_dev, "p2pmem resource start %pa[p] end %pa[p] size %luB\n",
+		 &res.start, &res.end, (unsigned long)resource_size(&res));
 
 	p = p2pmem_create(&adapter->pdev->dev);
 	if (IS_ERR(p))
