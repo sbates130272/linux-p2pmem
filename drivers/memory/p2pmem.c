@@ -42,8 +42,8 @@ static int stats_show(struct seq_file *seq, void *v)
 	struct p2pmem_dev *p = seq->private;
 
 	if (p->pool) {
-		seq_printf(seq, "total size: %lu\n", gen_pool_size(p->pool));
-		seq_printf(seq, "available:  %lu\n", gen_pool_avail(p->pool));
+		seq_printf(seq, "total size: %zu\n", gen_pool_size(p->pool));
+		seq_printf(seq, "available:  %zu\n", gen_pool_avail(p->pool));
 	}
 	return 0;
 }
