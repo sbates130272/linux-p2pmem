@@ -283,10 +283,10 @@ int shash_ahash_digest(struct ahash_request *req, struct shash_desc *desc)
 	if (nbytes < min(sg->length, ((unsigned int)(PAGE_SIZE)) - offset)) {
 		void *data;
 
-		data = kmap_atomic(sg_page(sg));
+		data = sg_kmap_atomic(sg);
 		err = crypto_shash_digest(desc, data + offset, nbytes,
 					  req->result);
-		kunmap_atomic(data);
+		sg_kunmap_atomic(sg, data);
 		crypto_yield(desc->flags);
 	} else
 		err = crypto_shash_init(desc) ?:

@@ -1632,9 +1632,9 @@ static int ablkcipher_get(void *saddr, unsigned int *srestp, unsigned int offset
 	while (size) {
 		copy = min3(srest, dst->length, size);
 
-		daddr = kmap_atomic(sg_page(dst));
+		daddr = sg_kmap_atomic(dst);
 		memcpy(daddr + dst->offset + offset, saddr, copy);
-		kunmap_atomic(daddr);
+		sg_kunmap_atomic(dst, daddr);
 
 		nbytes -= copy;
 		size -= copy;
@@ -1695,17 +1695,17 @@ static void hifn_process_ready(struct ablkcipher_request *req, int error)
 				continue;
 			}
 
-			saddr = kmap_atomic(sg_page(t));
+			saddr = sg_kmap_atomic(t);
 
 			err = ablkcipher_get(saddr, &t->length, t->offset,
 					dst, nbytes, &nbytes);
 			if (err < 0) {
-				kunmap_atomic(saddr);
+				sg_kunmap_atomic(t, saddr);
 				break;
 			}
 
 			idx += err;
-			kunmap_atomic(saddr);
+			sg_kunmap_atomic(t, saddr);
 		}
 
 		hifn_cipher_walk_exit(&rctx->walk);

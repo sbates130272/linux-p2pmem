@@ -420,7 +420,7 @@ static sense_reason_t xdreadwrite_callback(struct se_cmd *cmd, bool success,
 
 	offset = 0;
 	for_each_sg(cmd->t_bidi_data_sg, sg, cmd->t_bidi_data_nents, count) {
-		addr = kmap_atomic(sg_page(sg));
+		addr = sg_kmap_atomic(sg);
 		if (!addr) {
 			ret = TCM_OUT_OF_RESOURCES;
 			goto out;
@@ -430,7 +430,7 @@ static sense_reason_t xdreadwrite_callback(struct se_cmd *cmd, bool success,
 			*(addr + sg->offset + i) ^= *(buf + offset + i);
 
 		offset += sg->length;
-		kunmap_atomic(addr);
+		sg_kunmap_atomic(sg, addr);
 	}
 
 out:

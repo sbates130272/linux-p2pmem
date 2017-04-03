@@ -1378,7 +1378,7 @@ static int slot_complete_v1_hw(struct hisi_hba *hisi_hba,
 		struct scatterlist *sg_resp = &task->smp_task.smp_resp;
 
 		ts->stat = SAM_STAT_GOOD;
-		to = kmap_atomic(sg_page(sg_resp));
+		to = sg_kmap_atomic(sg_resp);
 
 		dma_unmap_sg(dev, &task->smp_task.smp_resp, 1,
 			     DMA_FROM_DEVICE);
@@ -1388,7 +1388,7 @@ static int slot_complete_v1_hw(struct hisi_hba *hisi_hba,
 		       slot->status_buffer +
 		       sizeof(struct hisi_sas_err_record),
 		       sg_dma_len(sg_resp));
-		kunmap_atomic(to);
+		sg_kunmap_atomic(sg_resp, to);
 		break;
 	}
 	case SAS_PROTOCOL_SATA:

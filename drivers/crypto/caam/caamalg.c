@@ -98,7 +98,7 @@ static void dbg_dump_sg(const char *level, const char *prefix_str,
 		 * make sure the scatterlist's page
 		 * has a valid virtual memory mapping
 		 */
-		it_page = kmap_atomic(sg_page(it));
+		it_page = sg_kmap_atomic(it);
 		if (unlikely(!it_page)) {
 			printk(KERN_ERR "dbg_dump_sg: kmap failed\n");
 			return;
@@ -110,7 +110,7 @@ static void dbg_dump_sg(const char *level, const char *prefix_str,
 			       groupsize, buf, len, ascii);
 		tlen -= len;
 
-		kunmap_atomic(it_page);
+		sg_kunmap_atomic(it, it_page);
 	}
 }
 #endif

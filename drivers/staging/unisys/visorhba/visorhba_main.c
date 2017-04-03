@@ -869,11 +869,11 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 
 		sg = scsi_sglist(scsicmd);
 		for (i = 0; i < scsi_sg_count(scsicmd); i++) {
-			this_page_orig = kmap_atomic(sg_page(sg + i));
+			this_page_orig = sg_kmap_atomic(sg + i);
 			this_page = (void *)((unsigned long)this_page_orig |
 					     sg[i].offset);
 			memcpy(this_page, buf + bufind, sg[i].length);
-			kunmap_atomic(this_page_orig);
+			sg_kunmap_atomic(sg + i, this_page_orig);
 		}
 	} else {
 		devdata = (struct visorhba_devdata *)scsidev->host->hostdata;

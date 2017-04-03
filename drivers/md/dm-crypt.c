@@ -589,9 +589,9 @@ static int crypt_iv_lmk_gen(struct crypt_config *cc, u8 *iv,
 	int r = 0;
 
 	if (bio_data_dir(dmreq->ctx->bio_in) == WRITE) {
-		src = kmap_atomic(sg_page(&dmreq->sg_in));
+		src = sg_kmap_atomic(&dmreq->sg_in);
 		r = crypt_iv_lmk_one(cc, iv, dmreq, src + dmreq->sg_in.offset);
-		kunmap_atomic(src);
+		sg_kunmap_atomic(&dmreq->sg_in, src);
 	} else
 		memset(iv, 0, cc->iv_size);
 
@@ -607,14 +607,14 @@ static int crypt_iv_lmk_post(struct crypt_config *cc, u8 *iv,
 	if (bio_data_dir(dmreq->ctx->bio_in) == WRITE)
 		return 0;
 
-	dst = kmap_atomic(sg_page(&dmreq->sg_out));
+	dst = sg_kmap_atomic(&dmreq->sg_out);
 	r = crypt_iv_lmk_one(cc, iv, dmreq, dst + dmreq->sg_out.offset);
 
 	/* Tweak the first block of plaintext sector */
 	if (!r)
 		crypto_xor(dst + dmreq->sg_out.offset, iv, cc->iv_size);
 
-	kunmap_atomic(dst);
+	sg_kunmap_atomic(&dmreq->sg_out, dst);
 	return r;
 }
 
@@ -731,9 +731,9 @@ static int crypt_iv_tcw_gen(struct crypt_config *cc, u8 *iv,
 
 	/* Remove whitening from ciphertext */
 	if (bio_data_dir(dmreq->ctx->bio_in) != WRITE) {
-		src = kmap_atomic(sg_page(&dmreq->sg_in));
+		src = sg_kmap_atomic(&dmreq->sg_in);
 		r = crypt_iv_tcw_whitening(cc, dmreq, src + dmreq->sg_in.offset);
-		kunmap_atomic(src);
+		sg_kunmap_atomic(&dmreq->sg_in, src);
 	}
 
 	/* Calculate IV */
@@ -755,9 +755,9 @@ static int crypt_iv_tcw_post(struct crypt_config *cc, u8 *iv,
 		return 0;
 
 	/* Apply whitening on ciphertext */
-	dst = kmap_atomic(sg_page(&dmreq->sg_out));
+	dst = sg_kmap_atomic(&dmreq->sg_out);
 	r = crypt_iv_tcw_whitening(cc, dmreq, dst + dmreq->sg_out.offset);
-	kunmap_atomic(dst);
+	sg_kunmap_atomic(&dmreq->sg_out, dst);
 
 	return r;
 }
