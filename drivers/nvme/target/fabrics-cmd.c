@@ -118,11 +118,17 @@ static u16 nvmet_install_queue(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 static void nvmet_execute_admin_connect(struct nvmet_req *req)
 {
 	struct nvmf_connect_command *c = &req->cmd->connect;
-	struct nvmf_connect_data d;
+	struct nvmf_connect_data *d;
 	struct nvmet_ctrl *ctrl = NULL;
 	u16 status = 0;
 
-	status = nvmet_copy_from_sgl(req, 0, &d, sizeof(d));
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
+	if (!d) {
+		status = NVME_SC_INTERNAL;
+		goto complete;
+	}
+
+	status = nvmet_copy_from_sgl(req, 0, d, sizeof(*d));
 	if (status)
 		goto out;
 
@@ -136,15 +142,15 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 		goto out;
 	}
 
-	if (unlikely(d.cntlid != cpu_to_le16(0xffff))) {
+	if (unlikely(d->cntlid != cpu_to_le16(0xffff))) {
 		pr_warn("connect attempt for invalid controller ID %#x\n",
-			d.cntlid);
+			d->cntlid);
 		status = NVME_SC_CONNECT_INVALID_PARAM | NVME_SC_DNR;
 		req->rsp->result.u32 = IPO_IATTR_CONNECT_DATA(cntlid);
 		goto out;
 	}
 
-	status = nvmet_alloc_ctrl(d.subsysnqn, d.hostnqn, req,
+	status = nvmet_alloc_ctrl(d->subsysnqn, d->hostnqn, req,
 				  le32_to_cpu(c->kato), &ctrl);
 	if (status)
 		goto out;
@@ -160,18 +166,26 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 	req->rsp->result.u16 = cpu_to_le16(ctrl->cntlid);
 
 out:
+	kfree(d);
+complete:
 	nvmet_req_complete(req, status);
 }
 
 static void nvmet_execute_io_connect(struct nvmet_req *req)
 {
 	struct nvmf_connect_command *c = &req->cmd->connect;
-	struct nvmf_connect_data d;
+	struct nvmf_connect_data *d;
 	struct nvmet_ctrl *ctrl = NULL;
 	u16 qid = le16_to_cpu(c->qid);
 	u16 status = 0;
 
-	status = nvmet_copy_from_sgl(req, 0, &d, sizeof(d));
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
+	if (!d) {
+		status = NVME_SC_INTERNAL;
+		goto complete;
+	}
+
+	status = nvmet_copy_from_sgl(req, 0, d, sizeof(*d));
 	if (status)
 		goto out;
 
@@ -185,8 +199,8 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 		goto out;
 	}
 
-	status = nvmet_ctrl_find_get(d.subsysnqn, d.hostnqn,
-				     le16_to_cpu(d.cntlid),
+	status = nvmet_ctrl_find_get(d->subsysnqn, d->hostnqn,
+				     le16_to_cpu(d->cntlid),
 				     req, &ctrl);
 	if (status)
 		goto out;
@@ -208,6 +222,8 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	pr_info("adding queue %d to ctrl %d.\n", qid, ctrl->cntlid);
 
 out:
+	kfree(d);
+complete:
 	nvmet_req_complete(req, status);
 	return;
 
