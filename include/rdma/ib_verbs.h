@@ -1005,17 +1005,41 @@ enum ib_srq_type {
 	IB_SRQT_BASIC,
 	IB_SRQT_XRC,
 	IB_SRQT_TM,
+	IB_EXP_SRQT_NVMF,
 };
 
 static inline bool ib_srq_has_cq(enum ib_srq_type srq_type)
 {
 	return srq_type == IB_SRQT_XRC ||
-	       srq_type == IB_SRQT_TM;
+	       srq_type == IB_SRQT_TM  ||
+	       srq_type == IB_EXP_SRQT_NVMF;
 }
 
 enum ib_srq_attr_mask {
 	IB_SRQ_MAX_WR	= 1 << 0,
 	IB_SRQ_LIMIT	= 1 << 1,
+};
+
+enum ib_nvmf_offload_type {
+	IB_NVMF_WRITE_OFFLOAD		 = (1ULL << 0),
+	IB_NVMF_READ_OFFLOAD		 = (1ULL << 1),
+	IB_NVMF_READ_WRITE_OFFLOAD	 = (1ULL << 2),
+	IB_NVMF_READ_WRITE_FLUSH_OFFLOAD = (1ULL << 3),
+};
+
+struct ib_nvmf_init_data {
+	enum ib_nvmf_offload_type	type;
+	u8				log_max_namespace;
+	u32				offloaded_capsules_count;
+	u32				cmd_size;
+	u8				data_offset;
+	u8				log_max_io_size;
+	u8				nvme_memory_log_page_size;
+	u8				staging_buffer_log_page_size;
+	u16				staging_buffer_number_of_pages;
+	u32				staging_buffer_page_offset;
+	u16				nvme_queue_size;
+	u64				*staging_buffer_pas;
 };
 
 struct ib_srq_attr {
@@ -1041,6 +1065,7 @@ struct ib_srq_init_attr {
 				u32		max_num_tags;
 			} tag_matching;
 		};
+		struct ib_nvmf_init_data nvmf;
 	} ext;
 };
 
