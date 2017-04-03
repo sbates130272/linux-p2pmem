@@ -541,6 +541,46 @@ struct mlx5_ifc_flow_table_eswitch_cap_bits {
 	u8      reserved_at_800[0x7800];
 };
 
+struct mlx5_ifc_nvmf_cap_bits {
+	u8	reserved_at_0[0x1b];
+	u8	log_max_namespace_per_xrq[0x5];
+
+	u8	reserved_at_20[0x6];
+	u8	read_write_flush_offload_dc[0x1];
+	u8	read_write_offload_dc[0x1];
+	u8	read_offload_dc[0x1];
+	u8	write_offload_dc[0x1];
+	u8	reserved_at_2a[0x1];
+	u8	log_max_staging_buffer_size[0x5];
+	u8	reserved_at_30[0x3];
+	u8	log_min_staging_buffer_size[0x5];
+	u8	reserved_at_38[0x3];
+	u8	read_write_flush_offload_rc[0x1];
+	u8	read_write_offload_rc[0x1];
+	u8	read_offload_rc[0x1];
+	u8	write_offload_rc[0x1];
+	u8	reserved_at_3f[0x1];
+
+	u8	reserved_at_40[0x3];
+	u8	log_max_io_size[0x5];
+	u8	reserved_at_48[0x3];
+	u8	log_max_backend_controller[0x5];
+	u8	reserved_at_50[0x3];
+	u8	log_max_backend_controller_per_xrq[0x5];
+	u8	max_icdoff[0x8];
+
+	u8	reserved_at_60[0x13];
+	u8	log_max_queue_size[0x5];
+	u8	reserved_at_78[0x3];
+	u8	log_min_queue_size[0x5];
+
+	u8	min_ioccsz[0x20];
+
+	u8	max_ioccsz[0x20];
+
+	u8	reserved_at_c0[0xe4];
+};
+
 struct mlx5_ifc_e_switch_cap_bits {
 	u8         vport_svlan_strip[0x1];
 	u8         vport_cvlan_strip[0x1];
@@ -1047,7 +1087,9 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         device_frequency_mhz[0x20];
 	u8         device_frequency_khz[0x20];
 
-	u8         reserved_at_500[0x20];
+	u8         reserved_at_500[0x2];
+	u8         nvmf_target_offload[0x1];
+	u8         reserved_at_503[0x1d];
 	u8	   num_of_uars_per_page[0x20];
 	u8         reserved_at_540[0x40];
 
@@ -2251,6 +2293,7 @@ union mlx5_ifc_hca_cap_union_bits {
 	struct mlx5_ifc_vector_calc_cap_bits vector_calc_cap;
 	struct mlx5_ifc_qos_cap_bits qos_cap;
 	struct mlx5_ifc_fpga_cap_bits fpga_cap;
+	struct mlx5_ifc_nvmf_cap_bits nvmf_cap;
 	u8         reserved_at_0[0x8000];
 };
 
