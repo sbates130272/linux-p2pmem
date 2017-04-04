@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/bug.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <asm/io.h>
 
 struct scatterlist {
@@ -124,6 +125,102 @@ static inline struct page *sg_page(struct scatterlist *sg)
 	BUG_ON(sg_is_chain(sg));
 #endif
 	return (struct page *)((sg)->page_link & ~0x3);
+}
+
+#define SG_KMAP		(1 << 0)	/* create a mapping with kmap */
+#define SG_KMAP_ATOMIC	(1 << 1)	/* create a mapping with kmap_atomic */
+
+/**
+ * sg_map_offset - kmap a page inside an sgl
+ * @sg:		SG entry
+ * @offset:	Offset into entry
+ * @flags:	Flags for creating the mapping
+ *
+ * Description:
+ *   Use this function to map a page in the scatterlist at the specified
+ *   offset. sg->offset is already added for you. Note: the semantics of
+ *   this function are that it may fail. Thus, its output should be checked
+ *   with IS_ERR and PTR_ERR. Otherwise, a pointer to the specified offset
+ *   in the mapped page is returned.
+ *
+ *   Flags can be any of:
+ *	* SG_KMAP	 - Use kmap to create the mapping
+ *	* SG_KMAP_ATOMIC - Use kmap_atomic to map the page atommically.
+ *			   Thus, the rules of that function apply: the cpu
+ *			   may not sleep until it is unmaped.
+ *
+ *   Also, consider carefully whether this function is appropriate. It is
+ *   largely not recommended for new code and if the sgl came from another
+ *   subsystem and you don't know what kind of memory might be in the list
+ *   then you definitely should not call it. Non-mappable memory may be in
+ *   the sgl and thus this function may fail unexpectedly.
+ **/
+static inline void *sg_map_offset(struct scatterlist *sg, size_t offset,
+				   int flags)
+{
+	struct page *pg;
+	unsigned int pg_off;
+
+	offset += sg->offset;
+	pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+	pg_off = offset_in_page(offset);
+
+	if (flags & SG_KMAP_ATOMIC)
+		return kmap_atomic(pg) + pg_off;
+	else
+		return kmap(pg) + pg_off;
+}
+
+/**
+ * sg_unkmap_offset - unmap a page that was mapped with sg_map_offset
+ * @sg:		SG entry
+ * @addr:	address returned by sg_map_offset
+ * @offset:	Offset into entry (same as specified for sg_map_offset)
+ * @flags:	Flags, which are the same specified for sg_map_offset
+ *
+ * Description:
+ *   Unmap the page that was mapped with sg_map_offset
+ *
+ **/
+static inline void sg_unmap_offset(struct scatterlist *sg, void *addr,
+				    size_t offset, int flags)
+{
+	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+	unsigned int pg_off = offset_in_page(offset);
+
+	if (flags & SG_KMAP_ATOMIC)
+		kunmap_atomic(addr - sg->offset - pg_off);
+	else
+		kunmap(pg);
+}
+
+/**
+ * sg_map - map the first page in the scatterlist entry
+ * @sg:		SG entry
+ * @flags:	Flags, see sg_map_offset for a description
+ *
+ * Description:
+ *   Same as sg_map_offset(sg, 0, flags);
+ *
+ **/
+static inline void *sg_map(struct scatterlist *sg, int flags)
+{
+	return sg_map_offset(sg, 0, flags);
+}
+
+/**
+ * sg_unmap - unmap a page mapped with sg_map
+ * @sg:		SG entry
+ * @addr:       address returned by sg_map
+ * @flags:	Flags, see sg_map_offset for a description
+ *
+ * Description:
+ *   Same as sg_map_offset(sg, 0, flags);
+ *
+ **/
+static inline void sg_unmap(struct scatterlist *sg, void *addr, int flags)
+{
+	sg_unmap_offset(sg, addr, 0, flags);
 }
 
 /**
