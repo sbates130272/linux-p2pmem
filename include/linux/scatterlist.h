@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/bug.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <asm/io.h>
 
 struct scatterlist {
@@ -124,6 +125,42 @@ static inline struct page *sg_page(struct scatterlist *sg)
 	BUG_ON(sg_is_chain(sg));
 #endif
 	return (struct page *)((sg)->page_link & ~0x3);
+}
+
+#define SG_KMAP_ATOMIC	(1 << 0)
+
+static inline void *sg_kmap_offset(struct scatterlist *sg, size_t offset,
+				   int flags)
+{
+	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+	unsigned int pg_off = offset_in_page(offset);
+
+	if (flags & SG_KMAP_ATOMIC)
+		return kmap_atomic(pg) + sg->offset + pg_off;
+	else
+		return kmap(pg) + sg->offset + pg_off;
+}
+
+static inline void sg_kunmap_offset(struct scatterlist *sg, void *addr,
+				    size_t offset, int flags)
+{
+	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+	unsigned int pg_off = offset_in_page(offset);
+
+	if (flags & SG_KMAP_ATOMIC)
+		kunmap_atomic(addr - sg->offset - pg_off);
+	else
+		kunmap(pg);
+}
+
+static inline void *sg_kmap(struct scatterlist *sg, int flags)
+{
+	return sg_kmap_offset(sg, 0, flags);
+}
+
+static inline void sg_kunmap(struct scatterlist *sg, void *addr, int flags)
+{
+	sg_kunmap_offset(sg, addr, 0, flags);
 }
 
 /**

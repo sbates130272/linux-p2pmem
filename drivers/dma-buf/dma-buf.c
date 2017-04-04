@@ -37,6 +37,9 @@
 
 #include <uapi/linux/dma-buf.h>
 
+/* Prevent the highmem.h macro from aliasing ops->kunmap_atomic */
+#undef kunmap_atomic
+
 static inline int is_dma_buf_file(struct file *);
 
 struct dma_buf_list {
