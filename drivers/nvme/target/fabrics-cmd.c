@@ -122,7 +122,11 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 	struct nvmet_ctrl *ctrl = NULL;
 	u16 status = 0;
 
-	d = kmap(sg_page(req->sg)) + req->sg->offset;
+	d = sg_map(req->sg, SG_KMAP);
+	if (IS_ERR(d)) {
+		status = NVME_SC_SGL_INVALID_DATA;
+		goto out;
+	}
 
 	/* zero out initial completion result, assign values as needed */
 	req->rsp->result.u32 = 0;
@@ -158,7 +162,7 @@ static void nvmet_execute_admin_connect(struct nvmet_req *req)
 	req->rsp->result.u16 = cpu_to_le16(ctrl->cntlid);
 
 out:
-	kunmap(sg_page(req->sg));
+	sg_unmap(req->sg, d, SG_KMAP);
 	nvmet_req_complete(req, status);
 }
 
@@ -170,7 +174,11 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	u16 qid = le16_to_cpu(c->qid);
 	u16 status = 0;
 
-	d = kmap(sg_page(req->sg)) + req->sg->offset;
+	d = sg_map(req->sg, SG_KMAP);
+	if (IS_ERR(d)) {
+		status = NVME_SC_SGL_INVALID_DATA;
+		goto out;
+	}
 
 	/* zero out initial completion result, assign values as needed */
 	req->rsp->result.u32 = 0;
@@ -205,7 +213,7 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	pr_info("adding queue %d to ctrl %d.\n", qid, ctrl->cntlid);
 
 out:
-	kunmap(sg_page(req->sg));
+	sg_unmap(req->sg, d, SG_KMAP);
 	nvmet_req_complete(req, status);
 	return;
 
