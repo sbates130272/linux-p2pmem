@@ -816,8 +816,9 @@ static int blkif_queue_rw_req(struct request *req, struct blkfront_ring_info *ri
 		BUG_ON(sg->offset + sg->length > PAGE_SIZE);
 
 		if (setup.need_copy) {
-			setup.bvec_off = sg->offset;
-			setup.bvec_data = kmap_atomic(sg_page(sg));
+			setup.bvec_off = 0;
+			setup.bvec_data = sg_map(sg, 0, SG_KMAP_ATOMIC |
+						 SG_MAP_MUST_NOT_FAIL);
 		}
 
 		gnttab_foreach_grant_in_range(sg_page(sg),
@@ -827,7 +828,7 @@ static int blkif_queue_rw_req(struct request *req, struct blkfront_ring_info *ri
 					      &setup);
 
 		if (setup.need_copy)
-			kunmap_atomic(setup.bvec_data);
+			sg_unmap(sg, setup.bvec_data, 0, SG_KMAP_ATOMIC);
 	}
 	if (setup.segments)
 		kunmap_atomic(setup.segments);
@@ -1053,7 +1054,7 @@ static int xen_translate_vdev(int vdevice, int *minor, unsigned int *offset)
 		case XEN_SCSI_DISK5_MAJOR:
 		case XEN_SCSI_DISK6_MAJOR:
 		case XEN_SCSI_DISK7_MAJOR:
-			*offset = (*minor / PARTS_PER_DISK) + 
+			*offset = (*minor / PARTS_PER_DISK) +
 				((major - XEN_SCSI_DISK1_MAJOR + 1) * 16) +
 				EMULATED_SD_DISK_NAME_OFFSET;
 			*minor = *minor +
@@ -1068,7 +1069,7 @@ static int xen_translate_vdev(int vdevice, int *minor, unsigned int *offset)
 		case XEN_SCSI_DISK13_MAJOR:
 		case XEN_SCSI_DISK14_MAJOR:
 		case XEN_SCSI_DISK15_MAJOR:
-			*offset = (*minor / PARTS_PER_DISK) + 
+			*offset = (*minor / PARTS_PER_DISK) +
 				((major - XEN_SCSI_DISK8_MAJOR + 8) * 16) +
 				EMULATED_SD_DISK_NAME_OFFSET;
 			*minor = *minor +
@@ -1119,7 +1120,7 @@ static int xlvbd_alloc_gendisk(blkif_sector_t capacity,
 	if (!VDEV_IS_EXTENDED(info->vdevice)) {
 		err = xen_translate_vdev(info->vdevice, &minor, &offset);
 		if (err)
-			return err;		
+			return err;
  		nr_parts = PARTS_PER_DISK;
 	} else {
 		minor = BLKIF_MINOR_EXT(info->vdevice);
@@ -1483,8 +1484,9 @@ static bool blkif_completion(unsigned long *id,
 		for_each_sg(s->sg, sg, num_sg, i) {
 			BUG_ON(sg->offset + sg->length > PAGE_SIZE);
 
-			data.bvec_offset = sg->offset;
-			data.bvec_data = kmap_atomic(sg_page(sg));
+			data.bvec_offset = 0;
+			data.bvec_data = sg_map(sg, 0, SG_KMAP_ATOMIC |
+						SG_MAP_MUST_NOT_FAIL);
 
 			gnttab_foreach_grant_in_range(sg_page(sg),
 						      sg->offset,
@@ -1492,7 +1494,7 @@ static bool blkif_completion(unsigned long *id,
 						      blkif_copy_from_grant,
 						      &data);
 
-			kunmap_atomic(data.bvec_data);
+			sg_unmap(sg, data.bvec_data, 0, SG_KMAP_ATOMIC);
 		}
 	}
 	/* Add the persistent grant into the list of free grants */
