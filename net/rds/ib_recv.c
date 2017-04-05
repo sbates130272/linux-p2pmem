@@ -800,10 +800,10 @@ static void rds_ib_cong_recv(struct rds_connection *conn,
 
 		to_copy = min(RDS_FRAG_SIZE - frag_off, PAGE_SIZE - map_off);
 		BUG_ON(to_copy & 7); /* Must be 64bit aligned. */
+		addr = sg_map(&frag->f_sg, 0,
+			      SG_KMAP_ATOMIC | SG_MAP_MUST_NOT_FAIL);
 
-		addr = kmap_atomic(sg_page(&frag->f_sg));
-
-		src = addr + frag->f_sg.offset + frag_off;
+		src = addr + frag_off;
 		dst = (void *)map->m_page_addrs[map_page] + map_off;
 		for (k = 0; k < to_copy; k += 8) {
 			/* Record ports that became uncongested, ie
@@ -811,7 +811,7 @@ static void rds_ib_cong_recv(struct rds_connection *conn,
 			uncongested |= ~(*src) & *dst;
 			*dst++ = *src++;
 		}
-		kunmap_atomic(addr);
+		sg_unmap(&frag->f_sg, addr, 0, SG_KMAP_ATOMIC);
 
 		copied += to_copy;
 
