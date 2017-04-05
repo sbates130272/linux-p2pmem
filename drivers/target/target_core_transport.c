@@ -1504,11 +1504,11 @@ int target_submit_cmd_map_sgls(struct se_cmd *se_cmd, struct se_session *se_sess
 			unsigned char *buf = NULL;
 
 			if (sgl)
-				buf = kmap(sg_page(sgl)) + sgl->offset;
+				buf = sg_kmap(sgl, 0);
 
-			if (buf) {
+			if (buf && !IS_ERR(buf)) {
 				memset(buf, 0, sgl->length);
-				kunmap(sg_page(sgl));
+				sg_kunmap(sgl, buf, 0);
 			}
 		}
 
