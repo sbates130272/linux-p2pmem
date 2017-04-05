@@ -2276,8 +2276,14 @@ void *transport_kmap_data_sg(struct se_cmd *cmd)
 		return NULL;
 
 	BUG_ON(!sg);
-	if (cmd->t_data_nents == 1)
-		return kmap(sg_page(sg)) + sg->offset;
+	if (cmd->t_data_nents == 1) {
+		cmd->t_data_vmap = sg_kmap(sg, 0);
+		if (IS_ERR(cmd->t_data_vmap)) {
+			cmd->t_data_vmap = NULL;
+			return NULL;
+		}
+		return cmd->t_data_vmap;
+	}
 
 	/* >1 page. use vmap */
 	pages = kmalloc(sizeof(*pages) * cmd->t_data_nents, GFP_KERNEL);
@@ -2303,7 +2309,7 @@ void transport_kunmap_data_sg(struct se_cmd *cmd)
 	if (!cmd->t_data_nents) {
 		return;
 	} else if (cmd->t_data_nents == 1) {
-		kunmap(sg_page(cmd->t_data_sg));
+		sg_kunmap(cmd->t_data_sg, cmd->t_data_vmap, 0);
 		return;
 	}
 
