@@ -1619,7 +1619,7 @@ static int hifn_start_device(struct hifn_device *dev)
 	return 0;
 }
 
-static int ablkcipher_get(void *saddr, unsigned int *srestp, unsigned int offset,
+static int ablkcipher_get(void *saddr, unsigned int *srestp,
 		struct scatterlist *dst, unsigned int size, unsigned int *nbytesp)
 {
 	unsigned int srest = *srestp, nbytes = *nbytesp, copy;
@@ -1632,15 +1632,17 @@ static int ablkcipher_get(void *saddr, unsigned int *srestp, unsigned int offset
 	while (size) {
 		copy = min3(srest, dst->length, size);
 
-		daddr = kmap_atomic(sg_page(dst));
-		memcpy(daddr + dst->offset + offset, saddr, copy);
-		kunmap_atomic(daddr);
+		daddr = sg_map(dst, SG_KMAP_ATOMIC);
+		if (IS_ERR(daddr))
+			return PTR_ERR(daddr);
+
+		memcpy(daddr, saddr, copy);
+		sg_unmap(dst, daddr, SG_KMAP_ATOMIC);
 
 		nbytes -= copy;
 		size -= copy;
 		srest -= copy;
 		saddr += copy;
-		offset = 0;
 
 		pr_debug("%s: copy: %u, size: %u, srest: %u, nbytes: %u.\n",
 			 __func__, copy, size, srest, nbytes);
@@ -1671,11 +1673,12 @@ static inline void hifn_complete_sa(struct hifn_device *dev, int i)
 
 static void hifn_process_ready(struct ablkcipher_request *req, int error)
 {
+	int err;
 	struct hifn_request_context *rctx = ablkcipher_request_ctx(req);
 
 	if (rctx->walk.flags & ASYNC_FLAGS_MISALIGNED) {
 		unsigned int nbytes = req->nbytes;
-		int idx = 0, err;
+		int idx = 0;
 		struct scatterlist *dst, *t;
 		void *saddr;
 
@@ -1695,17 +1698,24 @@ static void hifn_process_ready(struct ablkcipher_request *req, int error)
 				continue;
 			}
 
-			saddr = kmap_atomic(sg_page(t));
+			saddr = sg_map(t, SG_KMAP_ATOMIC);
+			if (IS_ERR(saddr)) {
+				if (!error)
+					error = PTR_ERR(saddr);
+				break;
+			}
 
-			err = ablkcipher_get(saddr, &t->length, t->offset,
-					dst, nbytes, &nbytes);
+			err = ablkcipher_get(saddr, &t->length,
+					     dst, nbytes, &nbytes);
+			sg_unmap(t, saddr, SG_KMAP_ATOMIC);
+
 			if (err < 0) {
-				kunmap_atomic(saddr);
+				if (!error)
+					error = err;
 				break;
 			}
 
 			idx += err;
-			kunmap_atomic(saddr);
 		}
 
 		hifn_cipher_walk_exit(&rctx->walk);
