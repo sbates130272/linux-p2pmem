@@ -3342,9 +3342,12 @@ static int pmcraid_copy_sglist(
 	scatterlist = sglist->scatterlist;
 
 	for (i = 0; i < (len / bsize_elem); i++, buffer += bsize_elem) {
-		struct page *page = sg_page(&scatterlist[i]);
+		kaddr = sg_kmap(&scatterlist[i], 0);
+		if (IS_ERR(kaddr)) {
+			pmcraid_err("failed to copy user data into sg list\n");
+			return PTR_ERR(kaddr);
+		}
 
-		kaddr = kmap(page);
 		if (direction == DMA_TO_DEVICE)
 			rc = __copy_from_user(kaddr,
 					      (void *)buffer,
@@ -3352,7 +3355,7 @@ static int pmcraid_copy_sglist(
 		else
 			rc = __copy_to_user((void *)buffer, kaddr, bsize_elem);
 
-		kunmap(page);
+		sg_kunmap(&scatterlist[i], kaddr, 0);
 
 		if (rc) {
 			pmcraid_err("failed to copy user data into sg list\n");
@@ -3363,9 +3366,11 @@ static int pmcraid_copy_sglist(
 	}
 
 	if (len % bsize_elem) {
-		struct page *page = sg_page(&scatterlist[i]);
-
-		kaddr = kmap(page);
+		kaddr = sg_kmap(&scatterlist[i], 0);
+		if (IS_ERR(kaddr)) {
+			pmcraid_err("failed to copy user data into sg list\n");
+			return PTR_ERR(kaddr);
+		}
 
 		if (direction == DMA_TO_DEVICE)
 			rc = __copy_from_user(kaddr,
@@ -3376,7 +3381,7 @@ static int pmcraid_copy_sglist(
 					    kaddr,
 					    len % bsize_elem);
 
-		kunmap(page);
+		sg_kunmap(&scatterlist[i], kaddr, 0);
 
 		scatterlist[i].length = len % bsize_elem;
 	}
