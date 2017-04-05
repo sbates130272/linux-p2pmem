@@ -842,7 +842,6 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 	struct scatterlist *sg;
 	unsigned int i;
 	char *this_page;
-	char *this_page_orig;
 	int bufind = 0;
 	struct visordisk_info *vdisk;
 	struct visorhba_devdata *devdata;
@@ -869,11 +868,14 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 
 		sg = scsi_sglist(scsicmd);
 		for (i = 0; i < scsi_sg_count(scsicmd); i++) {
-			this_page_orig = kmap_atomic(sg_page(sg + i));
-			this_page = (void *)((unsigned long)this_page_orig |
-					     sg[i].offset);
+			this_page = sg_map(sg + i, SG_KMAP_ATOMIC);
+			if (IS_ERR(this_page)) {
+				scsicmd->result = DID_ERROR << 16;
+				return;
+			}
+
 			memcpy(this_page, buf + bufind, sg[i].length);
-			kunmap_atomic(this_page_orig);
+			sg_unmap(sg + i, this_page, SG_KMAP_ATOMIC);
 		}
 	} else {
 		devdata = (struct visorhba_devdata *)scsidev->host->hostdata;
