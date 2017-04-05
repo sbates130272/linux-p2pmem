@@ -420,17 +420,17 @@ static sense_reason_t xdreadwrite_callback(struct se_cmd *cmd, bool success,
 
 	offset = 0;
 	for_each_sg(cmd->t_bidi_data_sg, sg, cmd->t_bidi_data_nents, count) {
-		addr = kmap_atomic(sg_page(sg));
-		if (!addr) {
+		addr = sg_kmap(sg, SG_KMAP_ATOMIC);
+		if (IS_ERR(addr)) {
 			ret = TCM_OUT_OF_RESOURCES;
 			goto out;
 		}
 
 		for (i = 0; i < sg->length; i++)
-			*(addr + sg->offset + i) ^= *(buf + offset + i);
+			*(addr + i) ^= *(buf + offset + i);
 
 		offset += sg->length;
-		kunmap_atomic(addr);
+		sg_kunmap(sg, addr, SG_KMAP_ATOMIC);
 	}
 
 out:
@@ -541,8 +541,8 @@ static sense_reason_t compare_and_write_callback(struct se_cmd *cmd, bool succes
 	 * Compare against SCSI READ payload against verify payload
 	 */
 	for_each_sg(cmd->t_bidi_data_sg, sg, cmd->t_bidi_data_nents, i) {
-		addr = (unsigned char *)kmap_atomic(sg_page(sg));
-		if (!addr) {
+		addr = sg_kmap(sg, SG_KMAP_ATOMIC);
+		if (IS_ERR(addr)) {
 			ret = TCM_OUT_OF_RESOURCES;
 			goto out;
 		}
@@ -552,10 +552,10 @@ static sense_reason_t compare_and_write_callback(struct se_cmd *cmd, bool succes
 		if (memcmp(addr, buf + offset, len)) {
 			pr_warn("Detected MISCOMPARE for addr: %p buf: %p\n",
 				addr, buf + offset);
-			kunmap_atomic(addr);
+			sg_kunmap(sg, addr, SG_KMAP_ATOMIC);
 			goto miscompare;
 		}
-		kunmap_atomic(addr);
+		sg_kunmap(sg, addr, SG_KMAP_ATOMIC);
 
 		offset += len;
 		compare_len -= len;
@@ -1262,8 +1262,14 @@ sbc_dif_generate(struct se_cmd *cmd)
 	unsigned int block_size = dev->dev_attrib.block_size;
 
 	for_each_sg(cmd->t_prot_sg, psg, cmd->t_prot_nents, i) {
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
-		daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+		paddr = sg_kmap(psg, SG_KMAP_ATOMIC);
+		if (IS_ERR(paddr))
+			goto sg_kmap_err;
+
+		daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
+		if (IS_ERR(daddr))
+			goto sg_kmap_err;
+
 
 		for (j = 0; j < psg->length;
 				j += sizeof(*sdt)) {
@@ -1272,26 +1278,32 @@ sbc_dif_generate(struct se_cmd *cmd)
 
 			if (offset >= dsg->length) {
 				offset -= dsg->length;
-				kunmap_atomic(daddr - dsg->offset);
+				sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 					return;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
+				if (IS_ERR(daddr))
+					goto sg_kmap_err;
 			}
 
 			sdt = paddr + j;
 			avail = min(block_size, dsg->length - offset);
 			crc = crc_t10dif(daddr + offset, avail);
 			if (avail < block_size) {
-				kunmap_atomic(daddr - dsg->offset);
+				sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 					return;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+
+				daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
+				if (IS_ERR(daddr))
+					goto sg_kmap_err;
+
 				offset = block_size - avail;
 				crc = crc_t10dif_update(crc, daddr, offset);
 			} else {
@@ -1313,9 +1325,24 @@ sbc_dif_generate(struct se_cmd *cmd)
 			sector++;
 		}
 
-		kunmap_atomic(daddr - dsg->offset);
-		kunmap_atomic(paddr - psg->offset);
+		sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
+		sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 	}
+
+	return;
+
+sg_kmap_err:
+	if (!IS_ERR_OR_NULL(paddr))
+		sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
+
+	/*
+	 * This should really never happen unless
+	 * the code is changed to use memory that is
+	 * not mappable in the sg. Seeing there doesn't
+	 * seem to be any error path out of here,
+	 * we can only WARN.
+	 */
+	WARN(1, "Non-mappable memory used in sg!");
 }
 
 static sense_reason_t
@@ -1359,8 +1386,8 @@ check_ref:
 	return 0;
 }
 
-void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
-		       struct scatterlist *sg, int sg_off)
+int sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
+		      struct scatterlist *sg, int sg_off)
 {
 	struct se_device *dev = cmd->se_dev;
 	struct scatterlist *psg;
@@ -1369,18 +1396,24 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 	unsigned int offset = sg_off;
 
 	if (!sg)
-		return;
+		return 0;
 
 	left = sectors * dev->prot_length;
 
 	for_each_sg(cmd->t_prot_sg, psg, cmd->t_prot_nents, i) {
 		unsigned int psg_len, copied = 0;
 
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
+		paddr = sg_kmap(psg, SG_KMAP_ATOMIC);
+		if (IS_ERR(paddr))
+			return TCM_OUT_OF_RESOURCES;
+
 		psg_len = min(left, psg->length);
 		while (psg_len) {
 			len = min(psg_len, sg->length - offset);
-			addr = kmap_atomic(sg_page(sg)) + sg->offset + offset;
+			addr = sg_kmap_offset(sg, offset, SG_KMAP_ATOMIC);
+
+			if (IS_ERR(paddr))
+				return TCM_OUT_OF_RESOURCES;
 
 			if (read)
 				memcpy(paddr + copied, addr, len);
@@ -1392,15 +1425,17 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 			copied += len;
 			psg_len -= len;
 
-			kunmap_atomic(addr - sg->offset - offset);
+			sg_kunmap_offset(sg, addr, offset, SG_KMAP_ATOMIC);
 
 			if (offset >= sg->length) {
 				sg = sg_next(sg);
 				offset = 0;
 			}
 		}
-		kunmap_atomic(paddr - psg->offset);
+		sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 	}
+
+	return 0;
 }
 EXPORT_SYMBOL(sbc_dif_copy_prot);
 
@@ -1419,8 +1454,15 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 	unsigned int block_size = dev->dev_attrib.block_size;
 
 	for (; psg && sector < start + sectors; psg = sg_next(psg)) {
-		paddr = kmap_atomic(sg_page(psg)) + psg->offset;
-		daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+		paddr = sg_kmap(psg, SG_KMAP_ATOMIC);
+		if (IS_ERR(paddr))
+			goto sg_kmap_err;
+
+		daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
+		if (IS_ERR(daddr)) {
+			sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
+			goto sg_kmap_err;
+		}
 
 		for (i = psg_off; i < psg->length &&
 				sector < start + sectors;
@@ -1430,13 +1472,13 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 
 			if (dsg_off >= dsg->length) {
 				dsg_off -= dsg->length;
-				kunmap_atomic(daddr - dsg->offset);
+				sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 					return 0;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
 			}
 
 			sdt = paddr + i;
@@ -1454,13 +1496,13 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 			avail = min(block_size, dsg->length - dsg_off);
 			crc = crc_t10dif(daddr + dsg_off, avail);
 			if (avail < block_size) {
-				kunmap_atomic(daddr - dsg->offset);
+				sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
 				dsg = sg_next(dsg);
 				if (!dsg) {
-					kunmap_atomic(paddr - psg->offset);
+					sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 					return 0;
 				}
-				daddr = kmap_atomic(sg_page(dsg)) + dsg->offset;
+				daddr = sg_kmap(dsg, SG_KMAP_ATOMIC);
 				dsg_off = block_size - avail;
 				crc = crc_t10dif_update(crc, daddr, dsg_off);
 			} else {
@@ -1469,8 +1511,8 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 
 			rc = sbc_dif_v1_verify(cmd, sdt, crc, sector, ei_lba);
 			if (rc) {
-				kunmap_atomic(daddr - dsg->offset);
-				kunmap_atomic(paddr - psg->offset);
+				sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
+				sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 				cmd->bad_sector = sector;
 				return rc;
 			}
@@ -1480,10 +1522,16 @@ next:
 		}
 
 		psg_off = 0;
-		kunmap_atomic(daddr - dsg->offset);
-		kunmap_atomic(paddr - psg->offset);
+		sg_kunmap(dsg, daddr, SG_KMAP_ATOMIC);
+		sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
 	}
 
 	return 0;
+
+sg_kmap_err:
+	if (!IS_ERR_OR_NULL(paddr))
+		sg_kunmap(psg, paddr, SG_KMAP_ATOMIC);
+
+	return TCM_OUT_OF_RESOURCES;
 }
 EXPORT_SYMBOL(sbc_dif_verify);
