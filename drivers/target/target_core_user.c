@@ -260,7 +260,7 @@ static inline size_t iov_tail(struct tcmu_dev *udev, struct iovec *iov)
 	return (size_t)iov->iov_base + iov->iov_len;
 }
 
-static void alloc_and_scatter_data_area(struct tcmu_dev *udev,
+static int alloc_and_scatter_data_area(struct tcmu_dev *udev,
 	struct scatterlist *data_sg, unsigned int data_nents,
 	struct iovec **iov, int *iov_cnt, bool copy_data)
 {
@@ -272,7 +272,10 @@ static void alloc_and_scatter_data_area(struct tcmu_dev *udev,
 
 	for_each_sg(data_sg, sg, data_nents, i) {
 		int sg_remaining = sg->length;
-		from = kmap_atomic(sg_page(sg)) + sg->offset;
+		from = sg_map(sg, 0, SG_KMAP_ATOMIC);
+		if (IS_ERR(from))
+			return PTR_ERR(from);
+
 		while (sg_remaining > 0) {
 			if (block_remaining == 0) {
 				block = find_first_zero_bit(udev->data_bitmap,
@@ -301,8 +304,10 @@ static void alloc_and_scatter_data_area(struct tcmu_dev *udev,
 			sg_remaining -= copy_bytes;
 			block_remaining -= copy_bytes;
 		}
-		kunmap_atomic(from - sg->offset);
+		sg_unmap(sg, from, 0, SG_KMAP_ATOMIC);
 	}
+
+	return 0;
 }
 
 static void free_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd)
@@ -311,8 +316,8 @@ static void free_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd)
 		   DATA_BLOCK_BITS);
 }
 
-static void gather_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd,
-			     bool bidi)
+static int gather_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd,
+			    bool bidi)
 {
 	struct se_cmd *se_cmd = cmd->se_cmd;
 	int i, block;
@@ -348,7 +353,10 @@ static void gather_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd,
 
 	for_each_sg(data_sg, sg, data_nents, i) {
 		int sg_remaining = sg->length;
-		to = kmap_atomic(sg_page(sg)) + sg->offset;
+		to = sg_map(sg, 0, SG_KMAP_ATOMIC);
+		if (IS_ERR(to))
+			return PTR_ERR(to);
+
 		while (sg_remaining > 0) {
 			if (block_remaining == 0) {
 				block = find_first_bit(bitmap,
@@ -368,8 +376,10 @@ static void gather_data_area(struct tcmu_dev *udev, struct tcmu_cmd *cmd,
 			sg_remaining -= copy_bytes;
 			block_remaining -= copy_bytes;
 		}
-		kunmap_atomic(to - sg->offset);
+		sg_unmap(sg, to, 0, SG_KMAP_ATOMIC);
 	}
+
+	return 0;
 }
 
 static inline size_t spc_bitmap_free(unsigned long *bitmap)
@@ -546,8 +556,12 @@ tcmu_queue_cmd_ring(struct tcmu_cmd *tcmu_cmd)
 	iov_cnt = 0;
 	copy_to_data_area = (se_cmd->data_direction == DMA_TO_DEVICE
 		|| se_cmd->se_cmd_flags & SCF_BIDI);
-	alloc_and_scatter_data_area(udev, se_cmd->t_data_sg,
-		se_cmd->t_data_nents, &iov, &iov_cnt, copy_to_data_area);
+	if (alloc_and_scatter_data_area(udev, se_cmd->t_data_sg,
+		se_cmd->t_data_nents, &iov, &iov_cnt, copy_to_data_area)) {
+		spin_unlock_irq(&udev->cmdr_lock);
+		return TCM_OUT_OF_RESOURCES;
+	}
+
 	entry->req.iov_cnt = iov_cnt;
 	entry->req.iov_dif_cnt = 0;
 
@@ -555,9 +569,12 @@ tcmu_queue_cmd_ring(struct tcmu_cmd *tcmu_cmd)
 	if (se_cmd->se_cmd_flags & SCF_BIDI) {
 		iov_cnt = 0;
 		iov++;
-		alloc_and_scatter_data_area(udev, se_cmd->t_bidi_data_sg,
+		if (alloc_and_scatter_data_area(udev, se_cmd->t_bidi_data_sg,
 				se_cmd->t_bidi_data_nents, &iov, &iov_cnt,
-				false);
+				false)) {
+			spin_unlock_irq(&udev->cmdr_lock);
+			return TCM_OUT_OF_RESOURCES;
+		}
 		entry->req.iov_bidi_cnt = iov_cnt;
 	}
 	/* cmd's data_bitmap is what changed in process */
@@ -637,10 +654,12 @@ static void tcmu_handle_completion(struct tcmu_cmd *cmd, struct tcmu_cmd_entry *
 		free_data_area(udev, cmd);
 	} else if (se_cmd->se_cmd_flags & SCF_BIDI) {
 		/* Get Data-In buffer before clean up */
-		gather_data_area(udev, cmd, true);
+		if (gather_data_area(udev, cmd, true))
+			entry->rsp.scsi_status = SAM_STAT_CHECK_CONDITION;
 		free_data_area(udev, cmd);
 	} else if (se_cmd->data_direction == DMA_FROM_DEVICE) {
-		gather_data_area(udev, cmd, false);
+		if (gather_data_area(udev, cmd, false))
+			entry->rsp.scsi_status = SAM_STAT_CHECK_CONDITION;
 		free_data_area(udev, cmd);
 	} else if (se_cmd->data_direction == DMA_TO_DEVICE) {
 		free_data_area(udev, cmd);

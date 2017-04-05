@@ -82,8 +82,8 @@ sector_t	sbc_get_write_same_sectors(struct se_cmd *cmd);
 void	sbc_dif_generate(struct se_cmd *);
 sense_reason_t	sbc_dif_verify(struct se_cmd *, sector_t, unsigned int,
 				     unsigned int, struct scatterlist *, int);
-void sbc_dif_copy_prot(struct se_cmd *, unsigned int, bool,
-		       struct scatterlist *, int);
+int sbc_dif_copy_prot(struct se_cmd *, unsigned int, bool,
+		      struct scatterlist *, int);
 void	transport_set_vpd_proto_id(struct t10_vpd *, unsigned char *);
 int	transport_set_vpd_assoc(struct t10_vpd *, unsigned char *);
 int	transport_set_vpd_ident_type(struct t10_vpd *, unsigned char *);
