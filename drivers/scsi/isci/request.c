@@ -1424,12 +1424,14 @@ sci_stp_request_pio_data_in_copy_data_buffer(struct isci_stp_request *stp_req,
 		sg = task->scatter;
 
 		while (total_len > 0) {
-			struct page *page = sg_page(sg);
-
 			copy_len = min_t(int, total_len, sg_dma_len(sg));
-			kaddr = kmap_atomic(page);
+			kaddr = sg_kmap(sg, SG_KMAP_ATOMIC);
+			if (IS_ERR(kaddr))
+				return SCI_FAILURE;
+
 			memcpy(kaddr, src_addr, copy_len);
-			kunmap_atomic(kaddr);
+			sg_kunmap(sg, kaddr, SG_KMAP_ATOMIC);
+
 			total_len -= copy_len;
 			src_addr += copy_len;
 			sg = sg_next(sg);
