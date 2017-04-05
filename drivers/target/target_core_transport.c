@@ -1504,11 +1504,11 @@ int target_submit_cmd_map_sgls(struct se_cmd *se_cmd, struct se_session *se_sess
 			unsigned char *buf = NULL;
 
 			if (sgl)
-				buf = kmap(sg_page(sgl)) + sgl->offset;
+				buf = sg_map(sgl, SG_KMAP);
 
-			if (buf) {
+			if (buf && !IS_ERR(buf)) {
 				memset(buf, 0, sgl->length);
-				kunmap(sg_page(sgl));
+				sg_unmap(sgl, buf, SG_KMAP);
 			}
 		}
 
@@ -2276,8 +2276,14 @@ void *transport_kmap_data_sg(struct se_cmd *cmd)
 		return NULL;
 
 	BUG_ON(!sg);
-	if (cmd->t_data_nents == 1)
-		return kmap(sg_page(sg)) + sg->offset;
+	if (cmd->t_data_nents == 1) {
+		cmd->t_data_vmap = sg_map(sg, SG_KMAP);
+		if (IS_ERR(cmd->t_data_vmap)) {
+			cmd->t_data_vmap = NULL;
+			return NULL;
+		}
+		return cmd->t_data_vmap;
+	}
 
 	/* >1 page. use vmap */
 	pages = kmalloc(sizeof(*pages) * cmd->t_data_nents, GFP_KERNEL);
@@ -2303,7 +2309,7 @@ void transport_kunmap_data_sg(struct se_cmd *cmd)
 	if (!cmd->t_data_nents) {
 		return;
 	} else if (cmd->t_data_nents == 1) {
-		kunmap(sg_page(cmd->t_data_sg));
+		sg_unmap(cmd->t_data_sg, cmd->t_data_vmap, SG_KMAP);
 		return;
 	}
 

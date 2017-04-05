@@ -579,7 +579,7 @@ iscsit_xmit_nondatain_pdu(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 }
 
 static int iscsit_map_iovec(struct iscsi_cmd *, struct kvec *, u32, u32);
-static void iscsit_unmap_iovec(struct iscsi_cmd *);
+static void iscsit_unmap_iovec(struct iscsi_cmd *, struct kvec *);
 static u32 iscsit_do_crypto_hash_sg(struct ahash_request *, struct iscsi_cmd *,
 				    u32, u32, u32, u8 *);
 static int
@@ -646,7 +646,7 @@ iscsit_xmit_datain_pdu(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 
 	ret = iscsit_fe_sendpage_sg(cmd, conn);
 
-	iscsit_unmap_iovec(cmd);
+	iscsit_unmap_iovec(cmd, &cmd->iov_data[1]);
 
 	if (ret < 0) {
 		iscsit_tx_thread_wait_for_tcp(conn);
@@ -925,7 +925,10 @@ static int iscsit_map_iovec(
 	while (data_length) {
 		u32 cur_len = min_t(u32, data_length, sg->length - page_off);
 
-		iov[i].iov_base = kmap(sg_page(sg)) + sg->offset + page_off;
+		iov[i].iov_base = sg_map_offset(sg, page_off, SG_KMAP);
+		if (IS_ERR(iov[i].iov_base))
+			goto map_err;
+
 		iov[i].iov_len = cur_len;
 
 		data_length -= cur_len;
@@ -937,17 +940,25 @@ static int iscsit_map_iovec(
 	cmd->kmapped_nents = i;
 
 	return i;
+
+map_err:
+	cmd->kmapped_nents = i - 1;
+	iscsit_unmap_iovec(cmd, iov);
+	return -1;
 }
 
-static void iscsit_unmap_iovec(struct iscsi_cmd *cmd)
+static void iscsit_unmap_iovec(struct iscsi_cmd *cmd, struct kvec *iov)
 {
 	u32 i;
 	struct scatterlist *sg;
+	unsigned int page_off = cmd->first_data_sg_off;
 
 	sg = cmd->first_data_sg;
 
-	for (i = 0; i < cmd->kmapped_nents; i++)
-		kunmap(sg_page(&sg[i]));
+	for (i = 0; i < cmd->kmapped_nents; i++) {
+		sg_unmap_offset(&sg[i], iov[i].iov_base, page_off, SG_KMAP);
+		page_off = 0;
+	}
 }
 
 static void iscsit_ack_from_expstatsn(struct iscsi_conn *conn, u32 exp_statsn)
@@ -1610,7 +1621,7 @@ iscsit_get_dataout(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 
 	rx_got = rx_data(conn, &cmd->iov_data[0], iov_count, rx_size);
 
-	iscsit_unmap_iovec(cmd);
+	iscsit_unmap_iovec(cmd, iov);
 
 	if (rx_got != rx_size)
 		return -1;
@@ -2626,7 +2637,7 @@ static int iscsit_handle_immediate_data(
 
 	rx_got = rx_data(conn, &cmd->iov_data[0], iov_count, rx_size);
 
-	iscsit_unmap_iovec(cmd);
+	iscsit_unmap_iovec(cmd, cmd->iov_data);
 
 	if (rx_got != rx_size) {
 		iscsit_rx_thread_wait_for_tcp(conn);
