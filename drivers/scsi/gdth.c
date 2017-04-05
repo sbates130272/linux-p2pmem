@@ -2301,10 +2301,21 @@ static void gdth_copy_internal_data(gdth_ha_str *ha, Scsi_Cmnd *scp,
                 return;
             }
             local_irq_save(flags);
-            address = kmap_atomic(sg_page(sl)) + sl->offset;
+            address = sg_kmap(sl, SG_KMAP_ATOMIC);
+            if (IS_ERR(address)) {
+                /*
+                 * This should really never happen unless
+                 * the code is changed to use memory that is
+                 * not mappable in the sg. Seeing there doesn't
+                 * seem to be any error path out of here,
+                 * we can only WARN.
+                 */
+                WARN(1, "Non-mappable memory used in sg!");
+	    }
+
             memcpy(address, buffer, cpnow);
             flush_dcache_page(sg_page(sl));
-            kunmap_atomic(address);
+            sg_kunmap(sl, address, SG_KMAP_ATOMIC);
             local_irq_restore(flags);
             if (cpsum == cpcount)
                 break;
