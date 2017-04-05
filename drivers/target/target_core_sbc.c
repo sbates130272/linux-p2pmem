@@ -420,17 +420,17 @@ static sense_reason_t xdreadwrite_callback(struct se_cmd *cmd, bool success,
 
 	offset = 0;
 	for_each_sg(cmd->t_bidi_data_sg, sg, cmd->t_bidi_data_nents, count) {
-		addr = kmap_atomic(sg_page(sg));
-		if (!addr) {
+		addr = sg_kmap(sg, SG_KMAP_ATOMIC);
+		if (IS_ERR(addr)) {
 			ret = TCM_OUT_OF_RESOURCES;
 			goto out;
 		}
 
 		for (i = 0; i < sg->length; i++)
-			*(addr + sg->offset + i) ^= *(buf + offset + i);
+			*(addr + i) ^= *(buf + offset + i);
 
 		offset += sg->length;
-		kunmap_atomic(addr);
+		sg_kunmap(sg, addr, SG_KMAP_ATOMIC);
 	}
 
 out:
