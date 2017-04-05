@@ -133,25 +133,23 @@ static void iscsi_tcp_segment_map(struct iscsi_segment *segment, int recv)
 	if (page_count(sg_page(sg)) >= 1 && !recv)
 		return;
 
-	if (recv) {
-		segment->atomic_mapped = true;
-		segment->sg_mapped = kmap_atomic(sg_page(sg));
-	} else {
-		segment->atomic_mapped = false;
-		/* the xmit path can sleep with the page mapped so use kmap */
-		segment->sg_mapped = kmap(sg_page(sg));
+	/* the xmit path can sleep with the page mapped so don't use atomic */
+	segment->sg_map_flags = recv ? SG_KMAP_ATOMIC : SG_KMAP;
+	segment->sg_mapped = sg_map(sg, segment->sg_map_flags);
+
+	if (IS_ERR(segment->sg_mapped)) {
+		segment->sg_mapped = NULL;
+		return;
 	}
 
-	segment->data = segment->sg_mapped + sg->offset + segment->sg_offset;
+	segment->data = segment->sg_mapped + segment->sg_offset;
 }
 
 void iscsi_tcp_segment_unmap(struct iscsi_segment *segment)
 {
 	if (segment->sg_mapped) {
-		if (segment->atomic_mapped)
-			kunmap_atomic(segment->sg_mapped);
-		else
-			kunmap(sg_page(segment->sg));
+		sg_unmap(segment->sg, segment->sg_mapped,
+			  segment->sg_map_flags);
 		segment->sg_mapped = NULL;
 		segment->data = NULL;
 	}
@@ -303,6 +301,9 @@ iscsi_tcp_segment_recv(struct iscsi_tcp_conn *tcp_conn,
 				      "copied %d bytes\n", len);
 			break;
 		}
+
+		if (segment->data)
+			return -EFAULT;
 
 		copy = min(len - copied, segment->size - segment->copied);
 		ISCSI_DBG_TCP(tcp_conn->iscsi_conn, "copying %d\n", copy);
@@ -927,6 +928,13 @@ int iscsi_tcp_recv_skb(struct iscsi_conn *conn, struct sk_buff *skb,
 			      avail);
 		rc = iscsi_tcp_segment_recv(tcp_conn, segment, ptr, avail);
 		BUG_ON(rc == 0);
+		if (rc < 0) {
+			ISCSI_DBG_TCP(conn, "memory fault. Consumed %d\n",
+				      consumed);
+			*status = ISCSI_TCP_INTERNAL_ERR;
+			goto skb_done;
+		}
+
 		consumed += rc;
 
 		if (segment->total_copied >= segment->total_size) {
