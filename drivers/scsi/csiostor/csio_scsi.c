@@ -1489,60 +1489,14 @@ static inline uint32_t
 csio_scsi_copy_to_sgl(struct csio_hw *hw, struct csio_ioreq *req)
 {
 	struct scsi_cmnd *scmnd  = (struct scsi_cmnd *)csio_scsi_cmnd(req);
-	struct scatterlist *sg;
-	uint32_t bytes_left;
-	uint32_t bytes_copy;
-	uint32_t buf_off = 0;
-	uint32_t start_off = 0;
-	uint32_t sg_off = 0;
-	void *sg_addr;
-	void *buf_addr;
 	struct csio_dma_buf *dma_buf;
+	size_t copied;
 
-	bytes_left = scsi_bufflen(scmnd);
-	sg = scsi_sglist(scmnd);
 	dma_buf = (struct csio_dma_buf *)csio_list_next(&req->gen_list);
+	copied = sg_copy_from_buffer(scsi_sglist(scmnd), scsi_sg_count(scmnd),
+				     dma_buf->vaddr, scsi_bufflen(scmnd));
 
-	/* Copy data from driver buffer to SGs of SCSI CMD */
-	while (bytes_left > 0 && sg && dma_buf) {
-		if (buf_off >= dma_buf->len) {
-			buf_off = 0;
-			dma_buf = (struct csio_dma_buf *)
-					csio_list_next(dma_buf);
-			continue;
-		}
-
-		if (start_off >= sg->length) {
-			start_off -= sg->length;
-			sg = sg_next(sg);
-			continue;
-		}
-
-		buf_addr = dma_buf->vaddr + buf_off;
-		sg_off = sg->offset + start_off;
-		bytes_copy = min((dma_buf->len - buf_off),
-				sg->length - start_off);
-		bytes_copy = min((uint32_t)(PAGE_SIZE - (sg_off & ~PAGE_MASK)),
-				 bytes_copy);
-
-		sg_addr = kmap_atomic(sg_page(sg) + (sg_off >> PAGE_SHIFT));
-		if (!sg_addr) {
-			csio_err(hw, "failed to kmap sg:%p of ioreq:%p\n",
-				sg, req);
-			break;
-		}
-
-		csio_dbg(hw, "copy_to_sgl:sg_addr %p sg_off %d buf %p len %d\n",
-				sg_addr, sg_off, buf_addr, bytes_copy);
-		memcpy(sg_addr + (sg_off & ~PAGE_MASK), buf_addr, bytes_copy);
-		kunmap_atomic(sg_addr);
-
-		start_off +=  bytes_copy;
-		buf_off += bytes_copy;
-		bytes_left -= bytes_copy;
-	}
-
-	if (bytes_left > 0)
+	if (copied != scsi_bufflen(scmnd))
 		return DID_ERROR;
 	else
 		return DID_OK;
