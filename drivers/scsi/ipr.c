@@ -3853,7 +3853,7 @@ static void ipr_free_ucode_buffer(struct ipr_sglist *sglist)
 static int ipr_copy_ucode_buffer(struct ipr_sglist *sglist,
 				 u8 *buffer, u32 len)
 {
-	int bsize_elem, i, result = 0;
+	int bsize_elem, i;
 	struct scatterlist *scatterlist;
 	void *kaddr;
 
@@ -3863,32 +3863,33 @@ static int ipr_copy_ucode_buffer(struct ipr_sglist *sglist,
 	scatterlist = sglist->scatterlist;
 
 	for (i = 0; i < (len / bsize_elem); i++, buffer += bsize_elem) {
-		struct page *page = sg_page(&scatterlist[i]);
+		kaddr = sg_map(&scatterlist[i], SG_KMAP);
+		if (IS_ERR(kaddr)) {
+			ipr_trace;
+			return PTR_ERR(kaddr);
+		}
 
-		kaddr = kmap(page);
 		memcpy(kaddr, buffer, bsize_elem);
-		kunmap(page);
+		sg_unmap(&scatterlist[i], kaddr, SG_KMAP);
 
 		scatterlist[i].length = bsize_elem;
-
-		if (result != 0) {
-			ipr_trace;
-			return result;
-		}
 	}
 
 	if (len % bsize_elem) {
-		struct page *page = sg_page(&scatterlist[i]);
+		kaddr = sg_map(&scatterlist[i], SG_KMAP);
+		if (IS_ERR(kaddr)) {
+			ipr_trace;
+			return PTR_ERR(kaddr);
+		}
 
-		kaddr = kmap(page);
 		memcpy(kaddr, buffer, len % bsize_elem);
-		kunmap(page);
+		sg_unmap(&scatterlist[i], kaddr, SG_KMAP);
 
 		scatterlist[i].length = len % bsize_elem;
 	}
 
 	sglist->buffer_len = len;
-	return result;
+	return 0;
 }
 
 /**
