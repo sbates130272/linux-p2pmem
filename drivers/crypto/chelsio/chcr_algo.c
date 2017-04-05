@@ -1489,22 +1489,21 @@ err:
 	return ERR_PTR(-EINVAL);
 }
 
-static void aes_gcm_empty_pld_pad(struct scatterlist *sg,
-				  unsigned short offset)
+static int aes_gcm_empty_pld_pad(struct scatterlist *sg,
+				 unsigned short offset)
 {
-	struct page *spage;
 	unsigned char *addr;
 
-	spage = sg_page(sg);
-	get_page(spage); /* so that it is not freed by NIC */
-#ifdef KMAP_ATOMIC_ARGS
-	addr = kmap_atomic(spage, KM_SOFTIRQ0);
-#else
-	addr = kmap_atomic(spage);
-#endif
-	memset(addr + sg->offset, 0, offset + 1);
+	get_page(sg_page(sg)); /* so that it is not freed by NIC */
 
-	kunmap_atomic(addr);
+	addr = sg_map(sg, SG_KMAP_ATOMIC);
+	if (IS_ERR(addr))
+		return PTR_ERR(addr);
+
+	memset(addr, 0, offset + 1);
+	sg_unmap(sg, addr, SG_KMAP_ATOMIC);
+
+	return 0;
 }
 
 static int set_msg_len(u8 *block, unsigned int msglen, int csize)
@@ -1940,7 +1939,10 @@ static struct sk_buff *create_gcm_wr(struct aead_request *req,
 	if (req->cryptlen) {
 		write_sg_to_skb(skb, &frags, src, req->cryptlen);
 	} else {
-		aes_gcm_empty_pld_pad(req->dst, authsize - 1);
+		err = aes_gcm_empty_pld_pad(req->dst, authsize - 1);
+		if (err)
+			goto dstmap_fail;
+
 		write_sg_to_skb(skb, &frags, reqctx->dst, crypt_len);
 
 	}
