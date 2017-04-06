@@ -1,0 +1,8 @@
+arch/sparc/kernel/ldc.c:2054:	unsigned long base = page_to_pfn(sg_page(sg)) << PAGE_SHIFT;
+arch/sparc/kernel/ldc.c:2117:		fill_cookies(&state, page_to_pfn(sg_page(s)) << PAGE_SHIFT,
+drivers/scsi/storvsc_drv.c:1641:				page_to_pfn(sg_page((cur_sgl)));
+drivers/gpu/drm/i915/i915_drv.h:2556:			s.pfn = page_to_pfn(sg_page(s.sgp));
+lib/dma-debug.c:1416:		entry->pfn	      = page_to_pfn(sg_page(s));
+lib/dma-debug.c:1468:			.pfn		= page_to_pfn(sg_page(s)),
+lib/dma-debug.c:1672:			.pfn		= page_to_pfn(sg_page(s)),
+lib/dma-debug.c:1705:			.pfn		= page_to_pfn(sg_page(s)),

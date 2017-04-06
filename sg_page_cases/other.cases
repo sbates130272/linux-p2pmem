@@ -1,0 +1,3 @@
+drivers/gpu/drm/drm_cache.c:129:		for_each_sg_page(st->sgl, &sg_iter, st->nents, 0)
+drivers/gpu/drm/omapdrm/omap_gem.c:1466:		for_each_sg_page(sgt->sgl, &iter, sgt->orig_nents, 0) {
+include/crypto/scatterwalk.h:42:	return !(((sg_page(walk_in->sg) - sg_page(walk_out->sg)) << PAGE_SHIFT) +

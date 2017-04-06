@@ -1,0 +1,7 @@
+arch/microblaze/kernel/dma.c:68:		__dma_sync(page_to_phys(sg_page(sg)) + sg->offset,
+arch/mips/mm/dma-default.c:312:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:345:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:377:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:393:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/powerpc/kernel/dma.c:210:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);
+arch/powerpc/kernel/dma.c:266:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);

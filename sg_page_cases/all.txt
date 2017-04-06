@@ -1,0 +1,263 @@
+arch/s390/pci/pci_dma.c:440:		pa = page_to_phys(sg_page(s));
+arch/microblaze/kernel/dma.c:68:		__dma_sync(page_to_phys(sg_page(sg)) + sg->offset,
+arch/arm/mm/dma-mapping.c:1083:		s->dma_address = ops->map_page(dev, sg_page(s), s->offset,
+arch/arm/mm/dma-mapping.c:1724:		phys_addr_t phys = page_to_phys(sg_page(s));
+arch/arm/mm/dma-mapping.c:1728:			__dma_page_cpu_to_dev(sg_page(s), s->offset, s->length, dir);
+arch/arm/mm/dma-mapping.c:1841:			__dma_page_dev_to_cpu(sg_page(s), s->offset,
+arch/arm/mm/dma-mapping.c:1894:		__dma_page_dev_to_cpu(sg_page(s), s->offset, s->length, dir);
+arch/arm/mm/dma-mapping.c:1912:		__dma_page_cpu_to_dev(sg_page(s), s->offset, s->length, dir);
+arch/um/drivers/ubd_kern.c:1411:					sg->offset, sg->length, sg_page(sg));
+arch/sh/kernel/dma-nommu.c:38:		BUG_ON(!sg_page(s));
+arch/mn10300/mm/dma-alloc.c:84:		BUG_ON(!sg_page(sg));
+arch/openrisc/kernel/dma.c:189:		s->dma_address = or1k_map_page(dev, sg_page(s), s->offset,
+arch/frv/mb93090-mb00/pci-dma.c:56:		vaddr = kmap_atomic_primary(sg_page(sg));
+arch/sparc/kernel/ldc.c:2054:	unsigned long base = page_to_pfn(sg_page(sg)) << PAGE_SHIFT;
+arch/sparc/kernel/ldc.c:2117:		fill_cookies(&state, page_to_pfn(sg_page(s)) << PAGE_SHIFT,
+arch/sparc/mm/iommu.c:246:		sg->dma_address = iommu_get_one(dev, sg_page(sg), n) + sg->offset;
+arch/sparc/mm/iommu.c:267:		if ((page = (unsigned long) page_address(sg_page(sg))) != 0) {
+arch/sparc/mm/iommu.c:277:		sg->dma_address = iommu_get_one(dev, sg_page(sg), n) + sg->offset;
+arch/arc/mm/dma.c:175:		s->dma_address = dma_map_page(dev, sg_page(s), s->offset,
+arch/mips/mm/dma-default.c:312:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:317:		sg->dma_address = plat_map_dma_mem_page(dev, sg_page(sg)) +
+arch/mips/mm/dma-default.c:345:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:377:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:393:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/avr32/mm/dma-coherent.c:164:		sg->dma_address = page_to_bus(sg_page(sg)) + sg->offset;
+arch/x86/kernel/pci-calgary_64.c:377:		BUG_ON(!sg_page(s));
+arch/x86/kernel/pci-nommu.c:66:		BUG_ON(!sg_page(s));
+arch/x86/crypto/aesni-intel_glue.c:743:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:746:	    (!PageHighMem(sg_page(req->dst)) ||
+arch/x86/crypto/aesni-intel_glue.c:827:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:830:	    (!PageHighMem(sg_page(req->dst)) ||
+arch/powerpc/kernel/dma.c:210:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);
+arch/powerpc/kernel/dma.c:266:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);
+arch/metag/kernel/dma.c:509:		BUG_ON(!sg_page(sg));
+arch/metag/kernel/dma.c:531:		BUG_ON(!sg_page(sg));
+arch/xtensa/kernel/pci-dma.c:228:		s->dma_address = xtensa_map_page(dev, sg_page(s), s->offset,
+crypto/scompress.c:144:		page = sg_page(sgl);
+crypto/scatterwalk.c:93:	sg_set_page(dst, sg_page(src), src->length - len, src->offset + len);
+crypto/algif_skcipher.c:91:		put_page(sg_page(sg));
+crypto/algif_skcipher.c:167:			if (!sg_page(sg + i))
+crypto/algif_skcipher.c:179:				put_page(sg_page(sg + i));
+crypto/algif_skcipher.c:358:			err = memcpy_from_msg(page_address(sg_page(sg)) +
+crypto/algif_skcipher.c:396:			if (!sg_page(sg + i))
+crypto/algif_skcipher.c:399:			err = memcpy_from_msg(page_address(sg_page(sg + i)),
+crypto/algif_skcipher.c:402:				__free_page(sg_page(sg + i));
+crypto/algif_skcipher.c:577:				sg_set_page(&tmp[x], sg_page(&sreq->tsg[x]),
+crypto/algif_skcipher.c:587:		sg_set_page(sreq->tsg + txbufs++, sg_page(sg), sg->length,
+crypto/algif_aead.c:112:		if (!sg_page(sg + i))
+crypto/algif_aead.c:115:		put_page(sg_page(sg + i));
+crypto/algif_aead.c:244:			err = memcpy_from_msg(page_address(sg_page(sg)) +
+crypto/algif_aead.c:283:			if (!sg_page(sg))
+crypto/algif_aead.c:286:			err = memcpy_from_msg(page_address(sg_page(sg)),
+crypto/algif_aead.c:289:				__free_page(sg_page(sg));
+crypto/algif_aead.c:400:		put_page(sg_page(sg + i));
+crypto/algif_aead.c:466:		sg_set_page(&areq->tsgl[i], sg_page(&sgl->sg[i]),
+drivers/scsi/cxgbi/libcxgbi.c:1818:	struct page *page = sg_page(sg);
+drivers/scsi/cxgbi/libcxgbi.c:1834:			page = sg_page(sg);
+drivers/scsi/iscsi_tcp.c:288:			r = tcp_sw_conn->sendpage(sk, sg_page(sg), offset,
+drivers/scsi/osst.c:390:			pages[i] = sg_page(sg);
+drivers/scsi/osst.c:628:				memset(page_address(sg_page(&STp->buffer->sg[i])),
+drivers/scsi/osst.c:4524:		STp->buffer->aux = (os_aux_t *) (page_address(sg_page(&STp->buffer->sg[i])) + OS_DATA_SIZE - b_size);
+drivers/scsi/osst.c:5368:	if (sg_page(&STbuffer->sg[0]) == NULL) {
+drivers/scsi/osst.c:5418:		__free_pages(sg_page(&STbuffer->sg[i]), order);
+drivers/scsi/osst.c:5446:		res = copy_from_user(page_address(sg_page(&st_bp->sg[i])) + offset, ubp, cnt);
+drivers/scsi/osst.c:5479:		res = copy_to_user(ubp, page_address(sg_page(&st_bp->sg[i])) + offset, cnt);
+drivers/scsi/osst.c:5512:		memset(page_address(sg_page(&st_bp->sg[i])) + offset, 0, cnt);
+drivers/scsi/osst.c:5532:		memcpy(page_address(sg_page(&st_bp->sg[i])), ptr, cnt);
+drivers/scsi/osst.c:5553:		memcpy(ptr, page_address(sg_page(&st_bp->sg[i])), cnt);
+drivers/scsi/megaraid.c:1552:			if( sg_page(sgl) ) {
+drivers/scsi/gdth.c:2298:            if (!sg_page(sl)) {
+drivers/scsi/gdth.c:2306:            flush_dcache_page(sg_page(sl));
+drivers/scsi/ipr.c:3810:				__free_pages(sg_page(&scatterlist[j]), order);
+drivers/scsi/ipr.c:3836:		__free_pages(sg_page(&sglist->scatterlist[i]), sglist->order);
+drivers/scsi/xen-scsifront.c:463:		page = sg_page(sg);
+drivers/scsi/scsi_lib.c:3132:	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
+drivers/scsi/storvsc_drv.c:1641:				page_to_pfn(sg_page((cur_sgl)));
+drivers/scsi/qla2xxx/qla_isr.c:1994:			spt = page_address(sg_page(sg)) + sg->offset;
+drivers/scsi/pmcraid.c:3247:		__free_pages(sg_page(&(sglist->scatterlist[i])),
+drivers/scsi/pmcraid.c:3301:				__free_pages(sg_page(&scatterlist[j]), order);
+drivers/scsi/libfc/fc_fcp.c:691:		page = sg_page(sg) + (off >> PAGE_SHIFT);
+drivers/scsi/libiscsi_tcp.c:133:	if (page_count(sg_page(sg)) >= 1 && !recv)
+drivers/scsi/libiscsi_tcp.c:204:			sg_set_page(&sg, sg_page(segment->sg), copied,
+drivers/scsi/aha1542.c:460:			any2scsi(cptr[i].dataptr, isa_page_to_bus(sg_page(sg))
+drivers/scsi/megaraid/megaraid_mbox.c:1567:			if (sg_page(sgl)) {
+drivers/scsi/megaraid/megaraid_mbox.c:2309:			if (sg_page(sgl)) {
+drivers/block/skd_main.c:1624:			page = sg_page(&skspcl->req.sg[sksg_ix++]);
+drivers/block/skd_main.c:2608:	if (!sg_page(sg))
+drivers/block/skd_main.c:2894:		struct page *page = sg_page(&skspcl->req.sg[i]);
+drivers/block/cciss.c:3377:		temp64.val = (__u64) pci_map_page(h->pdev, sg_page(&tmp_sg[i]),
+drivers/block/xen-blkfront.c:814:		gnttab_foreach_grant_in_range(sg_page(sg),
+drivers/block/xen-blkfront.c:1474:			gnttab_foreach_grant_in_range(sg_page(sg),
+drivers/ide/ide-taskfile.c:243:		page = sg_page(cursg);
+drivers/nvme/target/rdma.c:197:		__free_page(sg_page(sg));
+drivers/nvme/target/rdma.c:234:		__free_page(sg_page(&sg[i]));
+drivers/nvme/target/fc.c:1598:		__free_page(sg_page(&sg[i]));
+drivers/nvme/target/fc.c:1620:		__free_page(sg_page(sg));
+drivers/nvme/target/io-cmd.c:78:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/staging/android/ion/ion_system_heap.c:202:		free_buffer_page(sys_heap, buffer, sg_page(sg));
+drivers/staging/android/ion/ion_system_heap.c:427:	struct page *page = sg_page(table->sgl);
+drivers/staging/android/ion/ion_test.c:67:	for_each_sg_page(table->sgl, &sg_iter, table->nents, offset_page) {
+drivers/staging/android/ion/ion.c:157:			struct page *page = sg_page(sg);
+drivers/staging/android/ion/ion_chunk_heap.c:84:		gen_pool_free(chunk_heap->pool, page_to_phys(sg_page(sg)),
+drivers/staging/android/ion/ion_chunk_heap.c:112:		gen_pool_free(chunk_heap->pool, page_to_phys(sg_page(sg)),
+drivers/staging/android/ion/ion_carveout_heap.c:102:	struct page *page = sg_page(table->sgl);
+drivers/staging/android/ion/ion_heap.c:51:		struct page *page = sg_page(sg);
+drivers/staging/android/ion/ion_heap.c:83:		struct page *page = sg_page(sg);
+drivers/staging/android/ion/ion_heap.c:127:	for_each_sg_page(sgl, &piter, nents, 0) {
+drivers/staging/rts5208/rtsx_transport.c:87:			struct page *page = sg_page(sg) +
+drivers/media/v4l2-core/videobuf2-dma-contig.c:251:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/media/v4l2-core/videobuf2-dma-sg.c:399:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/infiniband/sw/rdmavt/mr.c:415:		vaddr = page_address(sg_page(sg));
+drivers/infiniband/sw/rxe/rxe_mr.c:205:			vaddr = page_address(sg_page(sg));
+drivers/infiniband/core/umem.c:60:		page = sg_page(sg);
+drivers/infiniband/hw/i40iw/i40iw_verbs.c:1362:			iwpbl->qp_mr.sq_page = sg_page(sg);
+drivers/infiniband/hw/hns/hns_roce_hem.c:120:				   lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/infiniband/hw/hns/hns_roce_hem.c:306:				page = sg_page(&chunk->mem[i]);
+drivers/infiniband/hw/nes/nes_verbs.c:2443:					nespbl->page = sg_page(sg);
+drivers/infiniband/hw/usnic/usnic_uiom.c:89:			page = sg_page(sg);
+drivers/infiniband/hw/mthca/mthca_memfree.c:73:		__free_pages(sg_page(&chunk->mem[i]),
+drivers/infiniband/hw/mthca/mthca_memfree.c:83:				  lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/infiniband/hw/mthca/mthca_memfree.c:309:				page = sg_page(&chunk->mem[i]);
+drivers/infiniband/hw/mthca/mthca_memfree.c:492:		put_page(sg_page(&db_tab->page[i].mem));
+drivers/infiniband/hw/mthca/mthca_memfree.c:558:			put_page(sg_page(&db_tab->page[i].mem));
+drivers/infiniband/ulp/iser/iser_memory.c:149:			 sg_page(sg), sg->offset,
+drivers/vhost/scsi.c:325:			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
+drivers/vhost/scsi.c:329:			put_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
+drivers/vhost/scsi.c:705:				struct page *page = sg_page(&sg[i]);
+drivers/gpu/drm/drm_cache.c:129:		for_each_sg_page(st->sgl, &sg_iter, st->nents, 0)
+drivers/gpu/drm/vmwgfx/vmwgfx_buffer.c:259:static struct page *__vmw_piter_non_sg_page(struct vmw_piter *viter)
+drivers/gpu/drm/vmwgfx/vmwgfx_buffer.c:264:static struct page *__vmw_piter_sg_page(struct vmw_piter *viter)
+drivers/gpu/drm/i915/i915_gem_dmabuf.c:65:		sg_set_page(dst, sg_page(src), src->length, 0);
+drivers/gpu/drm/i915/i915_gem_internal.c:39:		__free_pages(sg_page(sg), get_order(sg->length));
+drivers/gpu/drm/i915/i915_drv.h:2556:			s.pfn = page_to_pfn(sg_page(s.sgp));
+drivers/gpu/drm/i915/i915_gem.c:2255:		sg_set_page(new_sg, sg_page(sg), sg->length, 0);
+drivers/gpu/drm/i915/i915_gem.c:5036:	return nth_page(sg_page(sg), offset);
+drivers/gpu/drm/i915/i915_vma.h:322:	return sg_page(vma->pages->sgl);
+drivers/gpu/drm/radeon/radeon_ttm.c:621:	for_each_sg_page(ttm->sg->sgl, &sg_iter, ttm->sg->nents, 0) {
+drivers/gpu/drm/drm_prime.c:827:		page = sg_page(sg);
+drivers/gpu/drm/udl/udl_dmabuf.c:120:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/gpu/drm/omapdrm/omap_gem.c:1466:		for_each_sg_page(sgt->sgl, &iter, sgt->orig_nents, 0) {
+drivers/gpu/drm/armada/armada_gem.c:484:		put_page(sg_page(sg));
+drivers/gpu/drm/armada/armada_gem.c:505:			put_page(sg_page(sg));
+drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c:700:	for_each_sg_page(ttm->sg->sgl, &sg_iter, ttm->sg->nents, 0) {
+drivers/net/ethernet/mellanox/mlx4/icm.c:63:		__free_pages(sg_page(&chunk->mem[i]),
+drivers/net/ethernet/mellanox/mlx4/icm.c:74:				  lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/net/ethernet/mellanox/mlx4/icm.c:346:				page = sg_page(&chunk->mem[i]);
+drivers/net/wireless/intel/iwlwifi/mvm/fw-dbg.c:492:				new_page = sg_page(iter);
+drivers/virtio/virtio_ring.c:189:			    sg_page(sg), sg->offset, sg->length,
+drivers/memstick/core/mspro_block.c:639:			    nth_page(sg_page(&(msb->req_sg[msb->current_seg])),
+drivers/memstick/core/ms_block.c:56:		sg_set_page(sg_to, sg_page(sg_from),
+drivers/memstick/core/ms_block.c:74:		sg_set_page(sg_to, sg_page(sg_from),
+drivers/memstick/core/ms_block.c:85:		sg_set_page(sg_to, sg_page(sg_from), len, sg_from->offset);
+drivers/mmc/host/mmc_spi.c:926:			dma_addr = dma_map_page(dma_dev, sg_page(sg), 0,
+drivers/mmc/host/mmc_spi.c:972:			flush_kernel_dcache_page(sg_page(sg));
+drivers/mmc/host/atmel-mci.c:2016:				flush_dcache_page(sg_page(sg));
+drivers/mmc/host/atmel-mci.c:2030:			flush_dcache_page(sg_page(sg));
+drivers/mmc/host/usdhi6rol0.c:370:	host->pg.page = sg_page(sg);
+drivers/mmc/host/usdhi6rol0.c:508:	host->pg.page = nth_page(sg_page(host->sg), host->page_idx);
+drivers/iommu/intel-iommu.c:2249:			pteval = page_to_phys(sg_page(sg)) | prot;
+drivers/iommu/intel-iommu.c:3894:		BUG_ON(!sg_page(sg));
+drivers/iommu/intel-iommu.c:3895:		sg->dma_address = page_to_phys(sg_page(sg)) + sg->offset;
+drivers/iommu/iommu.c:1606:		phys_addr_t phys = page_to_phys(sg_page(s)) + s->offset;
+drivers/usb/core/devio.c:394:		if (sg_page(&as->urb->sg[i]))
+drivers/usb/core/hcd.c:1577:						sg_page(sg),
+drivers/usb/core/message.c:435:			if (!PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_bin.c:428:			if (length == 0 || PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_text.c:167:		if (PageHighMem(sg_page(sg)))
+drivers/usb/misc/usbtest.c:524:		if (!sg_page(&sg[i]))
+drivers/usb/wusbcore/wa-xfer.c:1071:			sg_set_page(current_seg_sg, sg_page(current_xfer_sg),
+drivers/char/virtio_console.c:375:		struct page *page = sg_page(&buf->sg[i]);
+drivers/ata/libata-scsi.c:4031:	p = page_address(sg_page(scsi_sglist(scmd)));
+drivers/ata/libata-sff.c:710:	page = sg_page(qc->cursg);
+drivers/ata/libata-sff.c:849:	page = sg_page(sg);
+drivers/target/tcm_fc/tfc_cmd.c:65:			sg_page(sg), sg->length, sg->offset);
+drivers/target/tcm_fc/tfc_io.c:97:		page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:115:			page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:294:		page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:302:			page = sg_page(sg);
+drivers/target/target_core_transport.c:2193:		__free_page(sg_page(sg));
+drivers/target/target_core_transport.c:2291:		pages[i] = sg_page(sg);
+drivers/target/target_core_transport.c:2353:		__free_page(sg_page(&sg[i]));
+drivers/target/target_core_rd.c:90:			pg = sg_page(&sg[j]);
+drivers/target/target_core_iblock.c:437:				GFP_KERNEL, page ? page : sg_page(sg));
+drivers/target/target_core_iblock.c:493:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/target/target_core_iblock.c:657:		rc = bio_integrity_add_page(bio, sg_page(sg), sg->length,
+drivers/target/target_core_iblock.c:665:			 sg_page(sg), sg->length, sg->offset);
+drivers/target/target_core_iblock.c:731:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/target/target_core_pscsi.c:874:		page = sg_page(sg);
+drivers/target/target_core_file.c:267:		bvec[i].bv_page = sg_page(sg);
+drivers/target/target_core_file.c:393:		bvec[i].bv_page = sg_page(&cmd->t_data_sg[0]);
+drivers/target/iscsi/iscsi_target_util.c:1189:					sg_page(sg), sg->offset + offset, sub_len, 0);
+drivers/target/iscsi/cxgbit/cxgbit_target.c:382:		page = sg_page(sg);
+drivers/target/iscsi/cxgbit/cxgbit_ddp.c:283:			put_page(sg_page(&ccmd->sg));
+drivers/crypto/qce/dma.c:63:		if (!sg_page(sg))
+drivers/crypto/qce/dma.c:72:		sg_set_page(sg, sg_page(new_sgl), new_sgl->length,
+drivers/crypto/hifn_795x.c:1338:		spage = sg_page(src);
+drivers/crypto/hifn_795x.c:1352:			BUG_ON(!sg_page(t));
+drivers/crypto/hifn_795x.c:1353:			dpage = sg_page(t);
+drivers/crypto/hifn_795x.c:1357:			BUG_ON(!sg_page(dst));
+drivers/crypto/hifn_795x.c:1358:			dpage = sg_page(dst);
+drivers/crypto/hifn_795x.c:1408:		__free_page(sg_page(s));
+drivers/crypto/hifn_795x.c:1685:			pr_debug("\n%s: sg_page(t): %p, t->length: %u, "
+drivers/crypto/hifn_795x.c:1686:				"sg_page(dst): %p, dst->length: %u, "
+drivers/crypto/hifn_795x.c:1688:				__func__, sg_page(t), t->length,
+drivers/crypto/hifn_795x.c:1689:				sg_page(dst), dst->length, nbytes);
+drivers/crypto/amcc/crypto4xx_core.c:560:		addr = dma_map_page(dev->core_dev->device, sg_page(sg),
+drivers/crypto/amcc/crypto4xx_core.c:643:		addr = dma_map_page(dev->core_dev->device, sg_page(dst),
+drivers/crypto/amcc/crypto4xx_core.c:883:			addr = dma_map_page(dev->core_dev->device, sg_page(sg),
+drivers/crypto/amcc/crypto4xx_core.c:897:		pd->src = (u32)dma_map_page(dev->core_dev->device, sg_page(src),
+drivers/crypto/amcc/crypto4xx_core.c:924:					sg_page(dst), dst->offset,
+drivers/crypto/ixp4xx_crypto.c:809:		ptr = page_address(sg_page(sg)) + sg->offset;
+drivers/crypto/chelsio/chcr_algo.c:491:		spage = sg_page(sg);
+drivers/crypto/chelsio/chcr_algo.c:1497:	get_page(sg_page(sg)); /* so that it is not freed by NIC */
+drivers/crypto/ccp/ccp-crypto-main.c:306:		if (!sg_page(sg))
+drivers/crypto/ccp/ccp-crypto-main.c:312:		sg_set_page(sg, sg_page(sg_add), sg_add->length,
+drivers/crypto/omap-sham.c:681:			sg_set_page(tmp, sg_page(sg), len, sg->offset);
+drivers/crypto/bcm/util.c:167:			sg_set_page(to++, sg_page(sg), frag_len, offset);
+include/linux/devcoredump.h:47:		page = sg_page(iter);
+include/linux/scatterlist.h:109: *   of the page pointer. See sg_page() for looking up the page belonging
+include/linux/scatterlist.h:121:static inline struct page *sg_page(struct scatterlist *sg)
+include/linux/scatterlist.h:135:	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+include/linux/scatterlist.h:147:	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+include/linux/scatterlist.h:263:	return page_to_phys(sg_page(sg)) + sg->offset;
+include/linux/scatterlist.h:278:	return page_address(sg_page(sg)) + sg->offset;
+include/linux/scatterlist.h:380:	return nth_page(sg_page(piter->sg), piter->sg_pgoffset);
+include/linux/scatterlist.h:400:#define for_each_sg_page(sglist, piter, nents, pgoffset)		   \
+include/crypto/scatterwalk.h:42:	return !(((sg_page(walk_in->sg) - sg_page(walk_out->sg)) << PAGE_SHIFT) +
+include/crypto/scatterwalk.h:74:	return sg_page(walk->sg) + (walk->offset >> PAGE_SHIFT);
+include/crypto/scatterwalk.h:101:		page = sg_page(walk->sg) + ((walk->offset - 1) >> PAGE_SHIFT);
+lib/dma-debug.c:1416:		entry->pfn	      = page_to_pfn(sg_page(s));
+lib/dma-debug.c:1424:		check_for_stack(dev, sg_page(s), s->offset);
+lib/dma-debug.c:1426:		if (!PageHighMem(sg_page(s))) {
+lib/dma-debug.c:1468:			.pfn		= page_to_pfn(sg_page(s)),
+lib/dma-debug.c:1672:			.pfn		= page_to_pfn(sg_page(s)),
+lib/dma-debug.c:1705:			.pfn		= page_to_pfn(sg_page(s)),
+lib/dma-virt.c:46:		BUG_ON(!sg_page(sg));
+lib/dma-noop.c:48:		BUG_ON(!sg_page(sg));
+net/ipv6/esp6.c:140:			put_page(sg_page(sg));
+net/rds/rdma.c:276:			put_page(sg_page(&sg[i]));
+net/rds/rdma.c:457:		struct page *page = sg_page(&ro->op_sg[i]);
+net/rds/rdma.c:476:	struct page *page = sg_page(ao->op_sg);
+net/rds/message.c:67:		rdsdebug("putting data page %p\n", (void *)sg_page(&rm->data.op_sg[i]));
+net/rds/message.c:69:		__free_page(sg_page(&rm->data.op_sg[i]));
+net/rds/message.c:285:		if (!sg_page(sg)) {
+net/rds/message.c:298:		nbytes = copy_page_from_iter(sg_page(sg), sg->offset + sg_off,
+net/rds/message.c:335:		ret = copy_page_to_iter(sg_page(sg), sg->offset + vec_off,
+net/rds/ib_rdma.c:250:			struct page *page = sg_page(&ibmr->sg[i]);
+net/rds/page.c:104:			get_page(sg_page(scat));
+net/rds/page.c:147:		 ret ? NULL : sg_page(scat), ret ? 0 : scat->offset,
+net/rds/tcp_send.c:130:						sg_page(&rm->data.op_sg[sg]),
+net/rds/tcp_send.c:134:		rdsdebug("tcp sendpage %p:%u:%u ret %d\n", (void *)sg_page(&rm->data.op_sg[sg]),
+net/rds/ib_recv.c:194:	rdsdebug("frag %p page %p\n", frag, sg_page(&frag->f_sg));
+net/rds/ib_recv.c:416:			 recv->r_ibinc, sg_page(&recv->r_frag->f_sg),
+net/rds/ib_recv.c:552:		ret = copy_page_to_iter(sg_page(&frag->f_sg),
+net/ipv4/esp4.c:118:			put_page(sg_page(sg));
+net/sunrpc/auth_gss/gss_krb5_crypto.c:483:		in_page = sg_page(sg);
+net/sunrpc/auth_gss/gss_krb5_crypto.c:487:	sg_set_page(&desc->outfrags[desc->fragno], sg_page(sg), sg->length,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:513:		sg_set_page(&desc->outfrags[0], sg_page(sg), fraglen,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:574:	sg_set_page(&desc->frags[desc->fragno], sg_page(sg), sg->length,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:597:		sg_set_page(&desc->frags[0], sg_page(sg), fraglen,
+tools/virtio/linux/scatterlist.h:54: *   of the page pointer. See sg_page() for looking up the page belonging
+tools/virtio/linux/scatterlist.h:66:static inline struct page *sg_page(struct scatterlist *sg)
+tools/virtio/linux/scatterlist.h:174:	return page_to_phys(sg_page(sg)) + sg->offset;

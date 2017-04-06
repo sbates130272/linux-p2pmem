@@ -1,0 +1,21 @@
+arch/sparc/mm/iommu.c:267:		if ((page = (unsigned long) page_address(sg_page(sg))) != 0) {
+crypto/algif_skcipher.c:358:			err = memcpy_from_msg(page_address(sg_page(sg)) +
+crypto/algif_skcipher.c:399:			err = memcpy_from_msg(page_address(sg_page(sg + i)),
+crypto/algif_aead.c:244:			err = memcpy_from_msg(page_address(sg_page(sg)) +
+crypto/algif_aead.c:286:			err = memcpy_from_msg(page_address(sg_page(sg)),
+drivers/scsi/osst.c:628:				memset(page_address(sg_page(&STp->buffer->sg[i])),
+drivers/scsi/osst.c:4524:		STp->buffer->aux = (os_aux_t *) (page_address(sg_page(&STp->buffer->sg[i])) + OS_DATA_SIZE - b_size);
+drivers/scsi/osst.c:5446:		res = copy_from_user(page_address(sg_page(&st_bp->sg[i])) + offset, ubp, cnt);
+drivers/scsi/osst.c:5479:		res = copy_to_user(ubp, page_address(sg_page(&st_bp->sg[i])) + offset, cnt);
+drivers/scsi/osst.c:5512:		memset(page_address(sg_page(&st_bp->sg[i])) + offset, 0, cnt);
+drivers/scsi/osst.c:5532:		memcpy(page_address(sg_page(&st_bp->sg[i])), ptr, cnt);
+drivers/scsi/osst.c:5553:		memcpy(ptr, page_address(sg_page(&st_bp->sg[i])), cnt);
+drivers/scsi/qla2xxx/qla_isr.c:1994:			spt = page_address(sg_page(sg)) + sg->offset;
+drivers/infiniband/sw/rdmavt/mr.c:415:		vaddr = page_address(sg_page(sg));
+drivers/infiniband/sw/rxe/rxe_mr.c:205:			vaddr = page_address(sg_page(sg));
+drivers/infiniband/hw/hns/hns_roce_hem.c:120:				   lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/infiniband/hw/mthca/mthca_memfree.c:83:				  lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/net/ethernet/mellanox/mlx4/icm.c:74:				  lowmem_page_address(sg_page(&chunk->mem[i])),
+drivers/ata/libata-scsi.c:4031:	p = page_address(sg_page(scsi_sglist(scmd)));
+drivers/crypto/ixp4xx_crypto.c:809:		ptr = page_address(sg_page(sg)) + sg->offset;
+include/linux/scatterlist.h:278:	return page_address(sg_page(sg)) + sg->offset;

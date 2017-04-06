@@ -1,0 +1,1 @@
+drivers/scsi/libiscsi_tcp.c:133:	if (page_count(sg_page(sg)) >= 1 && !recv)

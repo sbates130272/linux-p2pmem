@@ -1,0 +1,9 @@
+drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c:700:	for_each_sg_page(ttm->sg->sgl, &sg_iter, ttm->sg->nents, 0) {
+drivers/gpu/drm/radeon/radeon_ttm.c:621:	for_each_sg_page(ttm->sg->sgl, &sg_iter, ttm->sg->nents, 0) {
+drivers/infiniband/core/umem.c:60:		page = sg_page(sg);
+drivers/infiniband/hw/usnic/usnic_uiom.c:89:			page = sg_page(sg);
+drivers/vhost/scsi.c:705:				struct page *page = sg_page(&sg[i]);
+drivers/char/virtio_console.c:375:		struct page *page = sg_page(&buf->sg[i]);
+net/rds/ib_rdma.c:250:			struct page *page = sg_page(&ibmr->sg[i]);
+net/rds/rdma.c:457:		struct page *page = sg_page(&ro->op_sg[i]);
+net/rds/rdma.c:476:	struct page *page = sg_page(ao->op_sg);

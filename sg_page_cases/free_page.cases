@@ -1,0 +1,18 @@
+crypto/algif_skcipher.c:402:				__free_page(sg_page(sg + i));
+crypto/algif_aead.c:289:				__free_page(sg_page(sg));
+drivers/scsi/osst.c:5418:		__free_pages(sg_page(&STbuffer->sg[i]), order);
+drivers/scsi/ipr.c:3810:				__free_pages(sg_page(&scatterlist[j]), order);
+drivers/scsi/ipr.c:3836:		__free_pages(sg_page(&sglist->scatterlist[i]), sglist->order);
+drivers/scsi/pmcraid.c:3247:		__free_pages(sg_page(&(sglist->scatterlist[i])),
+drivers/scsi/pmcraid.c:3301:				__free_pages(sg_page(&scatterlist[j]), order);
+drivers/nvme/target/rdma.c:197:		__free_page(sg_page(sg));
+drivers/nvme/target/rdma.c:234:		__free_page(sg_page(&sg[i]));
+drivers/nvme/target/fc.c:1598:		__free_page(sg_page(&sg[i]));
+drivers/nvme/target/fc.c:1620:		__free_page(sg_page(sg));
+drivers/infiniband/hw/mthca/mthca_memfree.c:73:		__free_pages(sg_page(&chunk->mem[i]),
+drivers/gpu/drm/i915/i915_gem_internal.c:39:		__free_pages(sg_page(sg), get_order(sg->length));
+drivers/net/ethernet/mellanox/mlx4/icm.c:63:		__free_pages(sg_page(&chunk->mem[i]),
+drivers/target/target_core_transport.c:2193:		__free_page(sg_page(sg));
+drivers/target/target_core_transport.c:2353:		__free_page(sg_page(&sg[i]));
+drivers/crypto/hifn_795x.c:1408:		__free_page(sg_page(s));
+net/rds/message.c:69:		__free_page(sg_page(&rm->data.op_sg[i]));

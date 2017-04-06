@@ -1,0 +1,2 @@
+drivers/memstick/core/mspro_block.c:639:			    nth_page(sg_page(&(msb->req_sg[msb->current_seg])),
+net/sunrpc/auth_gss/gss_krb5_crypto.c:483:		in_page = sg_page(sg);

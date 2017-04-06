@@ -1,0 +1,11 @@
+include/linux/scatterlist.h:109: *   of the page pointer. See sg_page() for looking up the page belonging
+include/linux/scatterlist.h:121:static inline struct page *sg_page(struct scatterlist *sg)
+include/linux/scatterlist.h:135:	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+include/linux/scatterlist.h:147:	struct page *pg = nth_page(sg_page(sg), offset >> PAGE_SHIFT);
+include/linux/scatterlist.h:263:	return page_to_phys(sg_page(sg)) + sg->offset;
+include/linux/scatterlist.h:278:	return page_address(sg_page(sg)) + sg->offset;
+include/linux/scatterlist.h:380:	return nth_page(sg_page(piter->sg), piter->sg_pgoffset);
+include/linux/scatterlist.h:400:#define for_each_sg_page(sglist, piter, nents, pgoffset)		   \
+tools/virtio/linux/scatterlist.h:54: *   of the page pointer. See sg_page() for looking up the page belonging
+tools/virtio/linux/scatterlist.h:66:static inline struct page *sg_page(struct scatterlist *sg)
+tools/virtio/linux/scatterlist.h:174:	return page_to_phys(sg_page(sg)) + sg->offset;

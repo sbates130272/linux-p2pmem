@@ -1,0 +1,4 @@
+drivers/scsi/gdth.c:2306:            flush_dcache_page(sg_page(sl));
+drivers/mmc/host/mmc_spi.c:972:			flush_kernel_dcache_page(sg_page(sg));
+drivers/mmc/host/atmel-mci.c:2016:				flush_dcache_page(sg_page(sg));
+drivers/mmc/host/atmel-mci.c:2030:			flush_dcache_page(sg_page(sg));

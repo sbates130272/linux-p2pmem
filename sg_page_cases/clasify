@@ -1,0 +1,27 @@
+#!/bin/sh
+
+grep put_page $1 > put_page.cases
+grep get_page $1 > get_page.cases
+grep page_to_phys $1 > page_to_phys.cases
+grep page_to_pfn $1 > page_to_pfn.cases
+grep page_address $1 > page_address.cases
+grep BUG_ON $1 > bug_on.cases
+grep dma_map_page $1 > dma_map_page.cases
+grep PageHighMem $1 > pagehighmem.cases
+grep __dma_sync $1 > dma_sync.cases
+grep __free_page $1 > free_page.cases
+grep -e 'if *(.*sg_page(' $1 > conditional.cases
+grep sg_set_page $1 > sg_set_page.cases
+grep page_count $1 > page_count.cases
+grep scatterlist.h $1 > scatterlist.cases
+grep ^arch $1 > arch_misc.cases
+grep flush $1 > flush.cases
+
+rm unknown.cases
+cat *.cases | sort > found.sorted
+sort $1 > all.sorted
+
+comm -23 all.sorted found.sorted > unknown.cases
+
+wc -l $1
+wc -l *.cases

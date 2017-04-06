@@ -1,0 +1,11 @@
+arch/sh/kernel/dma-nommu.c:38:		BUG_ON(!sg_page(s));
+arch/mn10300/mm/dma-alloc.c:84:		BUG_ON(!sg_page(sg));
+arch/x86/kernel/pci-calgary_64.c:377:		BUG_ON(!sg_page(s));
+arch/x86/kernel/pci-nommu.c:66:		BUG_ON(!sg_page(s));
+arch/metag/kernel/dma.c:509:		BUG_ON(!sg_page(sg));
+arch/metag/kernel/dma.c:531:		BUG_ON(!sg_page(sg));
+drivers/iommu/intel-iommu.c:3894:		BUG_ON(!sg_page(sg));
+drivers/crypto/hifn_795x.c:1352:			BUG_ON(!sg_page(t));
+drivers/crypto/hifn_795x.c:1357:			BUG_ON(!sg_page(dst));
+lib/dma-virt.c:46:		BUG_ON(!sg_page(sg));
+lib/dma-noop.c:48:		BUG_ON(!sg_page(sg));

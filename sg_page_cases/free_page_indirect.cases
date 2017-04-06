@@ -1,0 +1,6 @@
+crypto/scompress.c:144:		page = sg_page(sgl);
+drivers/block/skd_main.c:2894:		struct page *page = sg_page(&skspcl->req.sg[i]);
+drivers/net/wireless/intel/iwlwifi/mvm/fw-dbg.c:492:				new_page = sg_page(iter);
+drivers/staging/android/ion/ion_system_heap.c:202:		free_buffer_page(sys_heap, buffer, sg_page(sg));
+drivers/staging/android/ion/ion_system_heap.c:427:	struct page *page = sg_page(table->sgl);
+include/linux/devcoredump.h:47:		page = sg_page(iter);

@@ -1,0 +1,14 @@
+crypto/algif_skcipher.c:91:		put_page(sg_page(sg));
+crypto/algif_skcipher.c:179:				put_page(sg_page(sg + i));
+crypto/algif_aead.c:115:		put_page(sg_page(sg + i));
+crypto/algif_aead.c:400:		put_page(sg_page(sg + i));
+drivers/infiniband/hw/mthca/mthca_memfree.c:492:		put_page(sg_page(&db_tab->page[i].mem));
+drivers/infiniband/hw/mthca/mthca_memfree.c:558:			put_page(sg_page(&db_tab->page[i].mem));
+drivers/vhost/scsi.c:325:			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
+drivers/vhost/scsi.c:329:			put_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
+drivers/gpu/drm/armada/armada_gem.c:484:		put_page(sg_page(sg));
+drivers/gpu/drm/armada/armada_gem.c:505:			put_page(sg_page(sg));
+drivers/target/iscsi/cxgbit/cxgbit_ddp.c:283:			put_page(sg_page(&ccmd->sg));
+net/ipv6/esp6.c:140:			put_page(sg_page(sg));
+net/rds/rdma.c:276:			put_page(sg_page(&sg[i]));
+net/ipv4/esp4.c:118:			put_page(sg_page(sg));

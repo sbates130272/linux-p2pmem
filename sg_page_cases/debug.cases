@@ -1,0 +1,11 @@
+drivers/crypto/hifn_795x.c:1685:			pr_debug("\n%s: sg_page(t): %p, t->length: %u, "
+drivers/crypto/hifn_795x.c:1686:				"sg_page(dst): %p, dst->length: %u, "
+drivers/crypto/hifn_795x.c:1688:				__func__, sg_page(t), t->length,
+drivers/crypto/hifn_795x.c:1689:				sg_page(dst), dst->length, nbytes);
+drivers/infiniband/ulp/iser/iser_memory.c:149:			 sg_page(sg), sg->offset,
+drivers/target/tcm_fc/tfc_cmd.c:65:			sg_page(sg), sg->length, sg->offset);
+net/rds/ib_recv.c:194:	rdsdebug("frag %p page %p\n", frag, sg_page(&frag->f_sg));
+net/rds/ib_recv.c:416:			 recv->r_ibinc, sg_page(&recv->r_frag->f_sg),
+net/rds/message.c:67:		rdsdebug("putting data page %p\n", (void *)sg_page(&rm->data.op_sg[i]));
+net/rds/page.c:147:		 ret ? NULL : sg_page(scat), ret ? 0 : scat->offset,
+net/rds/tcp_send.c:134:		rdsdebug("tcp sendpage %p:%u:%u ret %d\n", (void *)sg_page(&rm->data.op_sg[sg]),

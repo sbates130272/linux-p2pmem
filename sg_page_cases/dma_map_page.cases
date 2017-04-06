@@ -1,0 +1,6 @@
+arch/arc/mm/dma.c:175:		s->dma_address = dma_map_page(dev, sg_page(s), s->offset,
+drivers/mmc/host/mmc_spi.c:926:			dma_addr = dma_map_page(dma_dev, sg_page(sg), 0,
+drivers/crypto/amcc/crypto4xx_core.c:560:		addr = dma_map_page(dev->core_dev->device, sg_page(sg),
+drivers/crypto/amcc/crypto4xx_core.c:643:		addr = dma_map_page(dev->core_dev->device, sg_page(dst),
+drivers/crypto/amcc/crypto4xx_core.c:883:			addr = dma_map_page(dev->core_dev->device, sg_page(sg),
+drivers/crypto/amcc/crypto4xx_core.c:897:		pd->src = (u32)dma_map_page(dev->core_dev->device, sg_page(src),

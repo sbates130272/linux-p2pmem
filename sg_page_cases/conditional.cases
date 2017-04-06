@@ -1,0 +1,21 @@
+arch/sparc/mm/iommu.c:267:		if ((page = (unsigned long) page_address(sg_page(sg))) != 0) {
+crypto/algif_skcipher.c:167:			if (!sg_page(sg + i))
+crypto/algif_skcipher.c:396:			if (!sg_page(sg + i))
+crypto/algif_aead.c:112:		if (!sg_page(sg + i))
+crypto/algif_aead.c:283:			if (!sg_page(sg))
+drivers/scsi/osst.c:5368:	if (sg_page(&STbuffer->sg[0]) == NULL) {
+drivers/scsi/megaraid.c:1552:			if( sg_page(sgl) ) {
+drivers/scsi/gdth.c:2298:            if (!sg_page(sl)) {
+drivers/scsi/libiscsi_tcp.c:133:	if (page_count(sg_page(sg)) >= 1 && !recv)
+drivers/scsi/megaraid/megaraid_mbox.c:1567:			if (sg_page(sgl)) {
+drivers/scsi/megaraid/megaraid_mbox.c:2309:			if (sg_page(sgl)) {
+drivers/block/skd_main.c:2608:	if (!sg_page(sg))
+drivers/usb/core/devio.c:394:		if (sg_page(&as->urb->sg[i]))
+drivers/usb/core/message.c:435:			if (!PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_bin.c:428:			if (length == 0 || PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_text.c:167:		if (PageHighMem(sg_page(sg)))
+drivers/usb/misc/usbtest.c:524:		if (!sg_page(&sg[i]))
+drivers/crypto/qce/dma.c:63:		if (!sg_page(sg))
+drivers/crypto/ccp/ccp-crypto-main.c:306:		if (!sg_page(sg))
+lib/dma-debug.c:1426:		if (!PageHighMem(sg_page(s))) {
+net/rds/message.c:285:		if (!sg_page(sg)) {

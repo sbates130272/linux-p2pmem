@@ -1,0 +1,2 @@
+drivers/scsi/aha1542.c:460:			any2scsi(cptr[i].dataptr, isa_page_to_bus(sg_page(sg))
+drivers/staging/android/ion/ion.c:157:			struct page *page = sg_page(sg);

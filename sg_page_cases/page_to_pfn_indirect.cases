@@ -1,0 +1,2 @@
+drivers/scsi/xen-scsifront.c:463:		page = sg_page(sg);
+drivers/staging/android/ion/ion_carveout_heap.c:102:	struct page *page = sg_page(table->sgl);

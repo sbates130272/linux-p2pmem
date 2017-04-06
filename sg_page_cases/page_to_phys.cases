@@ -1,0 +1,10 @@
+arch/s390/pci/pci_dma.c:440:		pa = page_to_phys(sg_page(s));
+arch/microblaze/kernel/dma.c:68:		__dma_sync(page_to_phys(sg_page(sg)) + sg->offset,
+arch/arm/mm/dma-mapping.c:1724:		phys_addr_t phys = page_to_phys(sg_page(s));
+drivers/staging/android/ion/ion_chunk_heap.c:84:		gen_pool_free(chunk_heap->pool, page_to_phys(sg_page(sg)),
+drivers/staging/android/ion/ion_chunk_heap.c:112:		gen_pool_free(chunk_heap->pool, page_to_phys(sg_page(sg)),
+drivers/iommu/intel-iommu.c:2249:			pteval = page_to_phys(sg_page(sg)) | prot;
+drivers/iommu/intel-iommu.c:3895:		sg->dma_address = page_to_phys(sg_page(sg)) + sg->offset;
+drivers/iommu/iommu.c:1606:		phys_addr_t phys = page_to_phys(sg_page(s)) + s->offset;
+include/linux/scatterlist.h:263:	return page_to_phys(sg_page(sg)) + sg->offset;
+tools/virtio/linux/scatterlist.h:174:	return page_to_phys(sg_page(sg)) + sg->offset;

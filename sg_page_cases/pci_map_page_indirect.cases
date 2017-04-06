@@ -1,0 +1,4 @@
+drivers/block/cciss.c:3377:		temp64.val = (__u64) pci_map_page(h->pdev, sg_page(&tmp_sg[i]),
+drivers/crypto/hifn_795x.c:1338:		spage = sg_page(src);
+drivers/crypto/hifn_795x.c:1353:			dpage = sg_page(t);
+drivers/crypto/hifn_795x.c:1358:			dpage = sg_page(dst);

@@ -1,0 +1,4 @@
+drivers/gpu/drm/drm_prime.c:827:		page = sg_page(sg);
+drivers/usb/core/hcd.c:1577:						sg_page(sg),
+drivers/virtio/virtio_ring.c:189:			    sg_page(sg), sg->offset, sg->length,
+drivers/crypto/amcc/crypto4xx_core.c:924:					sg_page(dst), dst->offset,

@@ -1,0 +1,36 @@
+arch/s390/pci/pci_dma.c:440:		pa = page_to_phys(sg_page(s));
+arch/microblaze/kernel/dma.c:68:		__dma_sync(page_to_phys(sg_page(sg)) + sg->offset,
+arch/arm/mm/dma-mapping.c:1083:		s->dma_address = ops->map_page(dev, sg_page(s), s->offset,
+arch/arm/mm/dma-mapping.c:1724:		phys_addr_t phys = page_to_phys(sg_page(s));
+arch/arm/mm/dma-mapping.c:1728:			__dma_page_cpu_to_dev(sg_page(s), s->offset, s->length, dir);
+arch/arm/mm/dma-mapping.c:1841:			__dma_page_dev_to_cpu(sg_page(s), s->offset,
+arch/arm/mm/dma-mapping.c:1894:		__dma_page_dev_to_cpu(sg_page(s), s->offset, s->length, dir);
+arch/arm/mm/dma-mapping.c:1912:		__dma_page_cpu_to_dev(sg_page(s), s->offset, s->length, dir);
+arch/um/drivers/ubd_kern.c:1411:					sg->offset, sg->length, sg_page(sg));
+arch/sh/kernel/dma-nommu.c:38:		BUG_ON(!sg_page(s));
+arch/mn10300/mm/dma-alloc.c:84:		BUG_ON(!sg_page(sg));
+arch/openrisc/kernel/dma.c:189:		s->dma_address = or1k_map_page(dev, sg_page(s), s->offset,
+arch/frv/mb93090-mb00/pci-dma.c:56:		vaddr = kmap_atomic_primary(sg_page(sg));
+arch/sparc/kernel/ldc.c:2054:	unsigned long base = page_to_pfn(sg_page(sg)) << PAGE_SHIFT;
+arch/sparc/kernel/ldc.c:2117:		fill_cookies(&state, page_to_pfn(sg_page(s)) << PAGE_SHIFT,
+arch/sparc/mm/iommu.c:246:		sg->dma_address = iommu_get_one(dev, sg_page(sg), n) + sg->offset;
+arch/sparc/mm/iommu.c:267:		if ((page = (unsigned long) page_address(sg_page(sg))) != 0) {
+arch/sparc/mm/iommu.c:277:		sg->dma_address = iommu_get_one(dev, sg_page(sg), n) + sg->offset;
+arch/arc/mm/dma.c:175:		s->dma_address = dma_map_page(dev, sg_page(s), s->offset,
+arch/mips/mm/dma-default.c:312:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:317:		sg->dma_address = plat_map_dma_mem_page(dev, sg_page(sg)) +
+arch/mips/mm/dma-default.c:345:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:377:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/mips/mm/dma-default.c:393:			__dma_sync(sg_page(sg), sg->offset, sg->length,
+arch/avr32/mm/dma-coherent.c:164:		sg->dma_address = page_to_bus(sg_page(sg)) + sg->offset;
+arch/x86/kernel/pci-calgary_64.c:377:		BUG_ON(!sg_page(s));
+arch/x86/kernel/pci-nommu.c:66:		BUG_ON(!sg_page(s));
+arch/x86/crypto/aesni-intel_glue.c:743:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:746:	    (!PageHighMem(sg_page(req->dst)) ||
+arch/x86/crypto/aesni-intel_glue.c:827:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:830:	    (!PageHighMem(sg_page(req->dst)) ||
+arch/powerpc/kernel/dma.c:210:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);
+arch/powerpc/kernel/dma.c:266:		__dma_sync_page(sg_page(sg), sg->offset, sg->length, direction);
+arch/metag/kernel/dma.c:509:		BUG_ON(!sg_page(sg));
+arch/metag/kernel/dma.c:531:		BUG_ON(!sg_page(sg));
+arch/xtensa/kernel/pci-dma.c:228:		s->dma_address = xtensa_map_page(dev, sg_page(s), s->offset,

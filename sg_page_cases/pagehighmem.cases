@@ -1,0 +1,8 @@
+arch/x86/crypto/aesni-intel_glue.c:743:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:746:	    (!PageHighMem(sg_page(req->dst)) ||
+arch/x86/crypto/aesni-intel_glue.c:827:	    (!PageHighMem(sg_page(req->src)) ||
+arch/x86/crypto/aesni-intel_glue.c:830:	    (!PageHighMem(sg_page(req->dst)) ||
+drivers/usb/core/message.c:435:			if (!PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_bin.c:428:			if (length == 0 || PageHighMem(sg_page(sg)))
+drivers/usb/mon/mon_text.c:167:		if (PageHighMem(sg_page(sg)))
+lib/dma-debug.c:1426:		if (!PageHighMem(sg_page(s))) {

@@ -1,0 +1,22 @@
+crypto/scatterwalk.c:93:	sg_set_page(dst, sg_page(src), src->length - len, src->offset + len);
+crypto/algif_skcipher.c:577:				sg_set_page(&tmp[x], sg_page(&sreq->tsg[x]),
+crypto/algif_skcipher.c:587:		sg_set_page(sreq->tsg + txbufs++, sg_page(sg), sg->length,
+crypto/algif_aead.c:466:		sg_set_page(&areq->tsgl[i], sg_page(&sgl->sg[i]),
+drivers/scsi/libiscsi_tcp.c:204:			sg_set_page(&sg, sg_page(segment->sg), copied,
+drivers/media/v4l2-core/videobuf2-dma-contig.c:251:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/media/v4l2-core/videobuf2-dma-sg.c:399:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/gpu/drm/i915/i915_gem_dmabuf.c:65:		sg_set_page(dst, sg_page(src), src->length, 0);
+drivers/gpu/drm/i915/i915_gem.c:2255:		sg_set_page(new_sg, sg_page(sg), sg->length, 0);
+drivers/gpu/drm/udl/udl_dmabuf.c:120:		sg_set_page(wr, sg_page(rd), rd->length, rd->offset);
+drivers/memstick/core/ms_block.c:56:		sg_set_page(sg_to, sg_page(sg_from),
+drivers/memstick/core/ms_block.c:74:		sg_set_page(sg_to, sg_page(sg_from),
+drivers/memstick/core/ms_block.c:85:		sg_set_page(sg_to, sg_page(sg_from), len, sg_from->offset);
+drivers/usb/wusbcore/wa-xfer.c:1071:			sg_set_page(current_seg_sg, sg_page(current_xfer_sg),
+drivers/crypto/qce/dma.c:72:		sg_set_page(sg, sg_page(new_sgl), new_sgl->length,
+drivers/crypto/ccp/ccp-crypto-main.c:312:		sg_set_page(sg, sg_page(sg_add), sg_add->length,
+drivers/crypto/omap-sham.c:681:			sg_set_page(tmp, sg_page(sg), len, sg->offset);
+drivers/crypto/bcm/util.c:167:			sg_set_page(to++, sg_page(sg), frag_len, offset);
+net/sunrpc/auth_gss/gss_krb5_crypto.c:487:	sg_set_page(&desc->outfrags[desc->fragno], sg_page(sg), sg->length,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:513:		sg_set_page(&desc->outfrags[0], sg_page(sg), fraglen,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:574:	sg_set_page(&desc->frags[desc->fragno], sg_page(sg), sg->length,
+net/sunrpc/auth_gss/gss_krb5_crypto.c:597:		sg_set_page(&desc->frags[0], sg_page(sg), fraglen,

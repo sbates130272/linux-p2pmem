@@ -1,0 +1,44 @@
+drivers/ata/libata-sff.c:710:	page = sg_page(qc->cursg);
+drivers/ata/libata-sff.c:849:	page = sg_page(sg);
+drivers/crypto/chelsio/chcr_algo.c:491:		spage = sg_page(sg);
+drivers/gpu/drm/i915/i915_gem.c:5036:	return nth_page(sg_page(sg), offset);
+drivers/gpu/drm/i915/i915_vma.h:322:	return sg_page(vma->pages->sgl);
+drivers/gpu/drm/vmwgfx/vmwgfx_buffer.c:264:static struct page *__vmw_piter_sg_page(struct vmw_piter *viter)
+drivers/ide/ide-taskfile.c:243:		page = sg_page(cursg);
+drivers/infiniband/hw/nes/nes_verbs.c:2443:					nespbl->page = sg_page(sg);
+drivers/mmc/host/usdhi6rol0.c:370:	host->pg.page = sg_page(sg);
+drivers/mmc/host/usdhi6rol0.c:508:	host->pg.page = nth_page(sg_page(host->sg), host->page_idx);
+drivers/infiniband/hw/i40iw/i40iw_verbs.c:1362:			iwpbl->qp_mr.sq_page = sg_page(sg);
+drivers/scsi/cxgbi/libcxgbi.c:1818:	struct page *page = sg_page(sg);
+drivers/scsi/cxgbi/libcxgbi.c:1834:			page = sg_page(sg);
+drivers/nvme/target/io-cmd.c:78:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/scsi/iscsi_tcp.c:288:			r = tcp_sw_conn->sendpage(sk, sg_page(sg), offset,
+drivers/scsi/libfc/fc_fcp.c:691:		page = sg_page(sg) + (off >> PAGE_SHIFT);
+drivers/scsi/osst.c:390:			pages[i] = sg_page(sg);
+drivers/scsi/scsi_lib.c:3132:	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
+drivers/staging/android/ion/ion_heap.c:51:		struct page *page = sg_page(sg);
+drivers/staging/android/ion/ion_heap.c:83:		struct page *page = sg_page(sg);
+drivers/staging/android/ion/ion_heap.c:127:	for_each_sg_page(sgl, &piter, nents, 0) {
+drivers/staging/android/ion/ion_test.c:67:	for_each_sg_page(table->sgl, &sg_iter, table->nents, offset_page) {
+drivers/staging/rts5208/rtsx_transport.c:87:			struct page *page = sg_page(sg) +
+drivers/target/iscsi/cxgbit/cxgbit_target.c:382:		page = sg_page(sg);
+drivers/target/iscsi/iscsi_target_util.c:1189:					sg_page(sg), sg->offset + offset, sub_len, 0);
+drivers/target/target_core_file.c:267:		bvec[i].bv_page = sg_page(sg);
+drivers/target/target_core_file.c:393:		bvec[i].bv_page = sg_page(&cmd->t_data_sg[0]);
+drivers/target/target_core_iblock.c:437:				GFP_KERNEL, page ? page : sg_page(sg));
+drivers/target/target_core_iblock.c:493:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/target/target_core_iblock.c:657:		rc = bio_integrity_add_page(bio, sg_page(sg), sg->length,
+drivers/target/target_core_iblock.c:665:			 sg_page(sg), sg->length, sg->offset);
+drivers/target/target_core_iblock.c:731:		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+drivers/target/target_core_pscsi.c:874:		page = sg_page(sg);
+drivers/target/target_core_rd.c:90:			pg = sg_page(&sg[j]);
+drivers/target/target_core_transport.c:2291:		pages[i] = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:115:			page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:294:		page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:302:			page = sg_page(sg);
+drivers/target/tcm_fc/tfc_io.c:97:		page = sg_page(sg);
+include/crypto/scatterwalk.h:74:	return sg_page(walk->sg) + (walk->offset >> PAGE_SHIFT);
+net/rds/ib_recv.c:552:		ret = copy_page_to_iter(sg_page(&frag->f_sg),
+net/rds/message.c:298:		nbytes = copy_page_from_iter(sg_page(sg), sg->offset + sg_off,
+net/rds/message.c:335:		ret = copy_page_to_iter(sg_page(sg), sg->offset + vec_off,
+net/rds/tcp_send.c:130:						sg_page(&rm->data.op_sg[sg]),
