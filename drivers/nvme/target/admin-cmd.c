@@ -194,8 +194,14 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	/* we support multiple ports and multiples hosts: */
 	id->cmic = (1 << 0) | (1 << 1);
 
-	/* no limit on data transfer sizes for now */
-	id->mdts = 0;
+	/*
+	 * limit the data transfer size in offload case according to device
+	 * capability.
+	 */
+	if (req->port->offload)
+		id->mdts = ctrl->ops->peer_to_peer_mdts(req->port);
+	else
+		id->mdts = 0;
 	id->cntlid = cpu_to_le16(ctrl->cntlid);
 	id->ver = cpu_to_le32(ctrl->subsys->ver);
 
