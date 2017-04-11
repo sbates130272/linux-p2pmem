@@ -37,5 +37,8 @@ extern void create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 			       unsigned long virt, phys_addr_t size,
 			       pgprot_t prot, bool page_mappings_only);
 extern void *fixmap_remap_fdt(phys_addr_t dt_phys);
+#ifdef CONFIG_MEMORY_HOTPLUG
+extern void hotplug_paging(phys_addr_t start, phys_addr_t size);
+#endif
 
 #endif
