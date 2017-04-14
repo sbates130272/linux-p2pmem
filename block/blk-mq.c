@@ -350,7 +350,7 @@ void __blk_mq_finish_request(struct blk_mq_hw_ctx *hctx, struct blk_mq_ctx *ctx,
 	if (rq->tag != -1)
 		blk_mq_put_tag(hctx, hctx->tags, ctx, rq->tag);
 	if (sched_tag != -1)
-		blk_mq_sched_completed_request(hctx, rq);
+		blk_mq_put_tag(hctx, hctx->sched_tags, ctx, sched_tag);
 	blk_mq_sched_restart(hctx);
 	blk_queue_exit(q);
 }
@@ -368,6 +368,7 @@ void blk_mq_finish_request(struct request *rq)
 {
 	blk_mq_finish_hctx_request(blk_mq_map_queue(rq->q, rq->mq_ctx->cpu), rq);
 }
+EXPORT_SYMBOL_GPL(blk_mq_finish_request);
 
 void blk_mq_free_request(struct request *rq)
 {
@@ -442,6 +443,9 @@ static void blk_mq_stat_add(struct request *rq)
 static void __blk_mq_complete_request(struct request *rq)
 {
 	struct request_queue *q = rq->q;
+
+	if (rq->internal_tag != -1)
+		blk_mq_sched_completed_request(rq);
 
 	blk_mq_stat_add(rq);
 
@@ -1183,6 +1187,7 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 {
 	__blk_mq_delay_run_hw_queue(hctx, async, 0);
 }
+EXPORT_SYMBOL(blk_mq_run_hw_queue);
 
 void blk_mq_run_hw_queues(struct request_queue *q, bool async)
 {
