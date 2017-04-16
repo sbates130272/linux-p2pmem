@@ -520,7 +520,7 @@ comes. Splitting will free up unused subpages.
 Splitting the page right away is not an option due to locking context in
 the place where we can detect partial unmap. It's also might be
 counterproductive since in many cases partial unmap happens during exit(2) if
-an THP crosses VMA boundary.
+a THP crosses a VMA boundary.
 
 Function deferred_split_huge_page() is used to queue page for splitting.
 The splitting itself will happen when we get memory pressure via shrinker
