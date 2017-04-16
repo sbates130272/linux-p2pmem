@@ -590,7 +590,7 @@ static int dax_dev_huge_fault(struct vm_fault *vmf,
 		rc = __dax_dev_pud_fault(dax_dev, vmf);
 		break;
 	default:
-		rc = VM_FAULT_FALLBACK;
+		rc = VM_FAULT_SIGBUS;
 	}
 	rcu_read_unlock();
 
