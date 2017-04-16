@@ -2719,7 +2719,7 @@ struct page *rmqueue(struct zone *preferred_zone,
 	 * Exclude (hard) IRQ and NMI context from using the pcplists.
 	 * But allow softirq context, via disabling BH.
 	 */
-	if (likely(order == 0) && !(in_irq() || irqs_disabled()) ) {
+	if (likely(order == 0) && !(in_irq() || irqs_disabled())) {
 		page = rmqueue_pcplist(preferred_zone, zone, order,
 				gfp_flags, migratetype);
 		goto out;
