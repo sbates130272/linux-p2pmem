@@ -2351,9 +2351,9 @@ static void drain_local_pages_wq(struct work_struct *work)
 	 * cpu which is allright but we also have to make sure to not move to
 	 * a different one.
 	 */
-	preempt_disable();
+	local_bh_disable();
 	drain_local_pages(NULL);
-	preempt_enable();
+	local_bh_enable();
 }
 
 /*
@@ -2488,7 +2488,11 @@ void free_hot_cold_page(struct page *page, bool cold)
 	unsigned long pfn = page_to_pfn(page);
 	int migratetype;
 
-	if (in_interrupt()) {
+	/*
+	 * Exclude (hard) IRQ and NMI context from using the pcplists.
+	 * But allow softirq context, via disabling BH.
+	 */
+	if (in_irq() || irqs_disabled()) {
 		__free_pages_ok(page, 0);
 		return;
 	}
@@ -2498,7 +2502,7 @@ void free_hot_cold_page(struct page *page, bool cold)
 
 	migratetype = get_pfnblock_migratetype(page, pfn);
 	set_pcppage_migratetype(page, migratetype);
-	preempt_disable();
+	local_bh_disable();
 
 	/*
 	 * We only track unmovable, reclaimable and movable on pcp lists.
@@ -2529,7 +2533,7 @@ void free_hot_cold_page(struct page *page, bool cold)
 	}
 
 out:
-	preempt_enable();
+	local_bh_enable();
 }
 
 /*
@@ -2654,7 +2658,7 @@ static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 {
 	struct page *page;
 
-	VM_BUG_ON(in_interrupt());
+	VM_BUG_ON(in_irq() || irqs_disabled());
 
 	do {
 		if (list_empty(list)) {
@@ -2687,7 +2691,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	bool cold = ((gfp_flags & __GFP_COLD) != 0);
 	struct page *page;
 
-	preempt_disable();
+	local_bh_disable();
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
 	list = &pcp->lists[migratetype];
 	page = __rmqueue_pcplist(zone,  migratetype, cold, pcp, list);
@@ -2695,7 +2699,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
 		zone_statistics(preferred_zone, zone);
 	}
-	preempt_enable();
+	local_bh_enable();
 	return page;
 }
 
@@ -2711,7 +2715,11 @@ struct page *rmqueue(struct zone *preferred_zone,
 	unsigned long flags;
 	struct page *page;
 
-	if (likely(order == 0) && !in_interrupt()) {
+	/*
+	 * Exclude (hard) IRQ and NMI context from using the pcplists.
+	 * But allow softirq context, via disabling BH.
+	 */
+	if (likely(order == 0) && !(in_irq() || irqs_disabled()) ) {
 		page = rmqueue_pcplist(preferred_zone, zone, order,
 				gfp_flags, migratetype);
 		goto out;
