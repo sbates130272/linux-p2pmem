@@ -1366,16 +1366,16 @@ static ssize_t proc_fail_nth_write(struct file *file, const char __user *buf,
 	int err;
 	unsigned int n;
 
+	err = kstrtoint_from_user(buf, count, 0, &n);
+	if (err)
+		return err;
+
 	task = get_proc_task(file_inode(file));
 	if (!task)
 		return -ESRCH;
+	task->fail_nth = n;
 	put_task_struct(task);
-	if (task != current)
-		return -EPERM;
-	err = kstrtouint_from_user(buf, count, 0, &n);
-	if (err)
-		return err;
-	current->fail_nth = n;
+
 	return count;
 }
 
@@ -1389,11 +1389,9 @@ static ssize_t proc_fail_nth_read(struct file *file, char __user *buf,
 	task = get_proc_task(file_inode(file));
 	if (!task)
 		return -ESRCH;
-	put_task_struct(task);
-	if (task != current)
-		return -EPERM;
 	len = snprintf(numbuf, sizeof(numbuf), "%u\n", task->fail_nth);
 	len = simple_read_from_buffer(buf, count, ppos, numbuf, len);
+	put_task_struct(task);
 
 	return len;
 }
@@ -3346,11 +3344,7 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 #ifdef CONFIG_FAULT_INJECTION
 	REG("make-it-fail", S_IRUGO|S_IWUSR, proc_fault_inject_operations),
-	/*
-	 * Operations on the file check that the task is current,
-	 * so we create it with 0666 to support testing under unprivileged user.
-	 */
-	REG("fail-nth", 0666, proc_fail_nth_operations),
+	REG("fail-nth", 0644, proc_fail_nth_operations),
 #endif
 #ifdef CONFIG_TASK_IO_ACCOUNTING
 	ONE("io",	S_IRUSR, proc_tid_io_accounting),
