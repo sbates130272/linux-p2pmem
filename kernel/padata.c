@@ -1013,6 +1013,7 @@ err:
  */
 struct padata_instance *padata_alloc_possible(struct workqueue_struct *wq)
 {
+	lockdep_assert_hotplug_held();
 	return padata_alloc(wq, cpu_possible_mask, cpu_possible_mask);
 }
 EXPORT_SYMBOL(padata_alloc_possible);

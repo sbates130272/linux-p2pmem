@@ -562,6 +562,8 @@ int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
 		.active_cpus = cpus,
 	};
 
+	lockdep_assert_hotplug_held();
+
 	if (!stop_machine_initialized) {
 		/*
 		 * Handle the case where stop_machine() is called

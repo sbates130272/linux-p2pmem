@@ -130,6 +130,7 @@ void __static_key_slow_inc(struct static_key *key)
 	 * the all CPUs, for that to be serialized against CPU hot-plug
 	 * we need to avoid CPUs coming online.
 	 */
+	lockdep_assert_hotplug_held();
 	jump_label_lock();
 	if (atomic_read(&key->enabled) == 0) {
 		atomic_set(&key->enabled, -1);
@@ -158,6 +159,7 @@ EXPORT_SYMBOL_GPL(static_key_slow_inc_cpuslocked);
 static void __static_key_slow_dec(struct static_key *key,
 		unsigned long rate_limit, struct delayed_work *work)
 {
+	lockdep_assert_hotplug_held();
 	/*
 	 * The negative count check is valid even when a negative
 	 * key->enabled is in use by static_key_slow_inc(); a
