@@ -586,9 +586,21 @@ static int nvmet_port_subsys_allow_link(struct config_item *parent,
 	}
 
 	if (list_empty(&port->subsystems)) {
-		ret = nvmet_enable_port(port);
+		ret = nvmet_enable_port(port, subsys->offloadble);
 		if (ret)
 			goto out_free_link;
+	} else if (port->offload) {
+		/*
+		 * This limitation exists only in 1.0 spec.
+		 * Spec 1.1 solved it by passing CNTLID in private data format.
+		 */
+		pr_err("Offloaded port restricted to have one subsytem enabled\n");
+		ret = -EINVAL;
+		goto out_free_link;
+	} else if (port->offload != subsys->offloadble) {
+		pr_err("can only link subsystems to ports with the same offloadble polarity\n");
+		ret = -EINVAL;
+		goto out_free_link;
 	}
 
 	list_add_tail(&link->entry, &port->subsystems);

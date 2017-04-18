@@ -103,6 +103,7 @@ struct nvmet_port {
 	struct list_head		referrals;
 	void				*priv;
 	bool				enabled;
+	bool				offload;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)
@@ -328,7 +329,7 @@ void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
 int nvmet_register_transport(struct nvmet_fabrics_ops *ops);
 void nvmet_unregister_transport(struct nvmet_fabrics_ops *ops);
 
-int nvmet_enable_port(struct nvmet_port *port);
+int nvmet_enable_port(struct nvmet_port *port, bool offloadble);
 void nvmet_disable_port(struct nvmet_port *port);
 
 void nvmet_referral_enable(struct nvmet_port *parent, struct nvmet_port *port);
