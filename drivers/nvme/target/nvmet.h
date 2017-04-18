@@ -60,6 +60,8 @@ struct nvmet_ns {
 	struct config_group	group;
 
 	struct completion	disable_done;
+
+	bool			offloadble;
 };
 
 static inline struct nvmet_ns *to_nvmet_ns(struct config_item *item)
@@ -167,6 +169,8 @@ struct nvmet_subsys {
 	bool			pt_ctrl_enable;
 	char			*pt_ctrl_path;
 	struct nvme_ctrl	*pt_ctrl;
+
+	bool			offloadble;
 };
 
 static inline struct nvmet_subsys *to_subsys(struct config_item *item)
