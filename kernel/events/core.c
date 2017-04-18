@@ -7653,7 +7653,7 @@ static int perf_swevent_init(struct perf_event *event)
 		if (err)
 			return err;
 
-		static_key_slow_inc(&perf_swevent_enabled[event_id]);
+		static_key_slow_inc_cpuslocked(&perf_swevent_enabled[event_id]);
 		event->destroy = sw_perf_event_destroy;
 	}
 
@@ -9160,7 +9160,7 @@ static void account_event(struct perf_event *event)
 
 		mutex_lock(&perf_sched_mutex);
 		if (!atomic_read(&perf_sched_count)) {
-			static_branch_enable(&perf_sched_events);
+			static_key_slow_inc_cpuslocked(&perf_sched_events.key);
 			/*
 			 * Guarantee that all CPUs observe they key change and
 			 * call the perf scheduling hooks before proceeding to
