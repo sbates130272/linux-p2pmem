@@ -158,6 +158,7 @@ extern void arch_jump_label_transform_static(struct jump_entry *entry,
 					     enum jump_label_type type);
 extern int jump_label_text_reserved(void *start, void *end);
 extern void static_key_slow_inc(struct static_key *key);
+extern void static_key_slow_inc_cpuslocked(struct static_key *key);
 extern void static_key_slow_dec(struct static_key *key);
 extern void jump_label_apply_nops(struct module *mod);
 extern int static_key_count(struct static_key *key);
@@ -212,6 +213,8 @@ static inline void static_key_slow_inc(struct static_key *key)
 	STATIC_KEY_CHECK_USE();
 	atomic_inc(&key->enabled);
 }
+
+#define static_key_slow_inc_cpuslocked static_key_slow_inc
 
 static inline void static_key_slow_dec(struct static_key *key)
 {

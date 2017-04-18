@@ -101,7 +101,7 @@ void static_key_disable(struct static_key *key)
 }
 EXPORT_SYMBOL_GPL(static_key_disable);
 
-void static_key_slow_inc(struct static_key *key)
+void __static_key_slow_inc(struct static_key *key)
 {
 	int v, v1;
 
@@ -130,7 +130,6 @@ void static_key_slow_inc(struct static_key *key)
 	 * the all CPUs, for that to be serialized against CPU hot-plug
 	 * we need to avoid CPUs coming online.
 	 */
-	get_online_cpus();
 	jump_label_lock();
 	if (atomic_read(&key->enabled) == 0) {
 		atomic_set(&key->enabled, -1);
@@ -140,9 +139,21 @@ void static_key_slow_inc(struct static_key *key)
 		atomic_inc(&key->enabled);
 	}
 	jump_label_unlock();
+}
+
+void static_key_slow_inc(struct static_key *key)
+{
+	get_online_cpus();
+	__static_key_slow_inc(key);
 	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(static_key_slow_inc);
+
+void static_key_slow_inc_cpuslocked(struct static_key *key)
+{
+	__static_key_slow_inc(key);
+}
+EXPORT_SYMBOL_GPL(static_key_slow_inc_cpuslocked);
 
 static void __static_key_slow_dec(struct static_key *key,
 		unsigned long rate_limit, struct delayed_work *work)
@@ -154,7 +165,6 @@ static void __static_key_slow_dec(struct static_key *key,
 	 * returns is unbalanced, because all other static_key_slow_inc()
 	 * instances block while the update is in progress.
 	 */
-	get_online_cpus();
 	if (!atomic_dec_and_mutex_lock(&key->enabled, &jump_label_mutex)) {
 		WARN(atomic_read(&key->enabled) < 0,
 		     "jump label: negative count!\n");
@@ -168,20 +178,23 @@ static void __static_key_slow_dec(struct static_key *key,
 		jump_label_update(key);
 	}
 	jump_label_unlock();
-	put_online_cpus();
 }
 
 static void jump_label_update_timeout(struct work_struct *work)
 {
 	struct static_key_deferred *key =
 		container_of(work, struct static_key_deferred, work.work);
+	get_online_cpus();
 	__static_key_slow_dec(&key->key, 0, NULL);
+	put_online_cpus();
 }
 
 void static_key_slow_dec(struct static_key *key)
 {
 	STATIC_KEY_CHECK_USE();
+	get_online_cpus();
 	__static_key_slow_dec(key, 0, NULL);
+	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(static_key_slow_dec);
 
