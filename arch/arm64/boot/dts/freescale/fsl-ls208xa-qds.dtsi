@@ -1,5 +1,9 @@
 /*
- * Copyright (C) 2016 Marvell Technology Group Ltd.
+ * Device Tree file for Freescale LS2080A QDS Board.
+ *
+ * Copyright (C) 2016-17, Freescale Semiconductor
+ *
+ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
  *
  * This file is dual-licensed: you can use it either under the terms
  * of the GPLv2 or the X11 license, at your option. Note that this dual
@@ -40,152 +44,153 @@
  *     OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/*
- * Device Tree file for Marvell Armada 7040 Development board platform
- */
+&esdhc {
+	status = "okay";
+};
 
-#include "armada-7040.dtsi"
+&ifc {
+	status = "okay";
+	#address-cells = <2>;
+	#size-cells = <1>;
+	ranges = <0x0 0x0 0x5 0x80000000 0x08000000
+		  0x2 0x0 0x5 0x30000000 0x00010000
+		  0x3 0x0 0x5 0x20000000 0x00010000>;
 
-/ {
-	model = "Marvell Armada 7040 DB board";
-	compatible = "marvell,armada7040-db", "marvell,armada7040",
-		     "marvell,armada-ap806-quad", "marvell,armada-ap806";
-
-	chosen {
-		stdout-path = "serial0:115200n8";
+	nor@0,0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "cfi-flash";
+		reg = <0x0 0x0 0x8000000>;
+		bank-width = <2>;
+		device-width = <1>;
 	};
 
-	memory@00000000 {
-		device_type = "memory";
-		reg = <0x0 0x0 0x0 0x80000000>;
+	nand@2,0 {
+	     compatible = "fsl,ifc-nand";
+	     reg = <0x2 0x0 0x10000>;
+	};
+
+	cpld@3,0 {
+	     reg = <0x3 0x0 0x10000>;
+	     compatible = "fsl,ls2080aqds-fpga", "fsl,fpga-qixis";
 	};
 };
 
 &i2c0 {
 	status = "okay";
-	clock-frequency = <100000>;
+	pca9547@77 {
+		compatible = "nxp,pca9547";
+		reg = <0x77>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		i2c@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x00>;
+			rtc@68 {
+				compatible = "dallas,ds3232";
+				reg = <0x68>;
+			};
+		};
+
+		i2c@2 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x02>;
+
+			ina220@40 {
+				compatible = "ti,ina220";
+				reg = <0x40>;
+				shunt-resistor = <500>;
+			};
+
+			ina220@41 {
+				compatible = "ti,ina220";
+				reg = <0x41>;
+				shunt-resistor = <1000>;
+			};
+		};
+
+		i2c@3 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x3>;
+
+			adt7481@4c {
+				compatible = "adi,adt7461";
+				reg = <0x4c>;
+			};
+		};
+	};
 };
 
-&spi0 {
-	status = "okay";
+&i2c1 {
+	status = "disabled";
+};
 
-	spi-flash@0 {
+&i2c2 {
+	status = "disabled";
+};
+
+&i2c3 {
+	status = "disabled";
+};
+
+&dspi {
+	status = "okay";
+	dflash0: n25q128a {
 		#address-cells = <1>;
 		#size-cells = <1>;
-		compatible = "jedec,spi-nor";
-		reg = <0>;
-		spi-max-frequency = <10000000>;
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			partition@0 {
-				label = "U-Boot";
-				reg = <0 0x200000>;
-			};
-			partition@400000 {
-				label = "Filesystem";
-				reg = <0x200000 0xce0000>;
-			};
-		};
-	};
-};
-
-&uart0 {
-	status = "okay";
-};
-
-
-&cpm_pcie2 {
-	status = "okay";
-};
-
-&cpm_i2c0 {
-	status = "okay";
-	clock-frequency = <100000>;
-};
-
-&cpm_spi1 {
-	status = "okay";
-
-	spi-flash@0 {
-		#address-cells = <0x1>;
-		#size-cells = <0x1>;
-		compatible = "jedec,spi-nor";
-		reg = <0x0>;
-		spi-max-frequency = <20000000>;
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			partition@0 {
-				label = "U-Boot";
-				reg = <0x0 0x200000>;
-			};
-
-			partition@400000 {
-				label = "Filesystem";
-				reg = <0x200000 0xe00000>;
-			};
-		};
-	};
-};
-
-&cpm_sata0 {
-	status = "okay";
-};
-
-&cpm_usb3_0 {
-	status = "okay";
-};
-
-&cpm_usb3_1 {
-	status = "okay";
-};
-
-&ap_sdhci0 {
-	status = "okay";
-	bus-width = <4>;
-	no-1-8-v;
-	non-removable;
-};
-
-&cpm_sdhci0 {
-	status = "okay";
-	bus-width = <4>;
-	no-1-8-v;
-	non-removable;
-};
-
-&cpm_mdio {
-	phy0: ethernet-phy@0 {
+		compatible = "st,m25p80";
+		spi-max-frequency = <3000000>;
 		reg = <0>;
 	};
-	phy1: ethernet-phy@1 {
+	dflash1: sst25wf040b {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <3000000>;
 		reg = <1>;
 	};
+	dflash2: en25s64 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <3000000>;
+		reg = <2>;
+	};
 };
 
-&cpm_ethernet {
+&qspi {
+	status = "okay";
+	flash0: s25fl256s1@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <20000000>;
+		reg = <0>;
+	};
+	flash2: s25fl256s1@2 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "st,m25p80";
+		spi-max-frequency = <20000000>;
+		reg = <0>;
+	};
+};
+
+&sata0 {
 	status = "okay";
 };
 
-&cpm_eth1 {
+&sata1 {
 	status = "okay";
-	phy = <&phy0>;
-	phy-mode = "sgmii";
 };
 
-&cpm_eth2 {
+&usb0 {
 	status = "okay";
-	phy = <&phy1>;
-	phy-mode = "rgmii-id";
 };
 
-&cpm_crypto {
+&usb1 {
 	status = "okay";
 };
