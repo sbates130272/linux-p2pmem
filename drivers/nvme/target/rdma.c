@@ -46,6 +46,7 @@ struct nvmet_rdma_cmd {
 	struct page		*inline_page;
 	struct nvme_command     *nvme_cmd;
 	struct nvmet_rdma_queue	*queue;
+	struct ib_srq		*srq;
 };
 
 enum {
@@ -444,8 +445,8 @@ static int nvmet_rdma_post_recv(struct nvmet_rdma_device *ndev,
 		cmd->sge[0].addr, cmd->sge[0].length,
 		DMA_FROM_DEVICE);
 
-	if (ndev->srq)
-		return ib_post_srq_recv(ndev->srq, &cmd->wr, &bad_wr);
+	if (cmd->srq)
+		return ib_post_srq_recv(cmd->srq, &cmd->wr, &bad_wr);
 	return ib_post_recv(cmd->queue->cm_id->qp, &cmd->wr, &bad_wr);
 }
 
@@ -848,8 +849,10 @@ static int nvmet_rdma_init_srq(struct nvmet_rdma_device *ndev)
 	ndev->srq = srq;
 	ndev->srq_size = srq_size;
 
-	for (i = 0; i < srq_size; i++)
+	for (i = 0; i < srq_size; i++) {
+		ndev->srq_cmds[i].srq = srq;
 		nvmet_rdma_post_recv(ndev, &ndev->srq_cmds[i]);
+	}
 
 	return 0;
 
