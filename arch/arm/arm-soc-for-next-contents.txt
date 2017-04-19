@@ -10,6 +10,8 @@ next/fixes-non-critical
 		ARM: mmp: let clk_disable() return immediately if clk is NULL
 	broadcom/maintainers
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/maintainers
+	tegra/misc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-misc
 
 next/cleanup
 
@@ -30,6 +32,14 @@ next/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc-2
 	sunxi/core
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-core-for-4.12
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-4.12
+	hisi/soc
+		git://github.com/hisilicon/linux-hisi tags/hisi-armv7-soc-for-4.12
+	at91/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.12-soc
+	davinci/soc3
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc-3
 
 next/arm64
 	renesas/arm64-defconfig
@@ -44,6 +54,10 @@ next/arm64
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/defconfig-arm64
 	sunxi/config64
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-config64-for-4.12
+	samsung/soc64
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc64-4.12
+	mvebu/defconfig2
+		git://git.infradead.org/linux-mvebu tags/mvebu-defconfig64-4.12-2
 
 next/dt
 	gemini/dts
@@ -86,8 +100,37 @@ next/dt
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-4.12
 	sunxi/dt-h3
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h3-for-4.12
-	dt/include-paths
-		Merge branch 'dt/include-paths' into next/dt
+	tegra/dt-bindings
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-dt-bindings
+	qcom/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-dts-for-4.12
+	renesas/dt2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-dt2-for-v4.12
+	mvebu/dt2
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.12-2
+	samsung/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-4.12
+	rockchip/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts32-2
+	imx/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-4.12
+	at91/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.12-dt
+	omap/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/dt-pt2-signed
+	aspeed/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.12-devicetree
+	mvebu/dt3
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.12-3
+	alpine/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/atenart/linux tags/alpine-dt-for-4.12
+	patch
+		arm: spear6xx: add labels to various nodes in spear600.dtsi
+		arm: spear6xx: use node labels in spear600-evb.dts
+		arm: spear6xx: fix spaces in spear600-evb.dts
+		arm: spear6xx: switch spear600-evb to the new flash partition DT binding
+		arm: spear6xx: remove unneeded pinctrl properties in spear600-evb
+		arm: spear6xx: add DT description of the ADC on SPEAr600
 
 next/dt64
 	shared/dt-symlinks
@@ -113,8 +156,24 @@ next/dt64
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt64-for-4.12
 	sunxi/dt-h5
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h5-for-4.12
-	dt/include-paths
-		Merge branch 'dt/include-paths' into next/dt64
+	tegra/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-arm64-dt
+	qcom/arm64
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-arm64-for-4.12
+	renesas/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-dt2-for-v4.12
+	samsung/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt64-4.12
+	rockchip/dt64-3
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-2
+	imx/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-4.12
+	zte/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/zte-dt64-4.12
+	hisi/dt64
+		git://github.com/hisilicon/linux-hisi tags/hisi-arm64-dt-for-4.12
+	mvevu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-4.12-2
 
 next/defconfig
 	patch
@@ -134,6 +193,16 @@ next/defconfig
 		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_defconfig_updates_for_v4.12
 	sunxi/defconfig
 		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-defconfig-for-4.12
+	qcom/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-defconfig-for-4.12
+	samsung/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-defconfig-4.12
+	imx/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-4.12
+	omap/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/defconfig-signed
+	aspeed/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.12-defconfig
 
 next/drivers
 	drivers/reset
@@ -152,6 +221,20 @@ next/drivers
 		git://git.pengutronix.de/git/pza/linux tags/reset-for-4.12-2
 	keystone/pm
 		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/arm-soc-pmdomain
+	tegra/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-soc
+	qcom/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-drivers-for-4.12
+	drivers/isct-clock
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-integrator tags/arm-to-clk-icst
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-4.12
+	zte-drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/zte-drivers-4.12
+	renesas/sysc
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-sysc-for-v4.12
+	samsung/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-4.12
 
 next/tee
 	tee/initial-merge
