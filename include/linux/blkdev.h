@@ -924,6 +924,7 @@ extern int blk_register_queue(struct gendisk *disk);
 extern void blk_unregister_queue(struct gendisk *disk);
 extern blk_qc_t generic_make_request(struct bio *bio);
 extern void blk_rq_init(struct request_queue *q, struct request *rq);
+extern void blk_init_request_from_bio(struct request *req, struct bio *bio);
 extern void blk_put_request(struct request *);
 extern void __blk_put_request(struct request_queue *, struct request *);
 extern struct request *blk_get_request(struct request_queue *, int, gfp_t);
@@ -1084,20 +1085,6 @@ static inline unsigned int blk_rq_count_bios(struct request *rq)
 		nr_bios++;
 
 	return nr_bios;
-}
-
-/*
- * blk_rq_set_prio - associate a request with prio from ioc
- * @rq: request of interest
- * @ioc: target iocontext
- *
- * Assocate request prio with ioc prio so request based drivers
- * can leverage priority information.
- */
-static inline void blk_rq_set_prio(struct request *rq, struct io_context *ioc)
-{
-	if (ioc)
-		rq->ioprio = ioc->ioprio;
 }
 
 /*
