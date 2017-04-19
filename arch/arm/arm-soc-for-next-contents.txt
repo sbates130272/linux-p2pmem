@@ -1,8 +1,4 @@
 fixes
-	omap/fixes
-		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.11/fixes-rc4
-	patch
-		ARM: dts: keystone-k2l: fix broken Ethernet due to disabled OSR
 
 next/fixes-non-critical
 	oxnas/soc
@@ -28,6 +24,12 @@ next/soc
 		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-multiplat-2
 	broadcom/soc
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/soc
+	stm32/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-soc-for-v4.12-1
+	davinci/soc2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc-2
+	sunxi/core
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-core-for-4.12
 
 next/arm64
 	renesas/arm64-defconfig
@@ -40,6 +42,8 @@ next/arm64
 		git://git.infradead.org/linux-mvebu tags/mvebu-defconfig64-4.12-1
 	broadcom/defconfig64
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/defconfig-arm64
+	sunxi/config64
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-config64-for-4.12
 
 next/dt
 	gemini/dts
@@ -70,6 +74,20 @@ next/dt
 		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/dt-v2-signed
 	broadcom/dt-fixes
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.11/devicetree-fixes
+	sti/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/pchotard/sti sti-dt-for-v4.12-round1
+	stm32/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-dt-for-v4.12-1
+	davinci/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/dt-2
+	socfpga/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_for_v4.12
+	sunxi/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-4.12
+	sunxi/dt-h3
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h3-for-4.12
+	dt/include-paths
+		Merge branch 'dt/include-paths' into next/dt
 
 next/dt64
 	shared/dt-symlinks
@@ -89,6 +107,14 @@ next/dt64
 		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-1
 	rockchip/dt64-2
 		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-symlinks-1
+	amlogic/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-redo
+	sunxi/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt64-for-4.12
+	sunxi/dt-h5
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h5-for-4.12
+	dt/include-paths
+		Merge branch 'dt/include-paths' into next/dt64
 
 next/defconfig
 	patch
@@ -99,6 +125,15 @@ next/defconfig
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/defconfig
 	patch
 		multi_v7_defconfig: make Rockchip DRM drivers built-in
+		multi_v7_defconfig: make Rockchip usb2-phy built-in
+	stm32/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-defconfig-for-v4.12-1
+	davinci/defconfig2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/defconfig-2
+	socfpga/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_defconfig_updates_for_v4.12
+	sunxi/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-defconfig-for-4.12
 
 next/drivers
 	drivers/reset
@@ -109,7 +144,16 @@ next/drivers
 		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers
 	broadcom/drivers
 		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/drivers
+	drivers/scpi
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scpi-update-4.12
+	davinci/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/drivers
+	drivers/reset2
+		git://git.pengutronix.de/git/pza/linux tags/reset-for-4.12-2
+	keystone/pm
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/arm-soc-pmdomain
 
 next/tee
 	tee/initial-merge
 		git://git.linaro.org:/people/jens.wiklander/linux-tee tags/tee-drv-for-4.12
+
