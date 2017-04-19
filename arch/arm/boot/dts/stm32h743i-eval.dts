@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Marcus Cooper <codekipper@gmail.com>
+ * Copyright 2017 - Alexandre Torgue <alexandre.torgue@st.com>
  *
  * This file is dual-licensed: you can use it either under the terms
  * of the GPL or the X11 license, at your option. Note that this dual
@@ -41,133 +41,34 @@
  */
 
 /dts-v1/;
-#include "sun6i-a31.dtsi"
-#include "sunxi-common-regulators.dtsi"
-
-#include <dt-bindings/gpio/gpio.h>
+#include "stm32h743.dtsi"
+#include "stm32h743-pinctrl.dtsi"
 
 / {
-	model = "Mele I7 Quad top set box";
-	compatible = "mele,i7", "allwinner,sun6i-a31";
-
-	aliases {
-		serial0 = &uart0;
-	};
+	model = "STMicroelectronics STM32H743i-EVAL board";
+	compatible = "st,stm32h743i-eval", "st,stm32h743";
 
 	chosen {
+		bootargs = "root=/dev/ram";
 		stdout-path = "serial0:115200n8";
 	};
 
-	leds {
-		compatible = "gpio-leds";
-		pinctrl-names = "default";
-		pinctrl-0 = <&led_pins_i7>;
-
-		blue {
-			label = "i7:blue:usr";
-			gpios = <&pio 7 13 GPIO_ACTIVE_HIGH>;
-		};
+	memory {
+		reg = <0xd0000000 0x2000000>;
 	};
 
-	sound {
-		compatible = "simple-audio-card";
-		simple-audio-card,name = "On-board SPDIF";
-		simple-audio-card,cpu {
-			sound-dai = <&spdif>;
-		};
-
-		simple-audio-card,codec {
-			sound-dai = <&spdif_out>;
-		};
-	};
-
-	spdif_out: spdif-out {
-		#sound-dai-cells = <0>;
-		compatible = "linux,spdif-dit";
+	aliases {
+		serial0 = &usart1;
 	};
 };
 
-&codec {
-	allwinner,audio-routing =
-		"Headphone", "HP";
-	status = "okay";
+&clk_hse {
+	clock-frequency = <125000000>;
 };
 
-&ehci0 {
-	status = "okay";
-};
-
-&ehci1 {
-	status = "okay";
-};
-
-&gmac {
+&usart1 {
+	pinctrl-0 = <&usart1_pins>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&gmac_pins_mii_a>;
-	phy = <&phy1>;
-	phy-mode = "mii";
-	status = "okay";
-
-	phy1: ethernet-phy@1 {
-		reg = <1>;
-	};
-};
-
-&ir {
-	pinctrl-names = "default";
-	pinctrl-0 = <&ir_pins_a>;
 	status = "okay";
 };
 
-&mmc0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&mmc0_pins_a>, <&mmc0_cd_pin_i7>;
-	vmmc-supply = <&reg_vcc3v3>;
-	bus-width = <4>;
-	cd-gpios = <&pio 7 22 GPIO_ACTIVE_HIGH>; /* PH22 */
-	cd-inverted;
-	status = "okay";
-};
-
-&pio {
-	led_pins_i7: led_pins@0 {
-		pins = "PH13";
-		function = "gpio_out";
-	};
-
-	mmc0_cd_pin_i7: mmc0_cd_pin@0 {
-		pins = "PH22";
-		function = "gpio_in";
-		bias-pull-up;
-	};
-
-	usb1_vbus_pin_i7: usb1_vbus_pin@0 {
-		pins = "PC27";
-		function = "gpio_out";
-	};
-};
-
-&reg_usb1_vbus {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb1_vbus_pin_i7>;
-	gpio = <&pio 2 27 GPIO_ACTIVE_HIGH>;
-	status = "okay";
-};
-
-&spdif {
-	pinctrl-names = "default";
-	pinctrl-0 = <&spdif_pins_a>;
-	spdif-out = "okay";
-	status = "okay";
-};
-
-&uart0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart0_pins_a>;
-	status = "okay";
-};
-
-&usbphy {
-	usb1_vbus-supply = <&reg_usb1_vbus>;
-	status = "okay";
-};
