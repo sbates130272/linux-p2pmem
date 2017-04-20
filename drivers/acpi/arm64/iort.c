@@ -523,6 +523,19 @@ static int arm_smmu_iort_xlate(struct device *dev, u32 streamid,
 	return ret;
 }
 
+static inline bool iort_iommu_driver_enabled(u8 type)
+{
+	switch (type) {
+	case ACPI_IORT_NODE_SMMU_V3:
+		return IS_BUILTIN(CONFIG_ARM_SMMU_V3);
+	case ACPI_IORT_NODE_SMMU:
+		return IS_BUILTIN(CONFIG_ARM_SMMU);
+	default:
+		pr_warn("IORT node type %u does not describe an SMMU\n", type);
+		return false;
+	}
+}
+
 static const struct iommu_ops *iort_iommu_xlate(struct device *dev,
 					struct acpi_iort_node *node,
 					u32 streamid)
@@ -530,6 +543,14 @@ static const struct iommu_ops *iort_iommu_xlate(struct device *dev,
 	const struct iommu_ops *ops = NULL;
 	int ret = -ENODEV;
 	struct fwnode_handle *iort_fwnode;
+	struct iommu_fwspec *fwspec = dev->iommu_fwspec;
+
+	/*
+	 * If we already translated the fwspec there
+	 * is nothing left to do, return the iommu_ops.
+	 */
+	if (fwspec && fwspec->ops)
+		return fwspec->ops;
 
 	if (node) {
 		iort_fwnode = iort_get_fwnode(node);
@@ -537,8 +558,17 @@ static const struct iommu_ops *iort_iommu_xlate(struct device *dev,
 			return NULL;
 
 		ops = iommu_ops_from_fwnode(iort_fwnode);
+		/*
+		 * If the ops look-up fails, this means that either
+		 * the SMMU drivers have not been probed yet or that
+		 * the SMMU drivers are not built in the kernel;
+		 * Depending on whether the SMMU drivers are built-in
+		 * in the kernel or not, defer the IOMMU configuration
+		 * or just abort it.
+		 */
 		if (!ops)
-			return NULL;
+			return iort_iommu_driver_enabled(node->type) ?
+			       ERR_PTR(-EPROBE_DEFER) : NULL;
 
 		ret = arm_smmu_iort_xlate(dev, streamid, iort_fwnode, ops);
 	}
@@ -612,10 +642,24 @@ const struct iommu_ops *iort_iommu_configure(struct device *dev)
 
 		while (parent) {
 			ops = iort_iommu_xlate(dev, parent, streamid);
+			if (IS_ERR_OR_NULL(ops))
+				return ops;
 
 			parent = iort_node_get_id(node, &streamid,
 						  IORT_IOMMU_TYPE, i++);
 		}
+	}
+
+	/*
+	 * If we have reason to believe the IOMMU driver missed the initial
+	 * add_device callback for dev, replay it to get things in order.
+	 */
+	if (!IS_ERR_OR_NULL(ops) && ops->add_device &&
+	    dev->bus && !dev->iommu_group) {
+		int err = ops->add_device(dev);
+
+		if (err)
+			ops = ERR_PTR(err);
 	}
 
 	return ops;
@@ -956,6 +1000,4 @@ void __init acpi_iort_init(void)
 	}
 
 	iort_init_platform_devices();
-
-	acpi_probe_device_table(iort);
 }
