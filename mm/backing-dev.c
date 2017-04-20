@@ -12,8 +12,6 @@
 #include <linux/device.h>
 #include <trace/events/writeback.h>
 
-static atomic_long_t bdi_seq = ATOMIC_LONG_INIT(0);
-
 struct backing_dev_info noop_backing_dev_info = {
 	.name		= "noop",
 	.capabilities	= BDI_CAP_NO_ACCT_AND_WRITEBACK,
@@ -241,6 +239,8 @@ static __init int bdi_class_init(void)
 	return 0;
 }
 postcore_initcall(bdi_class_init);
+
+static int bdi_init(struct backing_dev_info *bdi);
 
 static int __init default_bdi_init(void)
 {
@@ -820,7 +820,7 @@ static void cgwb_remove_from_bdi_list(struct bdi_writeback *wb)
 
 #endif	/* CONFIG_CGROUP_WRITEBACK */
 
-int bdi_init(struct backing_dev_info *bdi)
+static int bdi_init(struct backing_dev_info *bdi)
 {
 	int ret;
 
@@ -838,7 +838,6 @@ int bdi_init(struct backing_dev_info *bdi)
 
 	return ret;
 }
-EXPORT_SYMBOL(bdi_init);
 
 struct backing_dev_info *bdi_alloc_node(gfp_t gfp_mask, int node_id)
 {
@@ -855,19 +854,16 @@ struct backing_dev_info *bdi_alloc_node(gfp_t gfp_mask, int node_id)
 	}
 	return bdi;
 }
+EXPORT_SYMBOL(bdi_alloc_node);
 
-int bdi_register(struct backing_dev_info *bdi, struct device *parent,
-		const char *fmt, ...)
+int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 {
-	va_list args;
 	struct device *dev;
 
 	if (bdi->dev)	/* The driver needs to use separate queues per device */
 		return 0;
 
-	va_start(args, fmt);
-	dev = device_create_vargs(bdi_class, parent, MKDEV(0, 0), bdi, fmt, args);
-	va_end(args);
+	dev = device_create_vargs(bdi_class, NULL, MKDEV(0, 0), bdi, fmt, args);
 	if (IS_ERR(dev))
 		return PTR_ERR(dev);
 
@@ -884,20 +880,25 @@ int bdi_register(struct backing_dev_info *bdi, struct device *parent,
 	trace_writeback_bdi_register(bdi);
 	return 0;
 }
-EXPORT_SYMBOL(bdi_register);
+EXPORT_SYMBOL(bdi_register_va);
 
-int bdi_register_dev(struct backing_dev_info *bdi, dev_t dev)
+int bdi_register(struct backing_dev_info *bdi, const char *fmt, ...)
 {
-	return bdi_register(bdi, NULL, "%u:%u", MAJOR(dev), MINOR(dev));
+	va_list args;
+	int ret;
+
+	va_start(args, fmt);
+	ret = bdi_register_va(bdi, fmt, args);
+	va_end(args);
+	return ret;
 }
-EXPORT_SYMBOL(bdi_register_dev);
+EXPORT_SYMBOL(bdi_register);
 
 int bdi_register_owner(struct backing_dev_info *bdi, struct device *owner)
 {
 	int rc;
 
-	rc = bdi_register(bdi, NULL, "%u:%u", MAJOR(owner->devt),
-			MINOR(owner->devt));
+	rc = bdi_register(bdi, "%u:%u", MAJOR(owner->devt), MINOR(owner->devt));
 	if (rc)
 		return rc;
 	/* Leaking owner reference... */
@@ -939,19 +940,16 @@ void bdi_unregister(struct backing_dev_info *bdi)
 	}
 }
 
-static void bdi_exit(struct backing_dev_info *bdi)
-{
-	WARN_ON_ONCE(bdi->dev);
-	wb_exit(&bdi->wb);
-	cgwb_bdi_exit(bdi);
-}
-
 static void release_bdi(struct kref *ref)
 {
 	struct backing_dev_info *bdi =
 			container_of(ref, struct backing_dev_info, refcnt);
 
-	bdi_exit(bdi);
+	if (test_bit(WB_registered, &bdi->wb.state))
+		bdi_unregister(bdi);
+	WARN_ON_ONCE(bdi->dev);
+	wb_exit(&bdi->wb);
+	cgwb_bdi_exit(bdi);
 	kfree(bdi);
 }
 
@@ -959,38 +957,7 @@ void bdi_put(struct backing_dev_info *bdi)
 {
 	kref_put(&bdi->refcnt, release_bdi);
 }
-
-void bdi_destroy(struct backing_dev_info *bdi)
-{
-	bdi_unregister(bdi);
-	bdi_exit(bdi);
-}
-EXPORT_SYMBOL(bdi_destroy);
-
-/*
- * For use from filesystems to quickly init and register a bdi associated
- * with dirty writeback
- */
-int bdi_setup_and_register(struct backing_dev_info *bdi, char *name)
-{
-	int err;
-
-	bdi->name = name;
-	bdi->capabilities = 0;
-	err = bdi_init(bdi);
-	if (err)
-		return err;
-
-	err = bdi_register(bdi, NULL, "%.28s-%ld", name,
-			   atomic_long_inc_return(&bdi_seq));
-	if (err) {
-		bdi_destroy(bdi);
-		return err;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(bdi_setup_and_register);
+EXPORT_SYMBOL(bdi_put);
 
 static wait_queue_head_t congestion_wqh[2] = {
 		__WAIT_QUEUE_HEAD_INITIALIZER(congestion_wqh[0]),
