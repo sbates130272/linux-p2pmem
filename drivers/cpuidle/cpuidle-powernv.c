@@ -56,10 +56,9 @@ static int snooze_loop(struct cpuidle_device *dev,
 
 	snooze_exit_time = get_tb() + snooze_timeout;
 	ppc64_runlatch_off();
+	HMT_very_low();
 	while (!need_resched()) {
-		HMT_low();
-		HMT_very_low();
-		if (snooze_timeout_en && get_tb() > snooze_exit_time)
+		if (likely(snooze_timeout_en) && get_tb() > snooze_exit_time)
 			break;
 	}
 
