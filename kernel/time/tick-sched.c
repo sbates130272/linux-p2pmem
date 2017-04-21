@@ -783,8 +783,13 @@ static ktime_t tick_nohz_stop_sched_tick(struct tick_sched *ts,
 	tick = expires;
 
 	/* Skip reprogram of event if its not changed */
-	if (ts->tick_stopped && (expires == ts->next_tick))
-		goto out;
+	if (ts->tick_stopped && (expires == ts->next_tick)) {
+		/* Sanity check: make sure clockevent is actually programmed */
+		if (likely(dev->next_event <= ts->next_tick))
+			goto out;
+
+		WARN_ON_ONCE(1);
+	}
 
 	/*
 	 * nohz_stop_sched_tick can be called several times before
