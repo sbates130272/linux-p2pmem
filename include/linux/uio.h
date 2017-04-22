@@ -91,6 +91,10 @@ size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i);
 size_t copy_from_iter(void *addr, size_t bytes, struct iov_iter *i);
 bool copy_from_iter_full(void *addr, size_t bytes, struct iov_iter *i);
 size_t copy_from_iter_nocache(void *addr, size_t bytes, struct iov_iter *i);
+size_t copy_from_iter_ops(void *addr, size_t bytes, struct iov_iter *i,
+		int (*user)(void *, const void __user *, unsigned),
+		void (*page)(char *, struct page *, size_t, size_t),
+		void (*copy)(void *, void *, unsigned));
 bool copy_from_iter_full_nocache(void *addr, size_t bytes, struct iov_iter *i);
 size_t iov_iter_zero(size_t bytes, struct iov_iter *);
 unsigned long iov_iter_alignment(const struct iov_iter *i);

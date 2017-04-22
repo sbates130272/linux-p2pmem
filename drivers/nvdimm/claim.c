@@ -10,10 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/libnvdimm.h>
 #include <linux/device.h>
 #include <linux/sizes.h>
-#include <linux/pmem.h>
 #include "nd-core.h"
+#include "pmem.h"
 #include "pfn.h"
 #include "btt.h"
 #include "nd.h"
@@ -239,7 +240,7 @@ static int nsio_rw_bytes(struct nd_namespace_common *ndns,
 	if (rw == READ) {
 		if (unlikely(is_bad_pmem(&nsio->bb, sector, sz_align)))
 			return -EIO;
-		return memcpy_from_pmem(buf, nsio->addr + offset, size);
+		return memcpy_mcsafe(buf, nsio->addr + offset, size);
 	}
 
 	if (unlikely(is_bad_pmem(&nsio->bb, sector, sz_align))) {
@@ -253,12 +254,12 @@ static int nsio_rw_bytes(struct nd_namespace_common *ndns,
 				cleared /= 512;
 				badblocks_clear(&nsio->bb, sector, cleared);
 			}
-			invalidate_pmem(nsio->addr + offset, size);
+			arch_invalidate_pmem(nsio->addr + offset, size);
 		} else
 			rc = -EIO;
 	}
 
-	memcpy_to_pmem(nsio->addr + offset, buf, size);
+	arch_memcpy_to_pmem(nsio->addr + offset, buf, size);
 	nvdimm_flush(to_nd_region(ndns->dev.parent));
 
 	return rc;
