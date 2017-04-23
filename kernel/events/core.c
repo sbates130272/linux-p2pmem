@@ -4016,10 +4016,12 @@ static void unaccount_event(struct perf_event *event)
 
 static void perf_sched_delayed(struct work_struct *work)
 {
+	get_online_cpus();
 	mutex_lock(&perf_sched_mutex);
 	if (atomic_dec_and_test(&perf_sched_count))
-		static_branch_disable(&perf_sched_events);
+		static_branch_disable_cpuslocked(&perf_sched_events);
 	mutex_unlock(&perf_sched_mutex);
+	put_online_cpus();
 }
 
 /*
