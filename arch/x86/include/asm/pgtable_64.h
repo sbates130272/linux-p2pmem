@@ -35,6 +35,13 @@ extern void paging_init(void);
 #define pud_ERROR(e)					\
 	pr_err("%s:%d: bad pud %p(%016lx)\n",		\
 	       __FILE__, __LINE__, &(e), pud_val(e))
+
+#if CONFIG_PGTABLE_LEVELS >= 5
+#define p4d_ERROR(e)					\
+	pr_err("%s:%d: bad p4d %p(%016lx)\n",		\
+	       __FILE__, __LINE__, &(e), p4d_val(e))
+#endif
+
 #define pgd_ERROR(e)					\
 	pr_err("%s:%d: bad pgd %p(%016lx)\n",		\
 	       __FILE__, __LINE__, &(e), pgd_val(e))
@@ -128,7 +135,11 @@ static inline void native_set_p4d(p4d_t *p4dp, p4d_t p4d)
 
 static inline void native_p4d_clear(p4d_t *p4d)
 {
+#ifdef CONFIG_X86_5LEVEL
+	native_set_p4d(p4d, native_make_p4d(0));
+#else
 	native_set_p4d(p4d, (p4d_t) { .pgd = native_make_pgd(0)});
+#endif
 }
 
 static inline void native_set_pgd(pgd_t *pgdp, pgd_t pgd)
@@ -216,20 +227,6 @@ extern void cleanup_highmap(void);
 extern void init_extra_mapping_uc(unsigned long phys, unsigned long size);
 extern void init_extra_mapping_wb(unsigned long phys, unsigned long size);
 
-#define gup_fast_permitted gup_fast_permitted
-static inline bool gup_fast_permitted(unsigned long start, int nr_pages,
-		int write)
-{
-	unsigned long len, end;
-
-	len = (unsigned long)nr_pages << PAGE_SHIFT;
-	end = start + len;
-	if (end < start)
-		return false;
-	if (end >> __VIRTUAL_MASK_SHIFT)
-		return false;
-	return true;
-}
-
 #endif /* !__ASSEMBLY__ */
+
 #endif /* _ASM_X86_PGTABLE_64_H */
