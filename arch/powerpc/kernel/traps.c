@@ -35,13 +35,13 @@
 #include <linux/backlight.h>
 #include <linux/bug.h>
 #include <linux/kdebug.h>
-#include <linux/debugfs.h>
 #include <linux/ratelimit.h>
 #include <linux/context_tracking.h>
 
 #include <asm/emulated_ops.h>
 #include <asm/pgtable.h>
 #include <linux/uaccess.h>
+#include <asm/debugfs.h>
 #include <asm/io.h>
 #include <asm/machdep.h>
 #include <asm/rtas.h>
@@ -1440,6 +1440,8 @@ void facility_unavailable_exception(struct pt_regs *regs)
 		[FSCR_TM_LG] = "TM",
 		[FSCR_EBB_LG] = "EBB",
 		[FSCR_TAR_LG] = "TAR",
+		[FSCR_MSGP_LG] = "MSGP",
+		[FSCR_SCV_LG] = "SCV",
 	};
 	char *facility = "unknown";
 	u64 value;

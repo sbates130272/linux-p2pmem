@@ -167,16 +167,13 @@ BEGIN_FTR_SECTION_NESTED(943)						\
 	std	ra,offset(r13);						\
 END_FTR_SECTION_NESTED(ftr,ftr,943)
 
-#define EXCEPTION_PROLOG_0_PACA(area)					\
+#define EXCEPTION_PROLOG_0(area)					\
+	GET_PACA(r13);							\
 	std	r9,area+EX_R9(r13);	/* save r9 */			\
 	OPT_GET_SPR(r9, SPRN_PPR, CPU_FTR_HAS_PPR);			\
 	HMT_MEDIUM;							\
 	std	r10,area+EX_R10(r13);	/* save r10 - r12 */		\
 	OPT_GET_SPR(r10, SPRN_CFAR, CPU_FTR_CFAR)
-
-#define EXCEPTION_PROLOG_0(area)					\
-	GET_PACA(r13);							\
-	EXCEPTION_PROLOG_0_PACA(area)
 
 #define __EXCEPTION_PROLOG_1(area, extra, vec)				\
 	OPT_SAVE_REG_TO_PACA(area+EX_PPR, r9, CPU_FTR_HAS_PPR);		\
@@ -205,12 +202,6 @@ END_FTR_SECTION_NESTED(ftr,ftr,943)
 
 #define EXCEPTION_PROLOG_PSERIES(area, label, h, extra, vec)		\
 	EXCEPTION_PROLOG_0(area);					\
-	EXCEPTION_PROLOG_1(area, extra, vec);				\
-	EXCEPTION_PROLOG_PSERIES_1(label, h);
-
-/* Have the PACA in r13 already */
-#define EXCEPTION_PROLOG_PSERIES_PACA(area, label, h, extra, vec)	\
-	EXCEPTION_PROLOG_0_PACA(area);					\
 	EXCEPTION_PROLOG_1(area, extra, vec);				\
 	EXCEPTION_PROLOG_PSERIES_1(label, h);
 
@@ -256,20 +247,12 @@ END_FTR_SECTION_NESTED(ftr,ftr,943)
 	ld	r9,area+EX_R9(r13);					\
 	bctr
 
-#define BRANCH_TO_KVM(reg, label)					\
-	__LOAD_FAR_HANDLER(reg, label);					\
-	mtctr	reg;							\
-	bctr
-
 #else
 #define BRANCH_TO_COMMON(reg, label)					\
 	b	label
 
 #define BRANCH_LINK_TO_FAR(label)					\
 	bl	label
-
-#define BRANCH_TO_KVM(reg, label)					\
-	b	label
 
 #define __BRANCH_TO_KVM_EXIT(area, label)				\
 	ld	r9,area+EX_R9(r13);					\
@@ -522,7 +505,7 @@ END_FTR_SECTION_NESTED(ftr,ftr,943)
 
 #define MASKABLE_RELON_EXCEPTION_HV_OOL(vec, label)			\
 	EXCEPTION_PROLOG_1(PACA_EXGEN, SOFTEN_TEST_HV, vec);		\
-	EXCEPTION_PROLOG_PSERIES_1(label, EXC_HV)
+	EXCEPTION_RELON_PROLOG_PSERIES_1(label, EXC_HV)
 
 /*
  * Our exception common code can be passed various "additions"

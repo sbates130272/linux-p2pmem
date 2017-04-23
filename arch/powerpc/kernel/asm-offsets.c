@@ -185,6 +185,7 @@ int main(void)
 #ifdef CONFIG_PPC_MM_SLICES
 	OFFSET(PACALOWSLICESPSIZE, paca_struct, mm_ctx_low_slices_psize);
 	OFFSET(PACAHIGHSLICEPSIZE, paca_struct, mm_ctx_high_slices_psize);
+	DEFINE(PACA_ADDR_LIMIT, offsetof(struct paca_struct, addr_limit));
 	DEFINE(MMUPSIZEDEFSIZE, sizeof(struct mmu_psize_def));
 #endif /* CONFIG_PPC_MM_SLICES */
 #endif
@@ -399,8 +400,8 @@ int main(void)
 	DEFINE(BUG_ENTRY_SIZE, sizeof(struct bug_entry));
 #endif
 
-#ifdef MAX_PGD_TABLE_SIZE
-	DEFINE(PGD_TABLE_SIZE, MAX_PGD_TABLE_SIZE);
+#ifdef CONFIG_PPC_BOOK3S_64
+	DEFINE(PGD_TABLE_SIZE, (sizeof(pgd_t) << max(RADIX_PGD_INDEX_SIZE, H_PGD_INDEX_SIZE)));
 #else
 	DEFINE(PGD_TABLE_SIZE, PGD_TABLE_SIZE);
 #endif
@@ -727,6 +728,7 @@ int main(void)
 	OFFSET(PACA_THREAD_IDLE_STATE, paca_struct, thread_idle_state);
 	OFFSET(PACA_THREAD_MASK, paca_struct, thread_mask);
 	OFFSET(PACA_SUBCORE_SIBLING_MASK, paca_struct, subcore_sibling_mask);
+	OFFSET(PACA_SIBLING_PACA_PTRS, paca_struct, thread_sibling_pacas);
 #endif
 
 	DEFINE(PPC_DBELL_SERVER, PPC_DBELL_SERVER);

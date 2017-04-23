@@ -56,6 +56,8 @@ struct pg_state {
 	struct seq_file *seq;
 	const struct addr_marker *marker;
 	unsigned long start_address;
+	unsigned long start_pa;
+	unsigned long last_pa;
 	unsigned int level;
 	u64 current_flags;
 };
@@ -154,11 +156,24 @@ static const struct flag_info flag_array[] = {
 		.clear	= "             ",
 	}, {
 #endif
+#ifndef CONFIG_PPC_BOOK3S_64
 		.mask	= _PAGE_NO_CACHE,
 		.val	= _PAGE_NO_CACHE,
 		.set	= "no cache",
 		.clear	= "        ",
 	}, {
+#else
+		.mask	= _PAGE_NON_IDEMPOTENT,
+		.val	= _PAGE_NON_IDEMPOTENT,
+		.set	= "non-idempotent",
+		.clear	= "              ",
+	}, {
+		.mask	= _PAGE_TOLERANT,
+		.val	= _PAGE_TOLERANT,
+		.set	= "tolerant",
+		.clear	= "        ",
+	}, {
+#endif
 #ifdef CONFIG_PPC_BOOK3S_64
 		.mask	= H_PAGE_BUSY,
 		.val	= H_PAGE_BUSY,
@@ -252,7 +267,9 @@ static void dump_addr(struct pg_state *st, unsigned long addr)
 	const char *unit = units;
 	unsigned long delta;
 
-	seq_printf(st->seq, "0x%016lx-0x%016lx   ", st->start_address, addr-1);
+	seq_printf(st->seq, "0x%016lx-0x%016lx ", st->start_address, addr-1);
+	seq_printf(st->seq, "0x%016lx ", st->start_pa);
+
 	delta = (addr - st->start_address) >> 10;
 	/* Work out what appropriate unit to use */
 	while (!(delta & 1023) && unit[1]) {
@@ -267,11 +284,15 @@ static void note_page(struct pg_state *st, unsigned long addr,
 	       unsigned int level, u64 val)
 {
 	u64 flag = val & pg_level[level].mask;
+	u64 pa = val & PTE_RPN_MASK;
+
 	/* At first no level is set */
 	if (!st->level) {
 		st->level = level;
 		st->current_flags = flag;
 		st->start_address = addr;
+		st->start_pa = pa;
+		st->last_pa = pa;
 		seq_printf(st->seq, "---[ %s ]---\n", st->marker->name);
 	/*
 	 * Dump the section of virtual memory when:
@@ -279,9 +300,11 @@ static void note_page(struct pg_state *st, unsigned long addr,
 	 *   - we change levels in the tree.
 	 *   - the address is in a different section of memory and is thus
 	 *   used for a different purpose, regardless of the flags.
+	 *   - the pa of this page is not adjacent to the last inspected page
 	 */
 	} else if (flag != st->current_flags || level != st->level ||
-		   addr >= st->marker[1].start_address) {
+		   addr >= st->marker[1].start_address ||
+		   pa != st->last_pa + PAGE_SIZE) {
 
 		/* Check the PTE flags */
 		if (st->current_flags) {
@@ -305,8 +328,12 @@ static void note_page(struct pg_state *st, unsigned long addr,
 			seq_printf(st->seq, "---[ %s ]---\n", st->marker->name);
 		}
 		st->start_address = addr;
+		st->start_pa = pa;
+		st->last_pa = pa;
 		st->current_flags = flag;
 		st->level = level;
+	} else {
+		st->last_pa = pa;
 	}
 }
 
