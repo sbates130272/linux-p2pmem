@@ -7783,7 +7783,9 @@ EXPORT_SYMBOL_GPL(perf_tp_event);
 
 static void tp_perf_event_destroy(struct perf_event *event)
 {
+	get_online_cpus();
 	perf_trace_destroy(event);
+	put_online_cpus();
 }
 
 static int perf_tp_event_init(struct perf_event *event)

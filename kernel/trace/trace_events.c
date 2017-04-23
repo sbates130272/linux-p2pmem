@@ -747,9 +747,11 @@ static int __ftrace_set_clr_event(struct trace_array *tr, const char *match,
 {
 	int ret;
 
+	get_online_cpus();
 	mutex_lock(&event_mutex);
 	ret = __ftrace_set_clr_event_nolock(tr, match, sub, event, set);
 	mutex_unlock(&event_mutex);
+	put_online_cpus();
 
 	return ret;
 }
@@ -1039,11 +1041,13 @@ event_enable_write(struct file *filp, const char __user *ubuf, size_t cnt,
 	case 0:
 	case 1:
 		ret = -ENODEV;
+		get_online_cpus();
 		mutex_lock(&event_mutex);
 		file = event_file_data(filp);
 		if (likely(file))
 			ret = ftrace_event_enable_disable(file, val);
 		mutex_unlock(&event_mutex);
+		put_online_cpus();
 		break;
 
 	default:
@@ -2902,6 +2906,7 @@ early_event_add_tracer(struct dentry *parent, struct trace_array *tr)
 
 int event_trace_del_tracer(struct trace_array *tr)
 {
+	get_online_cpus();
 	mutex_lock(&event_mutex);
 
 	/* Disable any event triggers and associated soft-disabled events */
@@ -2924,6 +2929,7 @@ int event_trace_del_tracer(struct trace_array *tr)
 	tr->event_dir = NULL;
 
 	mutex_unlock(&event_mutex);
+	put_online_cpus();
 
 	return 0;
 }

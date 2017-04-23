@@ -220,7 +220,7 @@ static int tracepoint_add_func(struct tracepoint *tp,
 	 */
 	rcu_assign_pointer(tp->funcs, tp_funcs);
 	if (!static_key_enabled(&tp->key))
-		static_key_slow_inc(&tp->key);
+		static_key_slow_inc_cpuslocked(&tp->key);
 	release_probes(old);
 	return 0;
 }
@@ -250,7 +250,7 @@ static int tracepoint_remove_func(struct tracepoint *tp,
 			tp->unregfunc();
 
 		if (static_key_enabled(&tp->key))
-			static_key_slow_dec(&tp->key);
+			static_key_slow_dec_cpuslocked(&tp->key);
 	}
 	rcu_assign_pointer(tp->funcs, tp_funcs);
 	release_probes(old);
