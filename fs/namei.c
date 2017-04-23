@@ -874,6 +874,8 @@ static int nd_jump_root(struct nameidata *nd)
 		path_get(&nd->path);
 		nd->inode = nd->path.dentry->d_inode;
 	}
+	if (unlikely(nd->flags & LOOKUP_NO_JUMPS))
+		return -ELOOP;
 	nd->flags |= LOOKUP_JUMPED;
 	return 0;
 }
@@ -1054,14 +1056,18 @@ const char *get_link(struct nameidata *nd)
 		} else {
 			res = get(dentry, inode, &last->done);
 		}
+		if (unlikely(nd->flags & LOOKUP_NO_JUMPS) &&
+		    unlikely(nd->flags & LOOKUP_JUMPED))
+			return ERR_PTR(-ELOOP);
 		if (IS_ERR_OR_NULL(res))
 			return res;
 	}
 	if (*res == '/') {
 		if (!nd->root.mnt)
 			set_root(nd);
-		if (unlikely(nd_jump_root(nd)))
-			return ERR_PTR(-ECHILD);
+		error = nd_jump_root(nd);
+		if (unlikely(error))
+			return ERR_PTR(error);
 		while (unlikely(*++res == '/'))
 			;
 	}
@@ -1245,12 +1251,16 @@ static int follow_managed(struct path *path, struct nameidata *nd)
 		break;
 	}
 
-	if (need_mntput && path->mnt == mnt)
-		mntput(path->mnt);
+	if (need_mntput) {
+		if (path->mnt == mnt)
+			mntput(path->mnt);
+		if (unlikely(nd->flags & LOOKUP_NO_JUMPS))
+			ret = -ELOOP;
+		else
+			nd->flags |= LOOKUP_JUMPED;
+	}
 	if (ret == -EISDIR || !ret)
 		ret = 1;
-	if (need_mntput)
-		nd->flags |= LOOKUP_JUMPED;
 	if (unlikely(ret < 0))
 		path_put_conditional(path, nd);
 	return ret;
@@ -1307,6 +1317,8 @@ static bool __follow_mount_rcu(struct nameidata *nd, struct path *path,
 		mounted = __lookup_mnt(path->mnt, path->dentry);
 		if (!mounted)
 			break;
+		if (unlikely(nd->flags & LOOKUP_NO_JUMPS))
+			return false;
 		path->mnt = &mounted->mnt;
 		path->dentry = mounted->mnt.mnt_root;
 		nd->flags |= LOOKUP_JUMPED;
@@ -1327,8 +1339,11 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 	struct inode *inode = nd->inode;
 
 	while (1) {
-		if (path_equal(&nd->path, &nd->root))
+		if (unlikely(path_equal(&nd->path, &nd->root))) {
+			if (nd->flags & LOOKUP_NO_JUMPS)
+				return -ELOOP;
 			break;
+		}
 		if (nd->path.dentry != nd->path.mnt->mnt_root) {
 			struct dentry *old = nd->path.dentry;
 			struct dentry *parent = old->d_parent;
@@ -1455,8 +1470,9 @@ static int path_parent_directory(struct path *path)
 static int follow_dotdot(struct nameidata *nd)
 {
 	while(1) {
-		if (nd->path.dentry == nd->root.dentry &&
-		    nd->path.mnt == nd->root.mnt) {
+		if (unlikely(path_equal(&nd->path, &nd->root))) {
+			if (nd->flags & LOOKUP_NO_JUMPS)
+				return -ELOOP;
 			break;
 		}
 		if (nd->path.dentry != nd->path.mnt->mnt_root) {
@@ -2142,7 +2158,6 @@ OK:
 
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
-	int retval = 0;
 	const char *s = nd->name->name;
 
 	if (!*s)
@@ -2154,13 +2169,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	if (flags & LOOKUP_ROOT) {
 		struct dentry *root = nd->root.dentry;
 		struct inode *inode = root->d_inode;
-		if (*s) {
-			if (!d_can_lookup(root))
-				return ERR_PTR(-ENOTDIR);
-			retval = inode_permission(inode, MAY_EXEC);
-			if (retval)
-				return ERR_PTR(retval);
-		}
+		if (*s && unlikely(!d_can_lookup(root)))
+			return ERR_PTR(-ENOTDIR);
 		nd->path = nd->root;
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
@@ -2180,14 +2190,16 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
+		int error;
 		if (flags & LOOKUP_RCU)
 			rcu_read_lock();
 		set_root(nd);
-		if (likely(!nd_jump_root(nd)))
-			return s;
-		nd->root.mnt = NULL;
-		rcu_read_unlock();
-		return ERR_PTR(-ECHILD);
+		error = nd_jump_root(nd);
+		if (unlikely(error)) {
+			terminate_walk(nd);
+			s = ERR_PTR(error);
+		}
+		return s;
 	} else if (nd->dfd == AT_FDCWD) {
 		if (flags & LOOKUP_RCU) {
 			struct fs_struct *fs = current->fs;
@@ -2204,6 +2216,11 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		} else {
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
+		}
+		if (unlikely(flags & LOOKUP_NO_JUMPS)) {
+			nd->root = nd->path;
+			if (!(flags & LOOKUP_RCU))
+				path_get(&nd->root);
 		}
 		return s;
 	} else {
@@ -2232,6 +2249,11 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			path_get(&nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
+		if (unlikely(flags & LOOKUP_NO_JUMPS)) {
+			nd->root = nd->path;
+			if (!(flags & LOOKUP_RCU))
+				path_get(&nd->root);
+		}
 		fdput(f);
 		return s;
 	}
@@ -2258,6 +2280,35 @@ static inline int lookup_last(struct nameidata *nd)
 	return walk_component(nd, 0);
 }
 
+static int handle_lookup_down(struct nameidata *nd)
+{
+	struct path path = nd->path;
+	struct inode *inode = nd->inode;
+	unsigned seq = nd->seq;
+	int err;
+
+	if (nd->flags & LOOKUP_RCU) {
+		/*
+		 * don't bother with unlazy_walk on failure - we are
+		 * at the very beginning of walk, so we lose nothing
+		 * if we simply redo everything in non-RCU mode
+		 */
+		if (unlikely(!__follow_mount_rcu(nd, &path, &inode, &seq)))
+			return -ECHILD;
+	} else {
+		dget(path.dentry);
+		err = follow_managed(&path, nd);
+		if (unlikely(err < 0))
+			return err;
+		inode = d_backing_inode(path.dentry);
+		seq = 0;
+	}
+	path_to_nameidata(&path, nd);
+	nd->inode = inode;
+	nd->seq = seq;
+	return 0;
+}
+
 /* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
@@ -2266,6 +2317,15 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 
 	if (IS_ERR(s))
 		return PTR_ERR(s);
+
+	if (unlikely(flags & LOOKUP_DOWN)) {
+		err = handle_lookup_down(nd);
+		if (unlikely(err < 0)) {
+			terminate_walk(nd);
+			return err;
+		}
+	}
+
 	while (!(err = link_path_walk(s, nd))
 		&& ((err = lookup_last(nd)) > 0)) {
 		s = trailing_symlink(nd);

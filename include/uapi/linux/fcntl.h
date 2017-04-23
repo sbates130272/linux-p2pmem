@@ -68,5 +68,6 @@
 #define AT_STATX_FORCE_SYNC	0x2000	/* - Force the attributes to be sync'd with the server */
 #define AT_STATX_DONT_SYNC	0x4000	/* - Don't sync attributes with the server */
 
+#define AT_NO_JUMPS		0x8000	/* No mountpoint crossing, no abs symlinks */
 
 #endif /* _UAPI_LINUX_FCNTL_H */
