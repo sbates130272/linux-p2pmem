@@ -2300,8 +2300,10 @@ static int _nfs4_proc_open(struct nfs4_opendata *data)
 		if (status != 0)
 			return status;
 	}
-	if (!(o_res->f_attr->valid & NFS_ATTR_FATTR))
+	if (!(o_res->f_attr->valid & NFS_ATTR_FATTR)) {
+		nfs4_sequence_free_slot(&o_res->seq_res);
 		nfs4_proc_getattr(server, &o_res->fh, o_res->f_attr, o_res->f_label);
+	}
 	return 0;
 }
 
@@ -4610,7 +4612,7 @@ static int nfs4_proc_pgio_rpc_prepare(struct rpc_task *task,
 		return 0;
 	if (nfs4_set_rw_stateid(&hdr->args.stateid, hdr->args.context,
 				hdr->args.lock_context,
-				hdr->rw_ops->rw_mode) == -EIO)
+				hdr->rw_mode) == -EIO)
 		return -EIO;
 	if (unlikely(test_bit(NFS_CONTEXT_BAD, &hdr->args.context->flags)))
 		return -EIO;
@@ -5782,6 +5784,7 @@ struct nfs4_unlockdata {
 	struct nfs_locku_res res;
 	struct nfs4_lock_state *lsp;
 	struct nfs_open_context *ctx;
+	struct nfs_lock_context *l_ctx;
 	struct file_lock fl;
 	struct nfs_server *server;
 	unsigned long timestamp;
@@ -5806,6 +5809,7 @@ static struct nfs4_unlockdata *nfs4_alloc_unlockdata(struct file_lock *fl,
 	atomic_inc(&lsp->ls_count);
 	/* Ensure we don't close file until we're done freeing locks! */
 	p->ctx = get_nfs_open_context(ctx);
+	p->l_ctx = nfs_get_lock_context(ctx);
 	memcpy(&p->fl, fl, sizeof(p->fl));
 	p->server = NFS_SERVER(inode);
 	return p;
@@ -5816,6 +5820,7 @@ static void nfs4_locku_release_calldata(void *data)
 	struct nfs4_unlockdata *calldata = data;
 	nfs_free_seqid(calldata->arg.seqid);
 	nfs4_put_lock_state(calldata->lsp);
+	nfs_put_lock_context(calldata->l_ctx);
 	put_nfs_open_context(calldata->ctx);
 	kfree(calldata);
 }
@@ -5856,6 +5861,10 @@ static void nfs4_locku_done(struct rpc_task *task, void *data)
 static void nfs4_locku_prepare(struct rpc_task *task, void *data)
 {
 	struct nfs4_unlockdata *calldata = data;
+
+	if (test_bit(NFS_CONTEXT_UNLOCK, &calldata->l_ctx->open_context->flags) &&
+		nfs_async_iocounter_wait(task, calldata->l_ctx))
+		return;
 
 	if (nfs_wait_on_sequence(calldata->arg.seqid, task) != 0)
 		goto out_wait;
@@ -5908,6 +5917,8 @@ static struct rpc_task *nfs4_do_unlck(struct file_lock *fl,
 	 * canceled lock is passed in, and it won't be an unlock.
 	 */
 	fl->fl_type = F_UNLCK;
+	if (fl->fl_flags & FL_CLOSE)
+		set_bit(NFS_CONTEXT_UNLOCK, &ctx->flags);
 
 	data = nfs4_alloc_unlockdata(fl, ctx, lsp, seqid);
 	if (data == NULL) {
@@ -6445,9 +6456,6 @@ nfs4_proc_lock(struct file *filp, int cmd, struct file_lock *request)
 	ctx = nfs_file_open_context(filp);
 	state = ctx->state;
 
-	if (request->fl_start < 0 || request->fl_end < 0)
-		return -EINVAL;
-
 	if (IS_GETLK(cmd)) {
 		if (state != NULL)
 			return nfs4_proc_getlk(state, F_GETLK, request);
@@ -6469,20 +6477,6 @@ nfs4_proc_lock(struct file *filp, int cmd, struct file_lock *request)
 	if ((request->fl_flags & FL_POSIX) &&
 	    !test_bit(NFS_STATE_POSIX_LOCKS, &state->flags))
 		return -ENOLCK;
-
-	/*
-	 * Don't rely on the VFS having checked the file open mode,
-	 * since it won't do this for flock() locks.
-	 */
-	switch (request->fl_type) {
-	case F_RDLCK:
-		if (!(filp->f_mode & FMODE_READ))
-			return -EBADF;
-		break;
-	case F_WRLCK:
-		if (!(filp->f_mode & FMODE_WRITE))
-			return -EBADF;
-	}
 
 	status = nfs4_set_lock_state(state, request);
 	if (status != 0)
@@ -7155,8 +7149,6 @@ int nfs4_proc_bind_one_conn_to_session(struct rpc_clnt *clnt,
 	};
 	struct rpc_task *task;
 
-	dprintk("--> %s\n", __func__);
-
 	nfs4_copy_sessionid(&args.sessionid, &clp->cl_session->sess_id);
 	if (!(clp->cl_session->flags & SESSION4_BACK_CHAN))
 		args.dir = NFS4_CDFC4_FORE;
@@ -7176,24 +7168,20 @@ int nfs4_proc_bind_one_conn_to_session(struct rpc_clnt *clnt,
 		if (memcmp(res.sessionid.data,
 		    clp->cl_session->sess_id.data, NFS4_MAX_SESSIONID_LEN)) {
 			dprintk("NFS: %s: Session ID mismatch\n", __func__);
-			status = -EIO;
-			goto out;
+			return -EIO;
 		}
 		if ((res.dir & args.dir) != res.dir || res.dir == 0) {
 			dprintk("NFS: %s: Unexpected direction from server\n",
 				__func__);
-			status = -EIO;
-			goto out;
+			return -EIO;
 		}
 		if (res.use_conn_in_rdma_mode != args.use_conn_in_rdma_mode) {
 			dprintk("NFS: %s: Server returned RDMA mode = true\n",
 				__func__);
-			status = -EIO;
-			goto out;
+			return -EIO;
 		}
 	}
-out:
-	dprintk("<-- %s status= %d\n", __func__, status);
+
 	return status;
 }
 
@@ -7459,15 +7447,14 @@ static int _nfs4_proc_exchange_id(struct nfs_client *clp, struct rpc_cred *cred,
 	};
 	struct nfs41_exchange_id_data *calldata;
 	struct rpc_task *task;
-	int status = -EIO;
+	int status;
 
 	if (!atomic_inc_not_zero(&clp->cl_count))
-		goto out;
+		return -EIO;
 
-	status = -ENOMEM;
 	calldata = kzalloc(sizeof(*calldata), GFP_NOFS);
 	if (!calldata)
-		goto out;
+		return -ENOMEM;
 
 	if (!xprt)
 		nfs4_init_boot_verifier(clp, &verifier);
@@ -7475,10 +7462,6 @@ static int _nfs4_proc_exchange_id(struct nfs_client *clp, struct rpc_cred *cred,
 	status = nfs4_init_uniform_client_string(clp);
 	if (status)
 		goto out_calldata;
-
-	dprintk("NFS call  exchange_id auth=%s, '%s'\n",
-		clp->cl_rpcclient->cl_auth->au_ops->au_name,
-		clp->cl_owner_id);
 
 	calldata->res.server_owner = kzalloc(sizeof(struct nfs41_server_owner),
 						GFP_NOFS);
@@ -7545,13 +7528,6 @@ static int _nfs4_proc_exchange_id(struct nfs_client *clp, struct rpc_cred *cred,
 
 	rpc_put_task(task);
 out:
-	if (clp->cl_implid != NULL)
-		dprintk("NFS reply exchange_id: Server Implementation ID: "
-			"domain: %s, name: %s, date: %llu,%u\n",
-			clp->cl_implid->domain, clp->cl_implid->name,
-			clp->cl_implid->date.seconds,
-			clp->cl_implid->date.nseconds);
-	dprintk("NFS reply exchange_id: %d\n", status);
 	return status;
 
 out_impl_id:
@@ -7769,17 +7745,13 @@ int nfs4_proc_get_lease_time(struct nfs_client *clp, struct nfs_fsinfo *fsinfo)
 
 	nfs4_init_sequence(&args.la_seq_args, &res.lr_seq_res, 0);
 	nfs4_set_sequence_privileged(&args.la_seq_args);
-	dprintk("--> %s\n", __func__);
 	task = rpc_run_task(&task_setup);
 
 	if (IS_ERR(task))
-		status = PTR_ERR(task);
-	else {
-		status = task->tk_status;
-		rpc_put_task(task);
-	}
-	dprintk("<-- %s return %d\n", __func__, status);
+		return PTR_ERR(task);
 
+	status = task->tk_status;
+	rpc_put_task(task);
 	return status;
 }
 
