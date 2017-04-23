@@ -29,6 +29,7 @@ static void pblk_mark_bb(struct pblk *pblk, struct pblk_line *line,
 	pr_debug("pblk: erase failed: line:%d, pos:%d\n", line->id, pos);
 	atomic_long_inc(&pblk->erase_failed);
 
+	atomic_dec(&line->blk_in_line);
 	if (test_and_set_bit(pos, line->blk_bitmap))
 		pr_err("pblk: attempted to erase bb: line:%d, pos:%d\n",
 							line->id, pos);
@@ -832,21 +833,28 @@ int pblk_line_erase(struct pblk *pblk, struct pblk_line *line)
 	struct ppa_addr ppa;
 	int bit = -1;
 
-	/* Erase one block at the time and only erase good blocks */
-	while ((bit = find_next_zero_bit(line->erase_bitmap, lm->blk_per_line,
-						bit + 1)) < lm->blk_per_line) {
+	/* Erase only good blocks, one at a time */
+	do {
+		spin_lock(&line->lock);
+		bit = find_next_zero_bit(line->erase_bitmap, lm->blk_per_line,
+								bit + 1);
+		if (bit >= lm->blk_per_line) {
+			spin_unlock(&line->lock);
+			break;
+		}
+
 		ppa = pblk->luns[bit].bppa; /* set ch and lun */
 		ppa.g.blk = line->id;
 
-		/* If the erase fails, the block is bad and should be marked */
-		line->left_eblks--;
+		atomic_dec(&line->left_eblks);
 		WARN_ON(test_and_set_bit(bit, line->erase_bitmap));
+		spin_unlock(&line->lock);
 
 		if (pblk_blk_erase_sync(pblk, ppa)) {
 			pr_err("pblk: failed to erase line %d\n", line->id);
 			return -ENOMEM;
 		}
-	}
+	} while (1);
 
 	return 0;
 }
@@ -1007,6 +1015,7 @@ retry_smeta:
 static int pblk_line_prepare(struct pblk *pblk, struct pblk_line *line)
 {
 	struct pblk_line_meta *lm = &pblk->lm;
+	int blk_in_line = atomic_read(&line->blk_in_line);
 
 	line->map_bitmap = mempool_alloc(pblk->line_meta_pool, GFP_ATOMIC);
 	if (!line->map_bitmap)
@@ -1030,12 +1039,13 @@ static int pblk_line_prepare(struct pblk *pblk, struct pblk_line *line)
 		return -EINTR;
 	}
 	line->state = PBLK_LINESTATE_OPEN;
+
+	atomic_set(&line->left_eblks, blk_in_line);
+	atomic_set(&line->left_seblks, blk_in_line);
 	spin_unlock(&line->lock);
 
 	/* Bad blocks do not need to be erased */
 	bitmap_copy(line->erase_bitmap, line->blk_bitmap, lm->blk_per_line);
-	line->left_eblks = line->blk_in_line;
-	atomic_set(&line->left_seblks, line->left_eblks);
 
 	kref_init(&line->ref);
 
@@ -1050,13 +1060,14 @@ int pblk_line_recov_alloc(struct pblk *pblk, struct pblk_line *line)
 	spin_lock(&l_mg->free_lock);
 	l_mg->data_line = line;
 	list_del(&line->list);
-	spin_unlock(&l_mg->free_lock);
 
 	ret = pblk_line_prepare(pblk, line);
 	if (ret) {
 		list_add(&line->list, &l_mg->free_list);
+		spin_unlock(&l_mg->free_lock);
 		return ret;
 	}
+	spin_unlock(&l_mg->free_lock);
 
 	pblk_rl_free_lines_dec(&pblk->rl, line);
 
@@ -1126,6 +1137,7 @@ static struct pblk_line *pblk_line_retry(struct pblk *pblk,
 	spin_lock(&l_mg->free_lock);
 	retry_line = pblk_line_get(pblk);
 	if (!retry_line) {
+		l_mg->data_line = NULL;
 		spin_unlock(&l_mg->free_lock);
 		return NULL;
 	}
@@ -1133,21 +1145,19 @@ static struct pblk_line *pblk_line_retry(struct pblk *pblk,
 	retry_line->smeta = line->smeta;
 	retry_line->emeta = line->emeta;
 	retry_line->meta_line = line->meta_line;
-	retry_line->map_bitmap = line->map_bitmap;
-	retry_line->invalid_bitmap = line->invalid_bitmap;
 
-	line->map_bitmap = NULL;
-	line->invalid_bitmap = NULL;
-	line->smeta = NULL;
-	line->emeta = NULL;
+	pblk_line_free(pblk, line);
+	l_mg->data_line = retry_line;
 	spin_unlock(&l_mg->free_lock);
 
-	if (pblk_line_erase(pblk, retry_line))
+	if (pblk_line_erase(pblk, retry_line)) {
+		spin_lock(&l_mg->free_lock);
+		l_mg->data_line = NULL;
+		spin_unlock(&l_mg->free_lock);
 		return NULL;
+	}
 
 	pblk_rl_free_lines_dec(&pblk->rl, retry_line);
-
-	l_mg->data_line = retry_line;
 
 	return retry_line;
 }
@@ -1231,7 +1241,7 @@ retry_line:
 	left_seblks = atomic_read(&new->left_seblks);
 	if (left_seblks) {
 		/* If line is not fully erased, erase it */
-		if (new->left_eblks) {
+		if (atomic_read(&new->left_eblks)) {
 			if (pblk_line_erase(pblk, new))
 				return NULL;
 		} else {
@@ -1273,7 +1283,7 @@ retry_meta:
 retry_setup:
 	if (!pblk_line_set_metadata(pblk, new, cur)) {
 		new = pblk_line_retry(pblk, new);
-		if (new)
+		if (!new)
 			return NULL;
 
 		goto retry_setup;
@@ -1299,6 +1309,8 @@ void pblk_line_free(struct pblk *pblk, struct pblk_line *line)
 
 	line->map_bitmap = NULL;
 	line->invalid_bitmap = NULL;
+	line->smeta = NULL;
+	line->emeta = NULL;
 }
 
 void pblk_line_put(struct kref *ref)

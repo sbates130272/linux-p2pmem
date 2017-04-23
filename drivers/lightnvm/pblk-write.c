@@ -142,6 +142,7 @@ static void pblk_end_w_fail(struct pblk *pblk, struct nvm_rq *rqd)
 		/* Logic error */
 		if (bit > c_ctx->nr_valid) {
 			WARN_ONCE(1, "pblk: corrupted write request\n");
+			mempool_free(recovery, pblk->rec_pool);
 			goto out;
 		}
 
@@ -149,6 +150,7 @@ static void pblk_end_w_fail(struct pblk *pblk, struct nvm_rq *rqd)
 		entry = pblk_rb_sync_scan_entry(&pblk->rwb, &ppa);
 		if (!entry) {
 			pr_err("pblk: could not scan entry on write failure\n");
+			mempool_free(recovery, pblk->rec_pool);
 			goto out;
 		}
 
@@ -162,6 +164,7 @@ static void pblk_end_w_fail(struct pblk *pblk, struct nvm_rq *rqd)
 	ret = pblk_recov_setup_rq(pblk, c_ctx, recovery, comp_bits, c_entries);
 	if (ret) {
 		pr_err("pblk: could not recover from write failure\n");
+		mempool_free(recovery, pblk->rec_pool);
 		goto out;
 	}
 
@@ -241,7 +244,7 @@ static int pblk_setup_w_rq(struct pblk *pblk, struct nvm_rq *rqd,
 	}
 
 	ppa_set_empty(&erase_ppa);
-	if (likely(!e_line || !e_line->left_eblks))
+	if (likely(!e_line || !atomic_read(&e_line->left_eblks)))
 		pblk_map_rq(pblk, rqd, c_ctx->sentry, lun_bitmap, valid, 0);
 	else
 		pblk_map_erase_rq(pblk, rqd, c_ctx->sentry, lun_bitmap,
@@ -254,7 +257,7 @@ out:
 			struct nvm_geo *geo = &dev->geo;
 			int bit;
 
-			e_line->left_eblks++;
+			atomic_inc(&e_line->left_eblks);
 			bit = erase_ppa.g.lun * geo->nr_chnls + erase_ppa.g.ch;
 			WARN_ON(!test_and_clear_bit(bit, e_line->erase_bitmap));
 			up(&pblk->erase_sem);
