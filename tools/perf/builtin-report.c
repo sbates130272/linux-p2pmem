@@ -16,7 +16,6 @@
 #include <linux/rbtree.h>
 #include "util/symbol.h"
 #include "util/callchain.h"
-#include "util/strlist.h"
 #include "util/values.h"
 
 #include "perf.h"
@@ -40,6 +39,9 @@
 #include "util/auxtrace.h"
 
 #include <dlfcn.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <regex.h>
 #include <linux/bitmap.h>
 #include <linux/stringify.h>
 
@@ -394,8 +396,7 @@ static int perf_evlist__tty_browse_hists(struct perf_evlist *evlist,
 		fprintf(stdout, "\n\n");
 	}
 
-	if (sort_order == NULL &&
-	    parent_pattern == default_parent_pattern)
+	if (!quiet)
 		fprintf(stdout, "#\n# (%s)\n#\n", help);
 
 	if (rep->show_threads) {
@@ -682,7 +683,7 @@ const char report_callchain_help[] = "Display call graph (stack chain/backtrace)
 				     CALLCHAIN_REPORT_HELP
 				     "\n\t\t\t\tDefault: " CALLCHAIN_DEFAULT_OPT;
 
-int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
+int cmd_report(int argc, const char **argv)
 {
 	struct perf_session *session;
 	struct itrace_synth_opts itrace_synth_opts = { .set = 0, };
@@ -701,6 +702,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 			.mmap		 = perf_event__process_mmap,
 			.mmap2		 = perf_event__process_mmap2,
 			.comm		 = perf_event__process_comm,
+			.namespaces	 = perf_event__process_namespaces,
 			.exit		 = perf_event__process_exit,
 			.fork		 = perf_event__process_fork,
 			.lost		 = perf_event__process_lost,
@@ -845,6 +847,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 			     stdio__config_color, "always"),
 	OPT_STRING(0, "time", &report.time_str, "str",
 		   "Time span of interest (start,stop)"),
+	OPT_BOOLEAN(0, "inline", &symbol_conf.inline_name,
+		    "Show inline function"),
 	OPT_END()
 	};
 	struct perf_data_file file = {
