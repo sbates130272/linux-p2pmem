@@ -101,6 +101,16 @@ void static_key_disable(struct static_key *key)
 }
 EXPORT_SYMBOL_GPL(static_key_disable);
 
+void static_key_disable_cpuslocked(struct static_key *key)
+{
+	int count = static_key_count(key);
+
+	WARN_ON_ONCE(count < 0 || count > 1);
+
+	if (count)
+		static_key_slow_dec_cpuslocked(key);
+}
+
 void __static_key_slow_inc(struct static_key *key)
 {
 	int v, v1;
@@ -159,7 +169,6 @@ EXPORT_SYMBOL_GPL(static_key_slow_inc_cpuslocked);
 static void __static_key_slow_dec(struct static_key *key,
 		unsigned long rate_limit, struct delayed_work *work)
 {
-	lockdep_assert_hotplug_held();
 	/*
 	 * The negative count check is valid even when a negative
 	 * key->enabled is in use by static_key_slow_inc(); a
@@ -173,6 +182,7 @@ static void __static_key_slow_dec(struct static_key *key,
 		return;
 	}
 
+	lockdep_assert_hotplug_held();
 	if (rate_limit) {
 		atomic_inc(&key->enabled);
 		schedule_delayed_work(work, rate_limit);
@@ -199,6 +209,12 @@ void static_key_slow_dec(struct static_key *key)
 	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(static_key_slow_dec);
+
+void static_key_slow_dec_cpuslocked(struct static_key *key)
+{
+	STATIC_KEY_CHECK_USE();
+	__static_key_slow_dec(key, 0, NULL);
+}
 
 void static_key_slow_dec_deferred(struct static_key_deferred *key)
 {
