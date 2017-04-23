@@ -1,0 +1,242 @@
+fixes
+
+next/fixes-non-critical
+	oxnas/soc
+		https://github.com/OXNAS/linux tags/oxnas-arm-soc-for-4.12
+	mvebu/soc
+		git://git.infradead.org/linux-mvebu tags/mvebu-soc-4.12-1
+	patch
+		ARM: w90x900: let clk_disable() return immediately if clk is NULL
+		ARM: mmp: let clk_disable() return immediately if clk is NULL
+	broadcom/maintainers
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/maintainers
+	tegra/misc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-misc
+
+next/cleanup
+
+next/soc
+	gemeni/multiplatform
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-multiplat-dt
+	davinci/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc
+	omap/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/soc-v2-signed
+	gemini/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-multiplat-2
+	broadcom/soc
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/soc
+	stm32/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-soc-for-v4.12-1
+	davinci/soc2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc-2
+	sunxi/core
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-core-for-4.12
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-4.12
+	hisi/soc
+		git://github.com/hisilicon/linux-hisi tags/hisi-armv7-soc-for-4.12
+	at91/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.12-soc
+	davinci/soc3
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/soc-3
+
+next/arm64
+	renesas/arm64-defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-defconfig-for-v4.12
+	patch
+		MAINTAINERS: Broadcom Vulcan is now Cavium ThunderX2
+	amlogic/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-defconfig
+	mvebu/defconfig64
+		git://git.infradead.org/linux-mvebu tags/mvebu-defconfig64-4.12-1
+	broadcom/defconfig64
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/defconfig-arm64
+	sunxi/config64
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-config64-for-4.12
+	samsung/soc64
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc64-4.12
+	mvebu/defconfig2
+		git://git.infradead.org/linux-mvebu tags/mvebu-defconfig64-4.12-2
+
+next/dt
+	gemini/dts
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-dts-base
+	shared/dt-symlinks
+		Merge branch 'shared/dt-symlinks' into next/dt
+	patch
+		ARM: dts: Adjust moxart IRQ controller and flags
+	renesas/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-dt-for-v4.12
+	renesas/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-dt-bindings-for-v4.12
+	uniphier/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/masahiroy/linux-uniphier tags/uniphier-dt-v4.12
+	patch
+		ARM: dts: augment Moxa ART GPIO node
+	davinci/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/dt
+	mvebu/dt
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.12-1
+	broadcom/dt
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/devicetree
+	gemini/dts-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-dts-2
+	rockchip/dts32
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts32-1
+	omap/dt-v2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/dt-v2-signed
+	broadcom/dt-fixes
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.11/devicetree-fixes
+	sti/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/pchotard/sti sti-dt-for-v4.12-round1
+	stm32/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-dt-for-v4.12-1
+	davinci/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/dt-2
+	socfpga/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_for_v4.12
+	sunxi/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-4.12
+	sunxi/dt-h3
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h3-for-4.12
+	tegra/dt-bindings
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-dt-bindings
+	qcom/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-dts-for-4.12
+	renesas/dt2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-dt2-for-v4.12
+	mvebu/dt2
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.12-2
+	samsung/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-4.12
+	rockchip/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts32-2
+	imx/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-4.12
+	at91/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.12-dt
+	omap/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/dt-pt2-signed
+	aspeed/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.12-devicetree
+	mvebu/dt3
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.12-3
+	alpine/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/atenart/linux tags/alpine-dt-for-4.12
+	patch
+		arm: spear6xx: add labels to various nodes in spear600.dtsi
+		arm: spear6xx: use node labels in spear600-evb.dts
+		arm: spear6xx: fix spaces in spear600-evb.dts
+		arm: spear6xx: switch spear600-evb to the new flash partition DT binding
+		arm: spear6xx: remove unneeded pinctrl properties in spear600-evb
+		arm: spear6xx: add DT description of the ADC on SPEAr600
+
+next/dt64
+	shared/dt-symlinks
+		Merge branch 'shared/dt-symlinks' into next/dt64
+	renesas/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-dt-for-v4.12
+	patch
+		dt-bindings: Add arm64 ARCH_THUNDER2 platform documentation
+		arm64: dts: move from ARCH_VULCAN to ARCH_THUNDER2
+	uniphier/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/masahiroy/linux-uniphier tags/uniphier-dt64-v4.12
+	mvebu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-4.12-1
+	broadcom/dt64
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/devicetree-arm64
+	rockchip/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-1
+	rockchip/dt64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-symlinks-1
+	amlogic/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-redo
+	sunxi/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt64-for-4.12
+	sunxi/dt-h5
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-h5-for-4.12
+	tegra/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-arm64-dt
+	qcom/arm64
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-arm64-for-4.12
+	renesas/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-dt2-for-v4.12
+	samsung/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt64-4.12
+	rockchip/dt64-3
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.12-rockchip-dts64-2
+	imx/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-4.12
+	zte/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/zte-dt64-4.12
+	hisi/dt64
+		git://github.com/hisilicon/linux-hisi tags/hisi-arm64-dt-for-4.12
+	mvevu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-4.12-2
+
+next/defconfig
+	patch
+		ARM: configs: stm32: Set CPU_V7M_NUM_IRQ to max value
+	davinci/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/defconfig
+	broadcom/defconfig
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/defconfig
+	patch
+		multi_v7_defconfig: make Rockchip DRM drivers built-in
+		multi_v7_defconfig: make Rockchip usb2-phy built-in
+	stm32/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-defconfig-for-v4.12-1
+	davinci/defconfig2
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/defconfig-2
+	socfpga/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_defconfig_updates_for_v4.12
+	sunxi/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-defconfig-for-4.12
+	qcom/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-defconfig-for-4.12
+	samsung/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-defconfig-4.12
+	imx/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-4.12
+	omap/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.12/defconfig-signed
+	aspeed/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.12-defconfig
+
+next/drivers
+	drivers/reset
+		git://git.pengutronix.de/git/pza/linux tags/reset-for-4.12-1
+	renesas/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-drivers-for-v4.12
+	amlogic/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-drivers
+	broadcom/drivers
+		http://github.com/Broadcom/stblinux tags/arm-soc/for-4.12/drivers
+	drivers/scpi
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scpi-update-4.12
+	davinci/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.12/drivers
+	drivers/reset2
+		git://git.pengutronix.de/git/pza/linux tags/reset-for-4.12-2
+	keystone/pm
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/arm-soc-pmdomain
+	tegra/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.12-soc
+	qcom/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-drivers-for-4.12
+	drivers/isct-clock
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-integrator tags/arm-to-clk-icst
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-4.12
+	zte-drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/zte-drivers-4.12
+	renesas/sysc
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-sysc-for-v4.12
+	samsung/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-4.12
+
+next/tee
+	tee/initial-merge
+		git://git.linaro.org:/people/jens.wiklander/linux-tee tags/tee-drv-for-4.12
+
