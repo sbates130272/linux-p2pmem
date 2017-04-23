@@ -3410,12 +3410,10 @@ static void intel_snb_check_microcode(void)
 	int pebs_broken = 0;
 	int cpu;
 
-	get_online_cpus();
 	for_each_online_cpu(cpu) {
 		if ((pebs_broken = intel_snb_pebs_broken(cpu)))
 			break;
 	}
-	put_online_cpus();
 
 	if (pebs_broken == x86_pmu.pebs_broken)
 		return;
@@ -3488,7 +3486,9 @@ static bool check_msr(unsigned long msr, u64 mask)
 static __init void intel_sandybridge_quirk(void)
 {
 	x86_pmu.check_microcode = intel_snb_check_microcode;
+	get_online_cpus();
 	intel_snb_check_microcode();
+	put_online_cpus();
 }
 
 static const struct { int id; char *name; } intel_arch_events_map[] __initconst = {

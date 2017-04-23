@@ -15,6 +15,7 @@
 #include <linux/static_key.h>
 #include <linux/jump_label_ratelimit.h>
 #include <linux/bug.h>
+#include <linux/cpu.h>
 
 #ifdef HAVE_JUMP_LABEL
 
@@ -100,7 +101,17 @@ void static_key_disable(struct static_key *key)
 }
 EXPORT_SYMBOL_GPL(static_key_disable);
 
-void static_key_slow_inc(struct static_key *key)
+void static_key_disable_cpuslocked(struct static_key *key)
+{
+	int count = static_key_count(key);
+
+	WARN_ON_ONCE(count < 0 || count > 1);
+
+	if (count)
+		static_key_slow_dec_cpuslocked(key);
+}
+
+void __static_key_slow_inc(struct static_key *key)
 {
 	int v, v1;
 
@@ -124,6 +135,12 @@ void static_key_slow_inc(struct static_key *key)
 			return;
 	}
 
+	/*
+	 * A number of architectures need to synchronize I$ across
+	 * the all CPUs, for that to be serialized against CPU hot-plug
+	 * we need to avoid CPUs coming online.
+	 */
+	lockdep_assert_hotplug_held();
 	jump_label_lock();
 	if (atomic_read(&key->enabled) == 0) {
 		atomic_set(&key->enabled, -1);
@@ -134,7 +151,20 @@ void static_key_slow_inc(struct static_key *key)
 	}
 	jump_label_unlock();
 }
+
+void static_key_slow_inc(struct static_key *key)
+{
+	get_online_cpus();
+	__static_key_slow_inc(key);
+	put_online_cpus();
+}
 EXPORT_SYMBOL_GPL(static_key_slow_inc);
+
+void static_key_slow_inc_cpuslocked(struct static_key *key)
+{
+	__static_key_slow_inc(key);
+}
+EXPORT_SYMBOL_GPL(static_key_slow_inc_cpuslocked);
 
 static void __static_key_slow_dec(struct static_key *key,
 		unsigned long rate_limit, struct delayed_work *work)
@@ -152,6 +182,7 @@ static void __static_key_slow_dec(struct static_key *key,
 		return;
 	}
 
+	lockdep_assert_hotplug_held();
 	if (rate_limit) {
 		atomic_inc(&key->enabled);
 		schedule_delayed_work(work, rate_limit);
@@ -165,15 +196,25 @@ static void jump_label_update_timeout(struct work_struct *work)
 {
 	struct static_key_deferred *key =
 		container_of(work, struct static_key_deferred, work.work);
+	get_online_cpus();
 	__static_key_slow_dec(&key->key, 0, NULL);
+	put_online_cpus();
 }
 
 void static_key_slow_dec(struct static_key *key)
 {
 	STATIC_KEY_CHECK_USE();
+	get_online_cpus();
 	__static_key_slow_dec(key, 0, NULL);
+	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(static_key_slow_dec);
+
+void static_key_slow_dec_cpuslocked(struct static_key *key)
+{
+	STATIC_KEY_CHECK_USE();
+	__static_key_slow_dec(key, 0, NULL);
+}
 
 void static_key_slow_dec_deferred(struct static_key_deferred *key)
 {
@@ -592,6 +633,10 @@ jump_label_module_notify(struct notifier_block *self, unsigned long val,
 
 	switch (val) {
 	case MODULE_STATE_COMING:
+		/*
+		 * XXX do we need get_online_cpus() ?  the module isn't
+		 * executable yet, so nothing should be looking at our code.
+		 */
 		jump_label_lock();
 		ret = jump_label_add_module(mod);
 		if (ret) {

@@ -4021,10 +4021,12 @@ static void unaccount_event(struct perf_event *event)
 
 static void perf_sched_delayed(struct work_struct *work)
 {
+	get_online_cpus();
 	mutex_lock(&perf_sched_mutex);
 	if (atomic_dec_and_test(&perf_sched_count))
-		static_branch_disable(&perf_sched_events);
+		static_branch_disable_cpuslocked(&perf_sched_events);
 	mutex_unlock(&perf_sched_mutex);
+	put_online_cpus();
 }
 
 /*
@@ -7724,7 +7726,6 @@ static int swevent_hlist_get(void)
 {
 	int err, cpu, failed_cpu;
 
-	get_online_cpus();
 	for_each_possible_cpu(cpu) {
 		err = swevent_hlist_get_cpu(cpu);
 		if (err) {
@@ -7732,8 +7733,6 @@ static int swevent_hlist_get(void)
 			goto fail;
 		}
 	}
-	put_online_cpus();
-
 	return 0;
 fail:
 	for_each_possible_cpu(cpu) {
@@ -7741,8 +7740,6 @@ fail:
 			break;
 		swevent_hlist_put_cpu(cpu);
 	}
-
-	put_online_cpus();
 	return err;
 }
 
@@ -7790,7 +7787,7 @@ static int perf_swevent_init(struct perf_event *event)
 		if (err)
 			return err;
 
-		static_key_slow_inc(&perf_swevent_enabled[event_id]);
+		static_key_slow_inc_cpuslocked(&perf_swevent_enabled[event_id]);
 		event->destroy = sw_perf_event_destroy;
 	}
 
@@ -7918,7 +7915,9 @@ EXPORT_SYMBOL_GPL(perf_tp_event);
 
 static void tp_perf_event_destroy(struct perf_event *event)
 {
+	get_online_cpus();
 	perf_trace_destroy(event);
+	put_online_cpus();
 }
 
 static int perf_tp_event_init(struct perf_event *event)
@@ -9299,7 +9298,7 @@ static void account_event(struct perf_event *event)
 
 		mutex_lock(&perf_sched_mutex);
 		if (!atomic_read(&perf_sched_count)) {
-			static_branch_enable(&perf_sched_events);
+			static_key_slow_inc_cpuslocked(&perf_sched_events.key);
 			/*
 			 * Guarantee that all CPUs observe they key change and
 			 * call the perf scheduling hooks before proceeding to
