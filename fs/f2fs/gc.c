@@ -172,7 +172,11 @@ static void select_policy(struct f2fs_sb_info *sbi, int gc_type,
 	if (gc_type != FG_GC && p->max_search > sbi->max_victim_search)
 		p->max_search = sbi->max_victim_search;
 
-	p->offset = sbi->last_victim[p->gc_mode];
+	/* let's select beginning hot/small space first */
+	if (type == CURSEG_HOT_DATA || IS_NODESEG(type))
+		p->offset = 0;
+	else
+		p->offset = sbi->last_victim[p->gc_mode];
 }
 
 static unsigned int get_max_cost(struct f2fs_sb_info *sbi,
@@ -182,7 +186,7 @@ static unsigned int get_max_cost(struct f2fs_sb_info *sbi,
 	if (p->alloc_mode == SSR)
 		return sbi->blocks_per_seg;
 	if (p->gc_mode == GC_GREEDY)
-		return sbi->blocks_per_seg * p->ofs_unit;
+		return 2 * sbi->blocks_per_seg * p->ofs_unit;
 	else if (p->gc_mode == GC_CB)
 		return UINT_MAX;
 	else /* No other gc_mode */
@@ -207,7 +211,7 @@ static unsigned int check_bg_victims(struct f2fs_sb_info *sbi)
 			continue;
 
 		clear_bit(secno, dirty_i->victim_secmap);
-		return secno * sbi->segs_per_sec;
+		return GET_SEG_FROM_SEC(sbi, secno);
 	}
 	return NULL_SEGNO;
 }
@@ -215,8 +219,8 @@ static unsigned int check_bg_victims(struct f2fs_sb_info *sbi)
 static unsigned int get_cb_cost(struct f2fs_sb_info *sbi, unsigned int segno)
 {
 	struct sit_info *sit_i = SIT_I(sbi);
-	unsigned int secno = GET_SECNO(sbi, segno);
-	unsigned int start = secno * sbi->segs_per_sec;
+	unsigned int secno = GET_SEC_FROM_SEG(sbi, segno);
+	unsigned int start = GET_SEG_FROM_SEC(sbi, secno);
 	unsigned long long mtime = 0;
 	unsigned int vblocks;
 	unsigned char age = 0;
@@ -225,7 +229,7 @@ static unsigned int get_cb_cost(struct f2fs_sb_info *sbi, unsigned int segno)
 
 	for (i = 0; i < sbi->segs_per_sec; i++)
 		mtime += get_seg_entry(sbi, start + i)->mtime;
-	vblocks = get_valid_blocks(sbi, segno, sbi->segs_per_sec);
+	vblocks = get_valid_blocks(sbi, segno, true);
 
 	mtime = div_u64(mtime, sbi->segs_per_sec);
 	vblocks = div_u64(vblocks, sbi->segs_per_sec);
@@ -248,7 +252,7 @@ static unsigned int get_greedy_cost(struct f2fs_sb_info *sbi,
 						unsigned int segno)
 {
 	unsigned int valid_blocks =
-			get_valid_blocks(sbi, segno, sbi->segs_per_sec);
+			get_valid_blocks(sbi, segno, true);
 
 	return IS_DATASEG(get_seg_entry(sbi, segno)->type) ?
 				valid_blocks * 2 : valid_blocks;
@@ -339,7 +343,7 @@ static int get_victim_by_default(struct f2fs_sb_info *sbi,
 			nsearched++;
 		}
 
-		secno = GET_SECNO(sbi, segno);
+		secno = GET_SEC_FROM_SEG(sbi, segno);
 
 		if (sec_usage_check(sbi, secno))
 			goto next;
@@ -361,13 +365,14 @@ next:
 				sbi->last_victim[p.gc_mode] = last_victim + 1;
 			else
 				sbi->last_victim[p.gc_mode] = segno + 1;
+			sbi->last_victim[p.gc_mode] %= MAIN_SEGS(sbi);
 			break;
 		}
 	}
 	if (p.min_segno != NULL_SEGNO) {
 got_it:
 		if (p.alloc_mode == LFS) {
-			secno = GET_SECNO(sbi, p.min_segno);
+			secno = GET_SEC_FROM_SEG(sbi, p.min_segno);
 			if (gc_type == FG_GC)
 				sbi->cur_victim_sec = secno;
 			else
@@ -550,8 +555,10 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	get_node_info(sbi, nid, dni);
 
 	if (sum->version != dni->version) {
-		f2fs_put_page(node_page, 1);
-		return false;
+		f2fs_msg(sbi->sb, KERN_WARNING,
+				"%s: valid data with mismatched node version.",
+				__func__);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
 	}
 
 	*nofs = ofs_of_node(node_page);
@@ -890,7 +897,7 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 					GET_SUM_BLOCK(sbi, segno));
 		f2fs_put_page(sum_page, 0);
 
-		if (get_valid_blocks(sbi, segno, 1) == 0 ||
+		if (get_valid_blocks(sbi, segno, false) == 0 ||
 				!PageUptodate(sum_page) ||
 				unlikely(f2fs_cp_error(sbi)))
 			goto next;
@@ -924,7 +931,7 @@ next:
 	blk_finish_plug(&plug);
 
 	if (gc_type == FG_GC &&
-		get_valid_blocks(sbi, start_segno, sbi->segs_per_sec) == 0)
+		get_valid_blocks(sbi, start_segno, true) == 0)
 		sec_freed = 1;
 
 	stat_inc_call_count(sbi->stat_info);
@@ -959,9 +966,11 @@ gc_more:
 		 * threshold, we can make them free by checkpoint. Then, we
 		 * secure free segments which doesn't need fggc any more.
 		 */
-		ret = write_checkpoint(sbi, &cpc);
-		if (ret)
-			goto stop;
+		if (prefree_segments(sbi)) {
+			ret = write_checkpoint(sbi, &cpc);
+			if (ret)
+				goto stop;
+		}
 		if (has_not_enough_free_secs(sbi, 0, 0))
 			gc_type = FG_GC;
 	}
@@ -999,7 +1008,7 @@ stop:
 
 void build_gc_manager(struct f2fs_sb_info *sbi)
 {
-	u64 main_count, resv_count, ovp_count, blocks_per_sec;
+	u64 main_count, resv_count, ovp_count;
 
 	DIRTY_I(sbi)->v_ops = &default_v_ops;
 
@@ -1007,8 +1016,7 @@ void build_gc_manager(struct f2fs_sb_info *sbi)
 	main_count = SM_I(sbi)->main_segments << sbi->log_blocks_per_seg;
 	resv_count = SM_I(sbi)->reserved_segments << sbi->log_blocks_per_seg;
 	ovp_count = SM_I(sbi)->ovp_segments << sbi->log_blocks_per_seg;
-	blocks_per_sec = sbi->blocks_per_seg * sbi->segs_per_sec;
 
-	sbi->fggc_threshold = div64_u64((main_count - ovp_count) * blocks_per_sec,
-					(main_count - resv_count));
+	sbi->fggc_threshold = div64_u64((main_count - ovp_count) *
+				BLKS_PER_SEC(sbi), (main_count - resv_count));
 }
