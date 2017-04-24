@@ -314,6 +314,8 @@ SECTIONS
 		NOSAVE_DATA
 	}
 
+	BUG_TABLE
+
 	. = ALIGN(PAGE_SIZE);
 	_edata  =  .;
 	PROVIDE32 (edata = .);

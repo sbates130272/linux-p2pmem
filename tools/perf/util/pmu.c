@@ -1,6 +1,7 @@
 #include <linux/list.h>
 #include <linux/compiler.h>
 #include <sys/types.h>
+#include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -15,6 +16,7 @@
 #include "header.h"
 #include "pmu-events/pmu-events.h"
 #include "cache.h"
+#include "string2.h"
 
 struct perf_pmu_format {
 	char *name;
@@ -231,7 +233,9 @@ static int perf_pmu__parse_snapshot(struct perf_pmu_alias *alias,
 static int __perf_pmu__new_alias(struct list_head *list, char *dir, char *name,
 				 char *desc, char *val,
 				 char *long_desc, char *topic,
-				 char *unit, char *perpkg)
+				 char *unit, char *perpkg,
+				 char *metric_expr,
+				 char *metric_name)
 {
 	struct perf_pmu_alias *alias;
 	int ret;
@@ -265,6 +269,8 @@ static int __perf_pmu__new_alias(struct list_head *list, char *dir, char *name,
 		perf_pmu__parse_snapshot(alias, dir, name);
 	}
 
+	alias->metric_expr = metric_expr ? strdup(metric_expr) : NULL;
+	alias->metric_name = metric_name ? strdup(metric_name): NULL;
 	alias->desc = desc ? strdup(desc) : NULL;
 	alias->long_desc = long_desc ? strdup(long_desc) :
 				desc ? strdup(desc) : NULL;
@@ -294,7 +300,7 @@ static int perf_pmu__new_alias(struct list_head *list, char *dir, char *name, FI
 	buf[ret] = 0;
 
 	return __perf_pmu__new_alias(list, dir, name, NULL, buf, NULL, NULL, NULL,
-				     NULL);
+				     NULL, NULL, NULL);
 }
 
 static inline bool pmu_alias_info_file(char *name)
@@ -564,7 +570,9 @@ static void pmu_add_cpu_aliases(struct list_head *head, const char *name)
 		__perf_pmu__new_alias(head, NULL, (char *)pe->name,
 				(char *)pe->desc, (char *)pe->event,
 				(char *)pe->long_desc, (char *)pe->topic,
-				(char *)pe->unit, (char *)pe->perpkg);
+				(char *)pe->unit, (char *)pe->perpkg,
+				(char *)pe->metric_expr,
+				(char *)pe->metric_name);
 	}
 
 out:
@@ -991,6 +999,8 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct list_head *head_terms,
 	info->unit     = NULL;
 	info->scale    = 0.0;
 	info->snapshot = false;
+	info->metric_expr = NULL;
+	info->metric_name = NULL;
 
 	list_for_each_entry_safe(term, h, head_terms, list) {
 		alias = pmu_find_alias(pmu, term);
@@ -1006,6 +1016,8 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct list_head *head_terms,
 
 		if (alias->per_pkg)
 			info->per_pkg = true;
+		info->metric_expr = alias->metric_expr;
+		info->metric_name = alias->metric_name;
 
 		list_del(&term->list);
 		free(term);
@@ -1100,6 +1112,8 @@ struct sevent {
 	char *topic;
 	char *str;
 	char *pmu;
+	char *metric_expr;
+	char *metric_name;
 };
 
 static int cmp_sevent(const void *a, const void *b)
@@ -1136,13 +1150,12 @@ static void wordwrap(char *s, int start, int max, int corr)
 			break;
 		s += wlen;
 		column += n;
-		while (isspace(*s))
-			s++;
+		s = ltrim(s);
 	}
 }
 
 void print_pmu_events(const char *event_glob, bool name_only, bool quiet_flag,
-			bool long_desc)
+			bool long_desc, bool details_flag)
 {
 	struct perf_pmu *pmu;
 	struct perf_pmu_alias *alias;
@@ -1198,6 +1211,8 @@ void print_pmu_events(const char *event_glob, bool name_only, bool quiet_flag,
 			aliases[j].topic = alias->topic;
 			aliases[j].str = alias->str;
 			aliases[j].pmu = pmu->name;
+			aliases[j].metric_expr = alias->metric_expr;
+			aliases[j].metric_name = alias->metric_name;
 			j++;
 		}
 		if (pmu->selectable &&
@@ -1232,8 +1247,14 @@ void print_pmu_events(const char *event_glob, bool name_only, bool quiet_flag,
 			printf("%*s", 8, "[");
 			wordwrap(aliases[j].desc, 8, columns, 0);
 			printf("]\n");
-			if (verbose > 0)
-				printf("%*s%s/%s/\n", 8, "", aliases[j].pmu, aliases[j].str);
+			if (details_flag) {
+				printf("%*s%s/%s/ ", 8, "", aliases[j].pmu, aliases[j].str);
+				if (aliases[j].metric_name)
+					printf(" MetricName: %s", aliases[j].metric_name);
+				if (aliases[j].metric_expr)
+					printf(" MetricExpr: %s", aliases[j].metric_expr);
+				putchar('\n');
+			}
 		} else
 			printf("  %-50s [Kernel PMU event]\n", aliases[j].name);
 		printed++;

@@ -3,6 +3,7 @@
 
 #include "util/evsel.h"
 #include "util/evlist.h"
+#include "util/term.h"
 #include "util/util.h"
 #include "util/cache.h"
 #include "util/symbol.h"
@@ -24,7 +25,10 @@
 #include <sys/timerfd.h>
 #endif
 
+#include <linux/kernel.h>
 #include <linux/time64.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <termios.h>
 #include <semaphore.h>
 #include <pthread.h>
@@ -1044,6 +1048,7 @@ static int read_events(struct perf_kvm_stat *kvm)
 	struct perf_tool eops = {
 		.sample			= process_sample_event,
 		.comm			= perf_event__process_comm,
+		.namespaces		= perf_event__process_namespaces,
 		.ordered_events		= true,
 	};
 	struct perf_data_file file = {
@@ -1208,7 +1213,7 @@ kvm_events_record(struct perf_kvm_stat *kvm, int argc, const char **argv)
 	set_option_flag(record_options, 0, "transaction", PARSE_OPT_DISABLED);
 
 	record_usage = kvm_stat_record_usage;
-	return cmd_record(i, rec_argv, NULL);
+	return cmd_record(i, rec_argv);
 }
 
 static int
@@ -1348,6 +1353,7 @@ static int kvm_events_live(struct perf_kvm_stat *kvm,
 	kvm->tool.exit   = perf_event__process_exit;
 	kvm->tool.fork   = perf_event__process_fork;
 	kvm->tool.lost   = process_lost_event;
+	kvm->tool.namespaces  = perf_event__process_namespaces;
 	kvm->tool.ordered_events = true;
 	perf_tool__fill_defaults(&kvm->tool);
 
@@ -1475,7 +1481,7 @@ static int kvm_cmd_stat(const char *file_name, int argc, const char **argv)
 #endif
 
 perf_stat:
-	return cmd_stat(argc, argv, NULL);
+	return cmd_stat(argc, argv);
 }
 #endif /* HAVE_KVM_STAT_SUPPORT */
 
@@ -1494,7 +1500,7 @@ static int __cmd_record(const char *file_name, int argc, const char **argv)
 
 	BUG_ON(i != rec_argc);
 
-	return cmd_record(i, rec_argv, NULL);
+	return cmd_record(i, rec_argv);
 }
 
 static int __cmd_report(const char *file_name, int argc, const char **argv)
@@ -1512,7 +1518,7 @@ static int __cmd_report(const char *file_name, int argc, const char **argv)
 
 	BUG_ON(i != rec_argc);
 
-	return cmd_report(i, rec_argv, NULL);
+	return cmd_report(i, rec_argv);
 }
 
 static int
@@ -1531,10 +1537,10 @@ __cmd_buildid_list(const char *file_name, int argc, const char **argv)
 
 	BUG_ON(i != rec_argc);
 
-	return cmd_buildid_list(i, rec_argv, NULL);
+	return cmd_buildid_list(i, rec_argv);
 }
 
-int cmd_kvm(int argc, const char **argv, const char *prefix __maybe_unused)
+int cmd_kvm(int argc, const char **argv)
 {
 	const char *file_name = NULL;
 	const struct option kvm_options[] = {
@@ -1589,9 +1595,9 @@ int cmd_kvm(int argc, const char **argv, const char *prefix __maybe_unused)
 	else if (!strncmp(argv[0], "rep", 3))
 		return __cmd_report(file_name, argc, argv);
 	else if (!strncmp(argv[0], "diff", 4))
-		return cmd_diff(argc, argv, NULL);
+		return cmd_diff(argc, argv);
 	else if (!strncmp(argv[0], "top", 3))
-		return cmd_top(argc, argv, NULL);
+		return cmd_top(argc, argv);
 	else if (!strncmp(argv[0], "buildid-list", 12))
 		return __cmd_buildid_list(file_name, argc, argv);
 #ifdef HAVE_KVM_STAT_SUPPORT

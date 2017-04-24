@@ -1098,8 +1098,9 @@ static int __init arch_hw_breakpoint_init(void)
 	 * assume that a halting debugger will leave the world in a nice state
 	 * for us.
 	 */
-	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "arm/hw_breakpoint:online",
-				dbg_reset_online, NULL);
+	ret = cpuhp_setup_state_cpuslocked(CPUHP_AP_ONLINE_DYN,
+					   "arm/hw_breakpoint:online",
+					   dbg_reset_online, NULL);
 	unregister_undef_hook(&debug_reg_hook);
 	if (WARN_ON(ret < 0) || !cpumask_empty(&debug_err_mask)) {
 		core_num_brps = 0;
