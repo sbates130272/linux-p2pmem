@@ -43,8 +43,8 @@ enum nf_ct_ext_id {
 /* Extensions: optional stuff which isn't permanently in struct. */
 struct nf_ct_ext {
 	struct rcu_head rcu;
-	u16 offset[NF_CT_EXT_NUM];
-	u16 len;
+	u8 offset[NF_CT_EXT_NUM];
+	u8 len;
 	char data[0];
 };
 
@@ -86,13 +86,7 @@ static inline void nf_ct_ext_free(struct nf_conn *ct)
 }
 
 /* Add this type, returns pointer to data or NULL. */
-void *__nf_ct_ext_add_length(struct nf_conn *ct, enum nf_ct_ext_id id,
-			     size_t var_alloc_len, gfp_t gfp);
-
-#define nf_ct_ext_add(ct, id, gfp) \
-	((id##_TYPE *)__nf_ct_ext_add_length((ct), (id), 0, (gfp)))
-#define nf_ct_ext_add_length(ct, id, len, gfp) \
-	((id##_TYPE *)__nf_ct_ext_add_length((ct), (id), (len), (gfp)))
+void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp);
 
 #define NF_CT_EXT_F_PREALLOC	0x0001
 

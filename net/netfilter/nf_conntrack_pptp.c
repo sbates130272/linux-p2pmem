@@ -596,7 +596,6 @@ static const struct nf_conntrack_expect_policy pptp_exp_policy = {
 static struct nf_conntrack_helper pptp __read_mostly = {
 	.name			= "pptp",
 	.me			= THIS_MODULE,
-	.data_len		= sizeof(struct nf_ct_pptp_master),
 	.tuple.src.l3num	= AF_INET,
 	.tuple.src.u.tcp.port	= cpu_to_be16(PPTP_CONTROL_PORT),
 	.tuple.dst.protonum	= IPPROTO_TCP,
@@ -607,6 +606,8 @@ static struct nf_conntrack_helper pptp __read_mostly = {
 
 static int __init nf_conntrack_pptp_init(void)
 {
+	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nf_ct_pptp_master));
+
 	return nf_conntrack_helper_register(&pptp);
 }
 
