@@ -454,7 +454,8 @@ static int osd_probe(struct device *dev)
 	/* hold one more reference to the scsi_device that will get released
 	 * in __release, in case a logout is happening while fs is mounted
 	 */
-	scsi_device_get(scsi_device);
+	if (scsi_device_get(scsi_device))
+		goto err_retract_minor;
 	osd_dev_init(&oud->od, scsi_device);
 
 	/* allocate a disk and set it up */
@@ -507,10 +508,9 @@ static int osd_remove(struct device *dev)
 	struct scsi_device *scsi_device = to_scsi_device(dev);
 	struct osd_uld_device *oud = dev_get_drvdata(dev);
 
-	if (!oud || (oud->od.scsi_device != scsi_device)) {
-		OSD_ERR("Half cooked osd-device %p,%p || %p!=%p",
-			dev, oud, oud ? oud->od.scsi_device : NULL,
-			scsi_device);
+	if (oud->od.scsi_device != scsi_device) {
+		OSD_ERR("Half cooked osd-device %p, || %p!=%p",
+			dev, oud->od.scsi_device, scsi_device);
 	}
 
 	cdev_device_del(&oud->cdev, &oud->class_dev);
