@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2015, 2016 Intel Corporation.
+ * Copyright(c) 2015 - 2017 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
@@ -64,6 +64,7 @@
 #include "platform.h"
 #include "aspm.h"
 #include "affinity.h"
+#include "debugfs.h"
 
 #define NUM_IB_PORTS 1
 
@@ -125,9 +126,16 @@ struct flag_table {
 #define DEFAULT_KRCVQS		  2
 #define MIN_KERNEL_KCTXTS         2
 #define FIRST_KERNEL_KCTXT        1
-/* sizes for both the QP and RSM map tables */
-#define NUM_MAP_ENTRIES		256
-#define NUM_MAP_REGS             32
+
+/*
+ * RSM instance allocation
+ *   0 - Verbs
+ *   1 - User Fecn Handling
+ *   2 - Vnic
+ */
+#define RSM_INS_VERBS             0
+#define RSM_INS_FECN              1
+#define RSM_INS_VNIC              2
 
 /* Bit offset into the GUID which carries HFI id information */
 #define GUID_HFI_INDEX_SHIFT     39
@@ -138,8 +146,7 @@ struct flag_table {
 #define is_emulator_p(dd) ((((dd)->irev) & 0xf) == 3)
 #define is_emulator_s(dd) ((((dd)->irev) & 0xf) == 4)
 
-/* RSM fields */
-
+/* RSM fields for Verbs */
 /* packet type */
 #define IB_PACKET_TYPE         2ull
 #define QW_SHIFT               6ull
@@ -168,6 +175,28 @@ struct flag_table {
 
 /* QPN[m+n:1] QW 1, OFFSET 1 */
 #define QPN_SELECT_OFFSET      ((1ull << QW_SHIFT) | (1ull))
+
+/* RSM fields for Vnic */
+/* L2_TYPE: QW 0, OFFSET 61 - for match */
+#define L2_TYPE_QW             0ull
+#define L2_TYPE_BIT_OFFSET     61ull
+#define L2_TYPE_OFFSET(off)    ((L2_TYPE_QW << QW_SHIFT) | (off))
+#define L2_TYPE_MATCH_OFFSET   L2_TYPE_OFFSET(L2_TYPE_BIT_OFFSET)
+#define L2_TYPE_MASK           3ull
+#define L2_16B_VALUE           2ull
+
+/* L4_TYPE QW 1, OFFSET 0 - for match */
+#define L4_TYPE_QW              1ull
+#define L4_TYPE_BIT_OFFSET      0ull
+#define L4_TYPE_OFFSET(off)     ((L4_TYPE_QW << QW_SHIFT) | (off))
+#define L4_TYPE_MATCH_OFFSET    L4_TYPE_OFFSET(L4_TYPE_BIT_OFFSET)
+#define L4_16B_TYPE_MASK        0xFFull
+#define L4_16B_ETH_VALUE        0x78ull
+
+/* 16B VESWID - for select */
+#define L4_16B_HDR_VESWID_OFFSET  ((2 << QW_SHIFT) | (16ull))
+/* 16B ENTROPY - for select */
+#define L2_16B_ENTROPY_OFFSET     ((1 << QW_SHIFT) | (32ull))
 
 /* defines to build power on SC2VL table */
 #define SC2VL_VAL( \
@@ -1045,6 +1074,8 @@ static void dc_start(struct hfi1_devdata *);
 static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
 			   unsigned int *np);
 static void clear_full_mgmt_pkey(struct hfi1_pportdata *ppd);
+static int wait_link_transfer_active(struct hfi1_devdata *dd, int wait_ms);
+static void clear_rsm_rule(struct hfi1_devdata *dd, u8 rule_index);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -6701,7 +6732,13 @@ static void rxe_kernel_unfreeze(struct hfi1_devdata *dd)
 	int i;
 
 	/* enable all kernel contexts */
-	for (i = 0; i < dd->n_krcv_queues; i++) {
+	for (i = 0; i < dd->num_rcv_contexts; i++) {
+		struct hfi1_ctxtdata *rcd = dd->rcd[i];
+
+		/* Ensure all non-user contexts(including vnic) are enabled */
+		if (!rcd || !rcd->sc || (rcd->sc->type == SC_USER))
+			continue;
+
 		rcvmask = HFI1_RCVCTRL_CTXT_ENB;
 		/* HFI1_RCVCTRL_TAILUPD_[ENB|DIS] needs to be set explicitly */
 		rcvmask |= HFI1_CAP_KGET_MASK(dd->rcd[i]->flags, DMA_RTAIL) ?
@@ -7165,7 +7202,7 @@ static void get_link_widths(struct hfi1_devdata *dd, u16 *tx_width,
 	 * set the max_rate field in handle_verify_cap until v0.19.
 	 */
 	if ((dd->icode == ICODE_RTL_SILICON) &&
-	    (dd->dc8051_ver < dc8051_ver(0, 19))) {
+	    (dd->dc8051_ver < dc8051_ver(0, 19, 0))) {
 		/* max_rate: 0 = 12.5G, 1 = 25G */
 		switch (max_rate) {
 		case 0:
@@ -7350,7 +7387,7 @@ void handle_verify_cap(struct work_struct *work)
 	}
 
 	ppd->link_speed_active = 0;	/* invalid value */
-	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+	if (dd->dc8051_ver < dc8051_ver(0, 20, 0)) {
 		/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
 		switch (remote_tx_rate) {
 		case 0:
@@ -7897,6 +7934,9 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 		reg &= ~DCC_ERR_FLG_EN_CSR_ACCESS_BLOCKED_HOST_SMASK;
 	}
 
+	if (unlikely(hfi1_dbg_fault_suppress_err(&dd->verbs_dev)))
+		reg &= ~DCC_ERR_FLG_LATE_EBP_ERR_SMASK;
+
 	/* report any remaining errors */
 	if (reg)
 		dd_dev_info_ratelimited(dd, "DCC Error: %s\n",
@@ -7995,7 +8035,9 @@ static void is_rcv_avail_int(struct hfi1_devdata *dd, unsigned int source)
 	if (likely(source < dd->num_rcv_contexts)) {
 		rcd = dd->rcd[source];
 		if (rcd) {
-			if (source < dd->first_user_ctxt)
+			/* Check for non-user contexts, including vnic */
+			if ((source < dd->first_dyn_alloc_ctxt) ||
+			    (rcd->sc && (rcd->sc->type == SC_KERNEL)))
 				rcd->do_interrupt(rcd, 0);
 			else
 				handle_user_interrupt(rcd);
@@ -8023,7 +8065,8 @@ static void is_rcv_urgent_int(struct hfi1_devdata *dd, unsigned int source)
 		rcd = dd->rcd[source];
 		if (rcd) {
 			/* only pay attention to user urgent interrupts */
-			if (source >= dd->first_user_ctxt)
+			if ((source >= dd->first_dyn_alloc_ctxt) &&
+			    (!rcd->sc || (rcd->sc->type == SC_USER)))
 				handle_user_interrupt(rcd);
 			return;	/* OK */
 		}
@@ -8344,6 +8387,52 @@ static int read_lcb_via_8051(struct hfi1_devdata *dd, u32 addr, u64 *data)
 }
 
 /*
+ * Provide a cache for some of the LCB registers in case the LCB is
+ * unavailable.
+ * (The LCB is unavailable in certain link states, for example.)
+ */
+struct lcb_datum {
+	u32 off;
+	u64 val;
+};
+
+static struct lcb_datum lcb_cache[] = {
+	{ DC_LCB_ERR_INFO_RX_REPLAY_CNT, 0},
+	{ DC_LCB_ERR_INFO_SEQ_CRC_CNT, 0 },
+	{ DC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT, 0 },
+};
+
+static void update_lcb_cache(struct hfi1_devdata *dd)
+{
+	int i;
+	int ret;
+	u64 val;
+
+	for (i = 0; i < ARRAY_SIZE(lcb_cache); i++) {
+		ret = read_lcb_csr(dd, lcb_cache[i].off, &val);
+
+		/* Update if we get good data */
+		if (likely(ret != -EBUSY))
+			lcb_cache[i].val = val;
+	}
+}
+
+static int read_lcb_cache(u32 off, u64 *val)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(lcb_cache); i++) {
+		if (lcb_cache[i].off == off) {
+			*val = lcb_cache[i].val;
+			return 0;
+		}
+	}
+
+	pr_warn("%s bad offset 0x%x\n", __func__, off);
+	return -1;
+}
+
+/*
  * Read an LCB CSR.  Access may not be in host control, so check.
  * Return 0 on success, -EBUSY on failure.
  */
@@ -8354,9 +8443,13 @@ int read_lcb_csr(struct hfi1_devdata *dd, u32 addr, u64 *data)
 	/* if up, go through the 8051 for the value */
 	if (ppd->host_link_state & HLS_UP)
 		return read_lcb_via_8051(dd, addr, data);
-	/* if going up or down, no access */
-	if (ppd->host_link_state & (HLS_GOING_UP | HLS_GOING_OFFLINE))
-		return -EBUSY;
+	/* if going up or down, check the cache, otherwise, no access */
+	if (ppd->host_link_state & (HLS_GOING_UP | HLS_GOING_OFFLINE)) {
+		if (read_lcb_cache(addr, data))
+			return -EBUSY;
+		return 0;
+	}
+
 	/* otherwise, host has access */
 	*data = read_csr(dd, addr);
 	return 0;
@@ -8371,7 +8464,7 @@ static int write_lcb_via_8051(struct hfi1_devdata *dd, u32 addr, u64 data)
 	int ret;
 
 	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR ||
-	    (dd->dc8051_ver < dc8051_ver(0, 20))) {
+	    (dd->dc8051_ver < dc8051_ver(0, 20, 0))) {
 		if (acquire_lcb_access(dd, 0) == 0) {
 			write_csr(dd, addr, data);
 			release_lcb_access(dd, 0);
@@ -8677,13 +8770,20 @@ static void read_remote_device_id(struct hfi1_devdata *dd, u16 *device_id,
 			& REMOTE_DEVICE_REV_MASK;
 }
 
-void read_misc_status(struct hfi1_devdata *dd, u8 *ver_a, u8 *ver_b)
+void read_misc_status(struct hfi1_devdata *dd, u8 *ver_major, u8 *ver_minor,
+		      u8 *ver_patch)
 {
 	u32 frame;
 
 	read_8051_config(dd, MISC_STATUS, GENERAL_CONFIG, &frame);
-	*ver_a = (frame >> STS_FM_VERSION_A_SHIFT) & STS_FM_VERSION_A_MASK;
-	*ver_b = (frame >> STS_FM_VERSION_B_SHIFT) & STS_FM_VERSION_B_MASK;
+	*ver_major = (frame >> STS_FM_VERSION_MAJOR_SHIFT) &
+		STS_FM_VERSION_MAJOR_MASK;
+	*ver_minor = (frame >> STS_FM_VERSION_MINOR_SHIFT) &
+		STS_FM_VERSION_MINOR_MASK;
+
+	read_8051_config(dd, VERSION_PATCH, GENERAL_CONFIG, &frame);
+	*ver_patch = (frame >> STS_FM_VERSION_PATCH_SHIFT) &
+		STS_FM_VERSION_PATCH_MASK;
 }
 
 static void read_vc_remote_phy(struct hfi1_devdata *dd, u8 *power_management,
@@ -8891,8 +8991,6 @@ int send_idle_sma(struct hfi1_devdata *dd, u64 message)
  */
 static int do_quick_linkup(struct hfi1_devdata *dd)
 {
-	u64 reg;
-	unsigned long timeout;
 	int ret;
 
 	lcb_shutdown(dd, 0);
@@ -8915,19 +9013,9 @@ static int do_quick_linkup(struct hfi1_devdata *dd)
 		write_csr(dd, DC_LCB_CFG_RUN,
 			  1ull << DC_LCB_CFG_RUN_EN_SHIFT);
 
-		/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
-		timeout = jiffies + msecs_to_jiffies(10);
-		while (1) {
-			reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
-			if (reg)
-				break;
-			if (time_after(jiffies, timeout)) {
-				dd_dev_err(dd,
-					   "timeout waiting for LINK_TRANSFER_ACTIVE\n");
-				return -ETIMEDOUT;
-			}
-			udelay(2);
-		}
+		ret = wait_link_transfer_active(dd, 10);
+		if (ret)
+			return ret;
 
 		write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP,
 			  1ull << DC_LCB_CFG_ALLOW_LINK_UP_VAL_SHIFT);
@@ -9091,7 +9179,7 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	if (ret)
 		goto set_local_link_attributes_fail;
 
-	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+	if (dd->dc8051_ver < dc8051_ver(0, 20, 0)) {
 		/* set the tx rate to the fastest enabled */
 		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
 			ppd->local_tx_rate = 1;
@@ -9494,8 +9582,11 @@ static int test_qsfp_read(struct hfi1_pportdata *ppd)
 	int ret;
 	u8 status;
 
-	/* report success if not a QSFP */
-	if (ppd->port_type != PORT_TYPE_QSFP)
+	/*
+	 * Report success if not a QSFP or, if it is a QSFP, but the cable is
+	 * not present
+	 */
+	if (ppd->port_type != PORT_TYPE_QSFP || !qsfp_mod_present(ppd))
 		return 0;
 
 	/* read byte 2, the status byte */
@@ -10082,6 +10173,64 @@ static void check_lni_states(struct hfi1_pportdata *ppd)
 	decode_state_complete(ppd, last_remote_state, "received");
 }
 
+/* wait for wait_ms for LINK_TRANSFER_ACTIVE to go to 1 */
+static int wait_link_transfer_active(struct hfi1_devdata *dd, int wait_ms)
+{
+	u64 reg;
+	unsigned long timeout;
+
+	/* watch LCB_STS_LINK_TRANSFER_ACTIVE */
+	timeout = jiffies + msecs_to_jiffies(wait_ms);
+	while (1) {
+		reg = read_csr(dd, DC_LCB_STS_LINK_TRANSFER_ACTIVE);
+		if (reg)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(dd,
+				   "timeout waiting for LINK_TRANSFER_ACTIVE\n");
+			return -ETIMEDOUT;
+		}
+		udelay(2);
+	}
+	return 0;
+}
+
+/* called when the logical link state is not down as it should be */
+static void force_logical_link_state_down(struct hfi1_pportdata *ppd)
+{
+	struct hfi1_devdata *dd = ppd->dd;
+
+	/*
+	 * Bring link up in LCB loopback
+	 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 1);
+	write_csr(dd, DC_LCB_CFG_IGNORE_LOST_RCLK,
+		  DC_LCB_CFG_IGNORE_LOST_RCLK_EN_SMASK);
+
+	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0);
+	write_csr(dd, DC_LCB_CFG_REINIT_AS_SLAVE, 0);
+	write_csr(dd, DC_LCB_CFG_CNT_FOR_SKIP_STALL, 0x110);
+	write_csr(dd, DC_LCB_CFG_LOOPBACK, 0x2);
+
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+	(void)read_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET);
+	udelay(3);
+	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP, 1);
+	write_csr(dd, DC_LCB_CFG_RUN, 1ull << DC_LCB_CFG_RUN_EN_SHIFT);
+
+	wait_link_transfer_active(dd, 100);
+
+	/*
+	 * Bring the link down again.
+	 */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 1);
+	write_csr(dd, DC_LCB_CFG_ALLOW_LINK_UP, 0);
+	write_csr(dd, DC_LCB_CFG_IGNORE_LOST_RCLK, 0);
+
+	/* call again to adjust ppd->statusp, if needed */
+	get_logical_state(ppd);
+}
+
 /*
  * Helper for set_link_state().  Do not call except from that routine.
  * Expects ppd->hls_mutex to be held.
@@ -10097,6 +10246,8 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	int ret;
 	int do_transition;
 	int do_wait;
+
+	update_lcb_cache(dd);
 
 	previous_state = ppd->host_link_state;
 	ppd->host_link_state = HLS_GOING_OFFLINE;
@@ -10135,15 +10286,18 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 			return ret;
 	}
 
-	/* make sure the logical state is also down */
-	wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
-
 	/*
 	 * Now in charge of LCB - must be after the physical state is
 	 * offline.quiet and before host_link_state is changed.
 	 */
 	set_host_lcb_access(dd);
 	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+
+	/* make sure the logical state is also down */
+	ret = wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
+	if (ret)
+		force_logical_link_state_down(ppd);
+
 	ppd->host_link_state = HLS_LINK_COOLDOWN; /* LCB access allowed */
 
 	if (ppd->port_type == PORT_TYPE_QSFP &&
@@ -12726,7 +12880,10 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	first_sdma = last_general;
 	last_sdma = first_sdma + dd->num_sdma;
 	first_rx = last_sdma;
-	last_rx = first_rx + dd->n_krcv_queues;
+	last_rx = first_rx + dd->n_krcv_queues + HFI1_NUM_VNIC_CTXT;
+
+	/* VNIC MSIx interrupts get mapped when VNIC contexts are created */
+	dd->first_dyn_msix_idx = first_rx + dd->n_krcv_queues;
 
 	/*
 	 * Sanity check - the code expects all SDMA chip source
@@ -12740,7 +12897,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 		const char *err_info;
 		irq_handler_t handler;
 		irq_handler_t thread = NULL;
-		void *arg;
+		void *arg = NULL;
 		int idx;
 		struct hfi1_ctxtdata *rcd = NULL;
 		struct sdma_engine *sde = NULL;
@@ -12767,24 +12924,25 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 		} else if (first_rx <= i && i < last_rx) {
 			idx = i - first_rx;
 			rcd = dd->rcd[idx];
-			/* no interrupt if no rcd */
-			if (!rcd)
-				continue;
-			/*
-			 * Set the interrupt register and mask for this
-			 * context's interrupt.
-			 */
-			rcd->ireg = (IS_RCVAVAIL_START + idx) / 64;
-			rcd->imask = ((u64)1) <<
-					((IS_RCVAVAIL_START + idx) % 64);
-			handler = receive_context_interrupt;
-			thread = receive_context_thread;
-			arg = rcd;
-			snprintf(me->name, sizeof(me->name),
-				 DRIVER_NAME "_%d kctxt%d", dd->unit, idx);
-			err_info = "receive context";
-			remap_intr(dd, IS_RCVAVAIL_START + idx, i);
-			me->type = IRQ_RCVCTXT;
+			if (rcd) {
+				/*
+				 * Set the interrupt register and mask for this
+				 * context's interrupt.
+				 */
+				rcd->ireg = (IS_RCVAVAIL_START + idx) / 64;
+				rcd->imask = ((u64)1) <<
+					  ((IS_RCVAVAIL_START + idx) % 64);
+				handler = receive_context_interrupt;
+				thread = receive_context_thread;
+				arg = rcd;
+				snprintf(me->name, sizeof(me->name),
+					 DRIVER_NAME "_%d kctxt%d",
+					 dd->unit, idx);
+				err_info = "receive context";
+				remap_intr(dd, IS_RCVAVAIL_START + idx, i);
+				me->type = IRQ_RCVCTXT;
+				rcd->msix_intr = i;
+			}
 		} else {
 			/* not in our expected range - complain, then
 			 * ignore it
@@ -12822,6 +12980,84 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	return ret;
 }
 
+void hfi1_vnic_synchronize_irq(struct hfi1_devdata *dd)
+{
+	int i;
+
+	if (!dd->num_msix_entries) {
+		synchronize_irq(dd->pcidev->irq);
+		return;
+	}
+
+	for (i = 0; i < dd->vnic.num_ctxt; i++) {
+		struct hfi1_ctxtdata *rcd = dd->vnic.ctxt[i];
+		struct hfi1_msix_entry *me = &dd->msix_entries[rcd->msix_intr];
+
+		synchronize_irq(me->msix.vector);
+	}
+}
+
+void hfi1_reset_vnic_msix_info(struct hfi1_ctxtdata *rcd)
+{
+	struct hfi1_devdata *dd = rcd->dd;
+	struct hfi1_msix_entry *me = &dd->msix_entries[rcd->msix_intr];
+
+	if (!me->arg) /* => no irq, no affinity */
+		return;
+
+	hfi1_put_irq_affinity(dd, me);
+	free_irq(me->msix.vector, me->arg);
+
+	me->arg = NULL;
+}
+
+void hfi1_set_vnic_msix_info(struct hfi1_ctxtdata *rcd)
+{
+	struct hfi1_devdata *dd = rcd->dd;
+	struct hfi1_msix_entry *me;
+	int idx = rcd->ctxt;
+	void *arg = rcd;
+	int ret;
+
+	rcd->msix_intr = dd->vnic.msix_idx++;
+	me = &dd->msix_entries[rcd->msix_intr];
+
+	/*
+	 * Set the interrupt register and mask for this
+	 * context's interrupt.
+	 */
+	rcd->ireg = (IS_RCVAVAIL_START + idx) / 64;
+	rcd->imask = ((u64)1) <<
+		  ((IS_RCVAVAIL_START + idx) % 64);
+
+	snprintf(me->name, sizeof(me->name),
+		 DRIVER_NAME "_%d kctxt%d", dd->unit, idx);
+	me->name[sizeof(me->name) - 1] = 0;
+	me->type = IRQ_RCVCTXT;
+
+	remap_intr(dd, IS_RCVAVAIL_START + idx, rcd->msix_intr);
+
+	ret = request_threaded_irq(me->msix.vector, receive_context_interrupt,
+				   receive_context_thread, 0, me->name, arg);
+	if (ret) {
+		dd_dev_err(dd, "vnic irq request (vector %d, idx %d) fail %d\n",
+			   me->msix.vector, idx, ret);
+		return;
+	}
+	/*
+	 * assign arg after request_irq call, so it will be
+	 * cleaned up
+	 */
+	me->arg = arg;
+
+	ret = hfi1_get_irq_affinity(dd, me);
+	if (ret) {
+		dd_dev_err(dd,
+			   "unable to pin IRQ %d\n", ret);
+		free_irq(me->msix.vector, me->arg);
+	}
+}
+
 /*
  * Set the general handler to accept all interrupts, remap all
  * chip interrupts back to MSI-X 0.
@@ -12853,7 +13089,7 @@ static int set_up_interrupts(struct hfi1_devdata *dd)
 	 *	N interrupts - one per used SDMA engine
 	 *	M interrupt - one per kernel receive context
 	 */
-	total = 1 + dd->num_sdma + dd->n_krcv_queues;
+	total = 1 + dd->num_sdma + dd->n_krcv_queues + HFI1_NUM_VNIC_CTXT;
 
 	entries = kcalloc(total, sizeof(*entries), GFP_KERNEL);
 	if (!entries) {
@@ -12918,7 +13154,8 @@ fail:
  *
  *	num_rcv_contexts - number of contexts being used
  *	n_krcv_queues - number of kernel contexts
- *	first_user_ctxt - first non-kernel context in array of contexts
+ *	first_dyn_alloc_ctxt - first dynamically allocated context
+ *                             in array of contexts
  *	freectxts  - number of free user contexts
  *	num_send_contexts - number of PIO send contexts being used
  */
@@ -12995,10 +13232,14 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		total_contexts = num_kernel_contexts + num_user_contexts;
 	}
 
-	/* the first N are kernel contexts, the rest are user contexts */
+	/* Accommodate VNIC contexts */
+	if ((total_contexts + HFI1_NUM_VNIC_CTXT) <= dd->chip_rcv_contexts)
+		total_contexts += HFI1_NUM_VNIC_CTXT;
+
+	/* the first N are kernel contexts, the rest are user/vnic contexts */
 	dd->num_rcv_contexts = total_contexts;
 	dd->n_krcv_queues = num_kernel_contexts;
-	dd->first_user_ctxt = num_kernel_contexts;
+	dd->first_dyn_alloc_ctxt = num_kernel_contexts;
 	dd->num_user_contexts = num_user_contexts;
 	dd->freectxts = num_user_contexts;
 	dd_dev_info(dd,
@@ -13454,11 +13695,8 @@ static void reset_rxe_csrs(struct hfi1_devdata *dd)
 		write_csr(dd, RCV_COUNTER_ARRAY32 + (8 * i), 0);
 	for (i = 0; i < RXE_NUM_64_BIT_COUNTERS; i++)
 		write_csr(dd, RCV_COUNTER_ARRAY64 + (8 * i), 0);
-	for (i = 0; i < RXE_NUM_RSM_INSTANCES; i++) {
-		write_csr(dd, RCV_RSM_CFG + (8 * i), 0);
-		write_csr(dd, RCV_RSM_SELECT + (8 * i), 0);
-		write_csr(dd, RCV_RSM_MATCH + (8 * i), 0);
-	}
+	for (i = 0; i < RXE_NUM_RSM_INSTANCES; i++)
+		clear_rsm_rule(dd, i);
 	for (i = 0; i < 32; i++)
 		write_csr(dd, RCV_RSM_MAP_TABLE + (8 * i), 0);
 
@@ -13817,6 +14055,16 @@ static void add_rsm_rule(struct hfi1_devdata *dd, u8 rule_index,
 		  (u64)rrd->value2 << RCV_RSM_MATCH_VALUE2_SHIFT);
 }
 
+/*
+ * Clear a receive side mapping rule.
+ */
+static void clear_rsm_rule(struct hfi1_devdata *dd, u8 rule_index)
+{
+	write_csr(dd, RCV_RSM_CFG + (8 * rule_index), 0);
+	write_csr(dd, RCV_RSM_SELECT + (8 * rule_index), 0);
+	write_csr(dd, RCV_RSM_MATCH + (8 * rule_index), 0);
+}
+
 /* return the number of RSM map table entries that will be used for QOS */
 static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
 			   unsigned int *np)
@@ -13932,7 +14180,7 @@ static void init_qos(struct hfi1_devdata *dd, struct rsm_map_table *rmt)
 	rrd.value2 = LRH_SC_VALUE;
 
 	/* add rule 0 */
-	add_rsm_rule(dd, 0, &rrd);
+	add_rsm_rule(dd, RSM_INS_VERBS, &rrd);
 
 	/* mark RSM map entries as used */
 	rmt->used += rmt_entries;
@@ -13962,7 +14210,7 @@ static void init_user_fecn_handling(struct hfi1_devdata *dd,
 	/*
 	 * RSM will extract the destination context as an index into the
 	 * map table.  The destination contexts are a sequential block
-	 * in the range first_user_ctxt...num_rcv_contexts-1 (inclusive).
+	 * in the range first_dyn_alloc_ctxt...num_rcv_contexts-1 (inclusive).
 	 * Map entries are accessed as offset + extracted value.  Adjust
 	 * the added offset so this sequence can be placed anywhere in
 	 * the table - as long as the entries themselves do not wrap.
@@ -13970,9 +14218,9 @@ static void init_user_fecn_handling(struct hfi1_devdata *dd,
 	 * start with that to allow for a "negative" offset.
 	 */
 	offset = (u8)(NUM_MAP_ENTRIES + (int)rmt->used -
-						(int)dd->first_user_ctxt);
+						(int)dd->first_dyn_alloc_ctxt);
 
-	for (i = dd->first_user_ctxt, idx = rmt->used;
+	for (i = dd->first_dyn_alloc_ctxt, idx = rmt->used;
 				i < dd->num_rcv_contexts; i++, idx++) {
 		/* replace with identity mapping */
 		regoff = (idx % 8) * 8;
@@ -14006,9 +14254,82 @@ static void init_user_fecn_handling(struct hfi1_devdata *dd,
 	rrd.value2 = 1;
 
 	/* add rule 1 */
-	add_rsm_rule(dd, 1, &rrd);
+	add_rsm_rule(dd, RSM_INS_FECN, &rrd);
 
 	rmt->used += dd->num_user_contexts;
+}
+
+/* Initialize RSM for VNIC */
+void hfi1_init_vnic_rsm(struct hfi1_devdata *dd)
+{
+	u8 i, j;
+	u8 ctx_id = 0;
+	u64 reg;
+	u32 regoff;
+	struct rsm_rule_data rrd;
+
+	if (hfi1_vnic_is_rsm_full(dd, NUM_VNIC_MAP_ENTRIES)) {
+		dd_dev_err(dd, "Vnic RSM disabled, rmt entries used = %d\n",
+			   dd->vnic.rmt_start);
+		return;
+	}
+
+	dev_dbg(&(dd)->pcidev->dev, "Vnic rsm start = %d, end %d\n",
+		dd->vnic.rmt_start,
+		dd->vnic.rmt_start + NUM_VNIC_MAP_ENTRIES);
+
+	/* Update RSM mapping table, 32 regs, 256 entries - 1 ctx per byte */
+	regoff = RCV_RSM_MAP_TABLE + (dd->vnic.rmt_start / 8) * 8;
+	reg = read_csr(dd, regoff);
+	for (i = 0; i < NUM_VNIC_MAP_ENTRIES; i++) {
+		/* Update map register with vnic context */
+		j = (dd->vnic.rmt_start + i) % 8;
+		reg &= ~(0xffllu << (j * 8));
+		reg |= (u64)dd->vnic.ctxt[ctx_id++]->ctxt << (j * 8);
+		/* Wrap up vnic ctx index */
+		ctx_id %= dd->vnic.num_ctxt;
+		/* Write back map register */
+		if (j == 7 || ((i + 1) == NUM_VNIC_MAP_ENTRIES)) {
+			dev_dbg(&(dd)->pcidev->dev,
+				"Vnic rsm map reg[%d] =0x%llx\n",
+				regoff - RCV_RSM_MAP_TABLE, reg);
+
+			write_csr(dd, regoff, reg);
+			regoff += 8;
+			if (i < (NUM_VNIC_MAP_ENTRIES - 1))
+				reg = read_csr(dd, regoff);
+		}
+	}
+
+	/* Add rule for vnic */
+	rrd.offset = dd->vnic.rmt_start;
+	rrd.pkt_type = 4;
+	/* Match 16B packets */
+	rrd.field1_off = L2_TYPE_MATCH_OFFSET;
+	rrd.mask1 = L2_TYPE_MASK;
+	rrd.value1 = L2_16B_VALUE;
+	/* Match ETH L4 packets */
+	rrd.field2_off = L4_TYPE_MATCH_OFFSET;
+	rrd.mask2 = L4_16B_TYPE_MASK;
+	rrd.value2 = L4_16B_ETH_VALUE;
+	/* Calc context from veswid and entropy */
+	rrd.index1_off = L4_16B_HDR_VESWID_OFFSET;
+	rrd.index1_width = ilog2(NUM_VNIC_MAP_ENTRIES);
+	rrd.index2_off = L2_16B_ENTROPY_OFFSET;
+	rrd.index2_width = ilog2(NUM_VNIC_MAP_ENTRIES);
+	add_rsm_rule(dd, RSM_INS_VNIC, &rrd);
+
+	/* Enable RSM if not already enabled */
+	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
+}
+
+void hfi1_deinit_vnic_rsm(struct hfi1_devdata *dd)
+{
+	clear_rsm_rule(dd, RSM_INS_VNIC);
+
+	/* Disable RSM if used only by vnic */
+	if (dd->vnic.rmt_start == 0)
+		clear_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
 }
 
 static void init_rxe(struct hfi1_devdata *dd)
@@ -14023,6 +14344,8 @@ static void init_rxe(struct hfi1_devdata *dd)
 	init_qos(dd, rmt);
 	init_user_fecn_handling(dd, rmt);
 	complete_rsm_map_table(dd, rmt);
+	/* record number of used rsm map entries for vnic */
+	dd->vnic.rmt_start = rmt->used;
 	kfree(rmt);
 
 	/*

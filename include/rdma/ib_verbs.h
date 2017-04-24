@@ -55,6 +55,7 @@
 #include <net/ip.h>
 #include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/netdevice.h>
 
 #include <linux/if_link.h>
 #include <linux/atomic.h>
@@ -225,6 +226,7 @@ enum ib_device_cap_flags {
 	IB_DEVICE_VIRTUAL_FUNCTION		= (1ULL << 33),
 	/* Deprecated. Please use IB_RAW_PACKET_CAP_SCATTER_FCS. */
 	IB_DEVICE_RAW_SCATTER_FCS		= (1ULL << 34),
+	IB_DEVICE_RDMA_NETDEV_OPA_VNIC		= (1ULL << 35),
 };
 
 enum ib_signature_prot_cap {
@@ -432,7 +434,8 @@ enum ib_port_speed {
 	IB_SPEED_QDR	= 4,
 	IB_SPEED_FDR10	= 8,
 	IB_SPEED_FDR	= 16,
-	IB_SPEED_EDR	= 32
+	IB_SPEED_EDR	= 32,
+	IB_SPEED_HDR	= 64
 };
 
 /**
@@ -1358,6 +1361,17 @@ struct ib_fmr_attr {
 
 struct ib_umem;
 
+enum rdma_remove_reason {
+	/* Userspace requested uobject deletion. Call could fail */
+	RDMA_REMOVE_DESTROY,
+	/* Context deletion. This call should delete the actual object itself */
+	RDMA_REMOVE_CLOSE,
+	/* Driver is being hot-unplugged. This call should delete the actual object itself */
+	RDMA_REMOVE_DRIVER_REMOVE,
+	/* Context is being cleaned-up, but commit was just completed */
+	RDMA_REMOVE_DURING_CLEANUP,
+};
+
 struct ib_rdmacg_object {
 #ifdef CONFIG_CGROUP_RDMA
 	struct rdma_cgroup	*cg;		/* owner rdma cgroup */
@@ -1366,18 +1380,15 @@ struct ib_rdmacg_object {
 
 struct ib_ucontext {
 	struct ib_device       *device;
-	struct list_head	pd_list;
-	struct list_head	mr_list;
-	struct list_head	mw_list;
-	struct list_head	cq_list;
-	struct list_head	qp_list;
-	struct list_head	srq_list;
-	struct list_head	ah_list;
-	struct list_head	xrcd_list;
-	struct list_head	rule_list;
-	struct list_head	wq_list;
-	struct list_head	rwq_ind_tbl_list;
+	struct ib_uverbs_file  *ufile;
 	int			closing;
+
+	/* locking the uobjects_list */
+	struct mutex		uobjects_lock;
+	struct list_head	uobjects;
+	/* protects cleanup process from other actions */
+	struct rw_semaphore	cleanup_rwsem;
+	enum rdma_remove_reason cleanup_reason;
 
 	struct pid             *tgid;
 #ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
@@ -1408,9 +1419,16 @@ struct ib_uobject {
 	struct ib_rdmacg_object	cg_obj;		/* rdmacg object */
 	int			id;		/* index into kernel idr */
 	struct kref		ref;
-	struct rw_semaphore	mutex;		/* protects .live */
+	atomic_t		usecnt;		/* protects exclusive access */
 	struct rcu_head		rcu;		/* kfree_rcu() overhead */
-	int			live;
+
+	const struct uverbs_obj_type *type;
+};
+
+struct ib_uobject_file {
+	struct ib_uobject	uobj;
+	/* ufile contains the lock between context release and file close */
+	struct ib_uverbs_file	*ufile;
 };
 
 struct ib_udata {
@@ -1663,6 +1681,7 @@ enum ib_flow_spec_type {
 	IB_FLOW_SPEC_INNER		= 0x100,
 	/* Actions */
 	IB_FLOW_SPEC_ACTION_TAG         = 0x1000,
+	IB_FLOW_SPEC_ACTION_DROP        = 0x1001,
 };
 #define IB_FLOW_SPEC_LAYER_MASK	0xF0
 #define IB_FLOW_SPEC_SUPPORT_LAYERS 8
@@ -1791,6 +1810,11 @@ struct ib_flow_spec_action_tag {
 	u32                           tag_id;
 };
 
+struct ib_flow_spec_action_drop {
+	enum ib_flow_spec_type	      type;
+	u16			      size;
+};
+
 union ib_flow_spec {
 	struct {
 		u32			type;
@@ -1803,6 +1827,7 @@ union ib_flow_spec {
 	struct ib_flow_spec_ipv6        ipv6;
 	struct ib_flow_spec_tunnel      tunnel;
 	struct ib_flow_spec_action_tag  flow_tag;
+	struct ib_flow_spec_action_drop drop;
 };
 
 struct ib_flow_attr {
@@ -1859,6 +1884,34 @@ struct ib_port_immutable {
 	int                           gid_tbl_len;
 	u32                           core_cap_flags;
 	u32                           max_mad_size;
+};
+
+/* rdma netdev type - specifies protocol type */
+enum rdma_netdev_t {
+	RDMA_NETDEV_OPA_VNIC,
+	RDMA_NETDEV_IPOIB,
+};
+
+/**
+ * struct rdma_netdev - rdma netdev
+ * For cases where netstack interfacing is required.
+ */
+struct rdma_netdev {
+	void              *clnt_priv;
+	struct ib_device  *hca;
+	u8                 port_num;
+
+	/* control functions */
+	void (*set_id)(struct net_device *netdev, int id);
+	/* send packet */
+	int (*send)(struct net_device *dev, struct sk_buff *skb,
+		    struct ib_ah *address, u32 dqpn);
+	/* multicast */
+	int (*attach_mcast)(struct net_device *dev, struct ib_device *hca,
+			    union ib_gid *gid, u16 mlid,
+			    int set_qkey, u32 qkey);
+	int (*detach_mcast)(struct net_device *dev, struct ib_device *hca,
+			    union ib_gid *gid, u16 mlid);
 };
 
 struct ib_device {
@@ -2114,6 +2167,20 @@ struct ib_device {
 							   struct ib_rwq_ind_table_init_attr *init_attr,
 							   struct ib_udata *udata);
 	int                        (*destroy_rwq_ind_table)(struct ib_rwq_ind_table *wq_ind_table);
+	/**
+	 * rdma netdev operations
+	 *
+	 * Driver implementing alloc_rdma_netdev must return -EOPNOTSUPP if it
+	 * doesn't support the specified rdma netdev type.
+	 */
+	struct net_device *(*alloc_rdma_netdev)(
+					struct ib_device *device,
+					u8 port_num,
+					enum rdma_netdev_t type,
+					const char *name,
+					unsigned char name_assign_type,
+					void (*setup)(struct net_device *));
+	void (*free_rdma_netdev)(struct net_device *netdev);
 
 	struct module               *owner;
 	struct device                dev;

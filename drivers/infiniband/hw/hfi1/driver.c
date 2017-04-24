@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2015, 2016 Intel Corporation.
+ * Copyright(c) 2015-2017 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
@@ -59,6 +59,8 @@
 #include "trace.h"
 #include "qp.h"
 #include "sdma.h"
+#include "debugfs.h"
+#include "vnic.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -872,20 +874,42 @@ bail:
 	return last;
 }
 
-static inline void set_all_nodma_rtail(struct hfi1_devdata *dd)
+static inline void set_nodma_rtail(struct hfi1_devdata *dd, u8 ctxt)
 {
 	int i;
 
-	for (i = HFI1_CTRL_CTXT + 1; i < dd->first_user_ctxt; i++)
+	/*
+	 * For dynamically allocated kernel contexts (like vnic) switch
+	 * interrupt handler only for that context. Otherwise, switch
+	 * interrupt handler for all statically allocated kernel contexts.
+	 */
+	if (ctxt >= dd->first_dyn_alloc_ctxt) {
+		dd->rcd[ctxt]->do_interrupt =
+			&handle_receive_interrupt_nodma_rtail;
+		return;
+	}
+
+	for (i = HFI1_CTRL_CTXT + 1; i < dd->first_dyn_alloc_ctxt; i++)
 		dd->rcd[i]->do_interrupt =
 			&handle_receive_interrupt_nodma_rtail;
 }
 
-static inline void set_all_dma_rtail(struct hfi1_devdata *dd)
+static inline void set_dma_rtail(struct hfi1_devdata *dd, u8 ctxt)
 {
 	int i;
 
-	for (i = HFI1_CTRL_CTXT + 1; i < dd->first_user_ctxt; i++)
+	/*
+	 * For dynamically allocated kernel contexts (like vnic) switch
+	 * interrupt handler only for that context. Otherwise, switch
+	 * interrupt handler for all statically allocated kernel contexts.
+	 */
+	if (ctxt >= dd->first_dyn_alloc_ctxt) {
+		dd->rcd[ctxt]->do_interrupt =
+			&handle_receive_interrupt_dma_rtail;
+		return;
+	}
+
+	for (i = HFI1_CTRL_CTXT + 1; i < dd->first_dyn_alloc_ctxt; i++)
 		dd->rcd[i]->do_interrupt =
 			&handle_receive_interrupt_dma_rtail;
 }
@@ -895,8 +919,13 @@ void set_all_slowpath(struct hfi1_devdata *dd)
 	int i;
 
 	/* HFI1_CTRL_CTXT must always use the slow path interrupt handler */
-	for (i = HFI1_CTRL_CTXT + 1; i < dd->first_user_ctxt; i++)
-		dd->rcd[i]->do_interrupt = &handle_receive_interrupt;
+	for (i = HFI1_CTRL_CTXT + 1; i < dd->num_rcv_contexts; i++) {
+		struct hfi1_ctxtdata *rcd = dd->rcd[i];
+
+		if ((i < dd->first_dyn_alloc_ctxt) ||
+		    (rcd && rcd->sc && (rcd->sc->type == SC_KERNEL)))
+			rcd->do_interrupt = &handle_receive_interrupt;
+	}
 }
 
 static inline int set_armed_to_active(struct hfi1_ctxtdata *rcd,
@@ -1006,7 +1035,7 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 				last = RCV_PKT_DONE;
 			if (needset) {
 				dd_dev_info(dd, "Switching to NO_DMA_RTAIL\n");
-				set_all_nodma_rtail(dd);
+				set_nodma_rtail(dd, rcd->ctxt);
 				needset = 0;
 			}
 		} else {
@@ -1028,7 +1057,7 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 			if (needset) {
 				dd_dev_info(dd,
 					    "Switching to DMA_RTAIL\n");
-				set_all_dma_rtail(dd);
+				set_dma_rtail(dd, rcd->ctxt);
 				needset = 0;
 			}
 		}
@@ -1077,10 +1106,10 @@ void receive_interrupt_work(struct work_struct *work)
 	set_link_state(ppd, HLS_UP_ACTIVE);
 
 	/*
-	 * Interrupt all kernel contexts that could have had an
-	 * interrupt during auto activation.
+	 * Interrupt all statically allocated kernel contexts that could
+	 * have had an interrupt during auto activation.
 	 */
-	for (i = HFI1_CTRL_CTXT; i < dd->first_user_ctxt; i++)
+	for (i = HFI1_CTRL_CTXT; i < dd->first_dyn_alloc_ctxt; i++)
 		force_recv_intr(dd->rcd[i]);
 }
 
@@ -1294,7 +1323,8 @@ int hfi1_reset_device(int unit)
 
 	spin_lock_irqsave(&dd->uctxt_lock, flags);
 	if (dd->rcd)
-		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
+		for (i = dd->first_dyn_alloc_ctxt;
+		     i < dd->num_rcv_contexts; i++) {
 			if (!dd->rcd[i] || !dd->rcd[i]->cnt)
 				continue;
 			spin_unlock_irqrestore(&dd->uctxt_lock, flags);
@@ -1354,6 +1384,9 @@ void handle_eflags(struct hfi1_packet *packet)
  */
 int process_receive_ib(struct hfi1_packet *packet)
 {
+	if (unlikely(hfi1_dbg_fault_packet(packet)))
+		return RHF_RCV_CONTINUE;
+
 	trace_hfi1_rcvhdr(packet->rcd->ppd->dd,
 			  packet->rcd->ctxt,
 			  rhf_err_flags(packet->rhf),
@@ -1362,6 +1395,11 @@ int process_receive_ib(struct hfi1_packet *packet)
 			  packet->tlen,
 			  packet->updegr,
 			  rhf_egr_index(packet->rhf));
+
+	if (unlikely(
+		 (hfi1_dbg_fault_suppress_err(&packet->rcd->dd->verbs_dev) &&
+		 (packet->rhf & RHF_DC_ERR))))
+		return RHF_RCV_CONTINUE;
 
 	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
@@ -1372,15 +1410,31 @@ int process_receive_ib(struct hfi1_packet *packet)
 	return RHF_RCV_CONTINUE;
 }
 
+static inline bool hfi1_is_vnic_packet(struct hfi1_packet *packet)
+{
+	/* Packet received in VNIC context via RSM */
+	if (packet->rcd->is_vnic)
+		return true;
+
+	if ((HFI1_GET_L2_TYPE(packet->ebuf) == OPA_VNIC_L2_TYPE) &&
+	    (HFI1_GET_L4_TYPE(packet->ebuf) == OPA_VNIC_L4_ETHR))
+		return true;
+
+	return false;
+}
+
 int process_receive_bypass(struct hfi1_packet *packet)
 {
 	struct hfi1_devdata *dd = packet->rcd->dd;
 
-	if (unlikely(rhf_err_flags(packet->rhf)))
+	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
+	} else if (hfi1_is_vnic_packet(packet)) {
+		hfi1_vnic_bypass_rcv(packet);
+		return RHF_RCV_CONTINUE;
+	}
 
-	dd_dev_err(dd,
-		   "Bypass packets are not supported in normal operation. Dropping\n");
+	dd_dev_err(dd, "Unsupported bypass packet. Dropping\n");
 	incr_cntr64(&dd->sw_rcv_bypass_packet_errors);
 	if (!(dd->err_info_rcvport.status_and_code & OPA_EI_STATUS_SMASK)) {
 		u64 *flits = packet->ebuf;
@@ -1398,6 +1452,12 @@ int process_receive_bypass(struct hfi1_packet *packet)
 
 int process_receive_error(struct hfi1_packet *packet)
 {
+	/* KHdrHCRCErr -- KDETH packet with a bad HCRC */
+	if (unlikely(
+		 hfi1_dbg_fault_suppress_err(&packet->rcd->dd->verbs_dev) &&
+		 rhf_rcv_type_err(packet->rhf) == 3))
+		return RHF_RCV_CONTINUE;
+
 	handle_eflags(packet);
 
 	if (unlikely(rhf_err_flags(packet->rhf)))
@@ -1409,6 +1469,8 @@ int process_receive_error(struct hfi1_packet *packet)
 
 int kdeth_process_expected(struct hfi1_packet *packet)
 {
+	if (unlikely(hfi1_dbg_fault_packet(packet)))
+		return RHF_RCV_CONTINUE;
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
@@ -1421,6 +1483,8 @@ int kdeth_process_eager(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
+	if (unlikely(hfi1_dbg_fault_packet(packet)))
+		return RHF_RCV_CONTINUE;
 
 	dd_dev_err(packet->rcd->dd,
 		   "Unhandled eager packet received. Dropping.\n");
