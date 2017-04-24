@@ -18,10 +18,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include <linux/spinlock.h>	/* spinlock_t                                   */
-#include <linux/sched.h>	/* wait_queue_head_t                            */
-#include <linux/types.h>	/* pid_t                                        */
-#include <linux/netdevice.h>	/* struct net_device_stats,  struct sk_buff     */
+#include <linux/spinlock.h>	/* spinlock_t */
+#include <linux/sched.h>	/* wait_queue_head_t */
+#include <linux/types.h>	/* pid_t */
+#include <linux/netdevice.h>	/* struct net_device_stats,  struct sk_buff */
 #include <linux/etherdevice.h>
 #include <linux/wireless.h>
 #include <linux/atomic.h>	/* struct atomic_t */
@@ -36,7 +36,10 @@
 
 #ifdef KS_WLAN_DEBUG
 #define DPRINTK(n, fmt, args...) \
-                 if (KS_WLAN_DEBUG > (n)) printk(KERN_NOTICE "%s: "fmt, __FUNCTION__, ## args)
+	do { \
+		if (KS_WLAN_DEBUG > (n)) \
+			pr_notice("%s: "fmt, __func__, ## args); \
+	} while (0)
 #else
 #define DPRINTK(n, fmt, args...)
 #endif
@@ -85,23 +88,23 @@ enum {
 };
 
 /* SME flag */
-#define SME_MODE_SET	    (1<<0)
-#define SME_RTS             (1<<1)
-#define SME_FRAG            (1<<2)
-#define SME_WEP_FLAG        (1<<3)
-#define SME_WEP_INDEX       (1<<4)
-#define SME_WEP_VAL1        (1<<5)
-#define SME_WEP_VAL2        (1<<6)
-#define SME_WEP_VAL3        (1<<7)
-#define SME_WEP_VAL4        (1<<8)
+#define SME_MODE_SET	    BIT(0)
+#define SME_RTS             BIT(1)
+#define SME_FRAG            BIT(2)
+#define SME_WEP_FLAG        BIT(3)
+#define SME_WEP_INDEX       BIT(4)
+#define SME_WEP_VAL1        BIT(5)
+#define SME_WEP_VAL2        BIT(6)
+#define SME_WEP_VAL3        BIT(7)
+#define SME_WEP_VAL4        BIT(8)
 #define SME_WEP_VAL_MASK    (SME_WEP_VAL1 | SME_WEP_VAL2 | SME_WEP_VAL3 | SME_WEP_VAL4)
-#define SME_RSN             (1<<9)
-#define SME_RSN_MULTICAST   (1<<10)
-#define SME_RSN_UNICAST	    (1<<11)
-#define SME_RSN_AUTH	    (1<<12)
+#define SME_RSN             BIT(9)
+#define SME_RSN_MULTICAST   BIT(10)
+#define SME_RSN_UNICAST	    BIT(11)
+#define SME_RSN_AUTH	    BIT(12)
 
-#define SME_AP_SCAN         (1<<13)
-#define SME_MULTICAST       (1<<14)
+#define SME_AP_SCAN         BIT(13)
+#define SME_MULTICAST       BIT(14)
 
 /* SME Event */
 enum {
@@ -356,7 +359,8 @@ struct wpa_key_t {
 	u8 rx_seq[IW_ENCODE_SEQ_MAX_SIZE];	/* LSB first */
 	struct sockaddr addr;	/* ff:ff:ff:ff:ff:ff for broadcast/multicast
 				 * (group) keys or unicast address for
-				 * individual keys */
+				 * individual keys
+				 */
 	u16 alg;
 	u16 key_len;	/* WEP: 5 or 13, TKIP: 32, CCMP: 16 */
 	u8 key_val[IW_ENCODING_TOKEN_MAX];
@@ -409,7 +413,11 @@ struct wps_status_t {
 #endif /* WPS */
 
 struct ks_wlan_private {
-	struct hw_info_t ks_wlan_hw;	/* hardware information */
+	/* hardware information */
+	struct ks_sdio_card *ks_sdio_card;
+	struct workqueue_struct *wq;
+	struct delayed_work rw_dwork;
+	struct tasklet_struct rx_bh_task;
 
 	struct net_device *net_dev;
 	int reg_net;	/* register_netdev */
@@ -425,7 +433,7 @@ struct ks_wlan_private {
 	u8 *rxp;
 	unsigned int rx_size;
 	struct tasklet_struct sme_task;
-	struct work_struct ks_wlan_wakeup_task;
+	struct work_struct wakeup_work;
 	int scan_ind_count;
 
 	unsigned char eth_addr[ETH_ALEN];
