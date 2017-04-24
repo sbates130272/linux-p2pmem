@@ -24,7 +24,7 @@ upstream.
    The homepage of ACPICA project is: www.acpica.org, it is maintained and
    supported by Intel Corporation.
 
-   The following figure depicts the Linux ACPI subystem where the ACPICA
+   The following figure depicts the Linux ACPI subsystem where the ACPICA
    adaptation is included:
 
       +---------------------------------------------------------+
@@ -165,7 +165,7 @@ upstream.
        <http://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git>.
 
    Before the linuxized ACPICA patches are sent to the Linux ACPI community
-   for review, there is a quality ensurance build test process to reduce
+   for review, there is a quality assurance build test process to reduce
    porting issues.  Currently this build process only takes care of the
    following kernel configuration options:
    CONFIG_ACPI/CONFIG_ACPI_DEBUG/CONFIG_ACPI_DEBUGGER
