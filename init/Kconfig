@@ -521,6 +521,7 @@ config RCU_EXPERT
 
 config SRCU
 	bool
+	default y
 	help
 	  This option selects the sleepable version of RCU. This version
 	  permits arbitrary sleeping or blocking within RCU read-side critical
@@ -545,13 +546,13 @@ config CLASSIC_SRCU
 
 config TINY_SRCU
 	bool
-	default y if TINY_RCU && !CLASSIC_SRCU
+	default y if SRCU && TINY_RCU && !CLASSIC_SRCU
 	help
 	  This option selects the single-CPU non-preemptible version of SRCU.
 
 config TREE_SRCU
 	bool
-	default y if !TINY_RCU && !CLASSIC_SRCU
+	default y if SRCU && !TINY_RCU && !CLASSIC_SRCU
 	help
 	  This option selects the full-fledged version of SRCU.
 

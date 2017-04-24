@@ -27,15 +27,15 @@
 #include <linux/swait.h>
 
 struct srcu_struct {
-	int srcu_lock_nesting[2];	/* srcu_read_lock() nesting depth. */
+	short srcu_lock_nesting[2];	/* srcu_read_lock() nesting depth. */
+	short srcu_idx;			/* Current reader array element. */
+	u8 srcu_gp_running;		/* GP workqueue running? */
+	u8 srcu_gp_waiting;		/* GP waiting for readers? */
 	struct swait_queue_head srcu_wq;
 					/* Last srcu_read_unlock() wakes GP. */
 	unsigned long srcu_gp_seq;	/* GP seq # for callback tagging. */
 	struct rcu_segcblist srcu_cblist;
 					/* Pending SRCU callbacks. */
-	int srcu_idx;			/* Current reader array element. */
-	bool srcu_gp_running;		/* GP workqueue running? */
-	bool srcu_gp_waiting;		/* GP waiting for readers? */
 	struct work_struct srcu_work;	/* For driving grace periods. */
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map dep_map;
@@ -76,6 +76,18 @@ static inline void srcu_barrier(struct srcu_struct *sp)
 static inline unsigned long srcu_batches_completed(struct srcu_struct *sp)
 {
 	return 0;
+}
+
+static inline void srcutorture_get_gp_data(enum rcutorture_type test_type,
+					   struct srcu_struct *sp, int *flags,
+					   unsigned long *gpnum,
+					   unsigned long *completed)
+{
+	if (test_type != SRCU_FLAVOR)
+		return;
+	*flags = 0;
+	*completed = sp->srcu_gp_seq;
+	*gpnum = *completed;
 }
 
 #endif

@@ -66,8 +66,12 @@ static void init_srcu_struct_nodes(struct srcu_struct *sp, bool is_static)
 	/* Each pass through this loop initializes one srcu_node structure. */
 	rcu_for_each_node_breadth_first(sp, snp) {
 		spin_lock_init(&snp->lock);
-		for (i = 0; i < ARRAY_SIZE(snp->srcu_have_cbs); i++)
+		WARN_ON_ONCE(ARRAY_SIZE(snp->srcu_have_cbs) !=
+			     ARRAY_SIZE(snp->srcu_data_have_cbs));
+		for (i = 0; i < ARRAY_SIZE(snp->srcu_have_cbs); i++) {
 			snp->srcu_have_cbs[i] = 0;
+			snp->srcu_data_have_cbs[i] = 0;
+		}
 		snp->grplo = -1;
 		snp->grphi = -1;
 		if (snp == &sp->node[0]) {
@@ -107,6 +111,7 @@ static void init_srcu_struct_nodes(struct srcu_struct *sp, bool is_static)
 		sdp->cpu = cpu;
 		INIT_DELAYED_WORK(&sdp->work, srcu_invoke_callbacks);
 		sdp->sp = sp;
+		sdp->grpmask = 1 << (cpu - sdp->mynode->grplo);
 		if (is_static)
 			continue;
 
@@ -262,15 +267,20 @@ static bool srcu_readers_active_idx_check(struct srcu_struct *sp, int idx)
 	 * not mean that there are no more readers, as one could have read
 	 * the current index but not have incremented the lock counter yet.
 	 *
-	 * Possible bug: There is no guarantee that there haven't been
-	 * ULONG_MAX increments of ->srcu_lock_count[] since the unlocks were
-	 * counted, meaning that this could return true even if there are
-	 * still active readers.  Since there are no memory barriers around
-	 * srcu_flip(), the CPU is not required to increment ->srcu_idx
-	 * before running srcu_readers_unlock_idx(), which means that there
-	 * could be an arbitrarily large number of critical sections that
-	 * execute after srcu_readers_unlock_idx() but use the old value
-	 * of ->srcu_idx.
+	 * So suppose that the updater is preempted here for so long
+	 * that more than ULONG_MAX non-nested readers come and go in
+	 * the meantime.  It turns out that this cannot result in overflow
+	 * because if a reader modifies its unlock count after we read it
+	 * above, then that reader's next load of ->srcu_idx is guaranteed
+	 * to get the new value, which will cause it to operate on the
+	 * other bank of counters, where it cannot contribute to the
+	 * overflow of these counters.  This means that there is a maximum
+	 * of 2*NR_CPUS increments, which cannot overflow given current
+	 * systems, especially not on 64-bit systems.
+	 *
+	 * OK, how about nesting?  This does impose a limit on nesting
+	 * of floor(ULONG_MAX/NR_CPUS/2), which should be sufficient,
+	 * especially on 64-bit systems.
 	 */
 	return srcu_readers_lock_idx(sp, idx) == unlocks;
 }
@@ -434,16 +444,21 @@ static void srcu_schedule_cbs_sdp(struct srcu_data *sdp, unsigned long delay)
 
 /*
  * Schedule callback invocation for all srcu_data structures associated
- * with the specified srcu_node structure, if possible, on the corresponding
- * CPUs.
+ * with the specified srcu_node structure that have callbacks for the
+ * just-completed grace period, the one corresponding to idx.  If possible,
+ * schedule this invocation on the corresponding CPUs.
  */
-static void srcu_schedule_cbs_snp(struct srcu_struct *sp, struct srcu_node *snp)
+static void srcu_schedule_cbs_snp(struct srcu_struct *sp, struct srcu_node *snp,
+				  unsigned long mask)
 {
 	int cpu;
 
-	for (cpu = snp->grplo; cpu <= snp->grphi; cpu++)
+	for (cpu = snp->grplo; cpu <= snp->grphi; cpu++) {
+		if (!(mask & (1 << (cpu - snp->grplo))))
+			continue;
 		srcu_schedule_cbs_sdp(per_cpu_ptr(sp->sda, cpu),
 				      atomic_read(&sp->srcu_exp_cnt) ? 0 : SRCU_INTERVAL);
+	}
 }
 
 /*
@@ -461,6 +476,7 @@ static void srcu_gp_end(struct srcu_struct *sp)
 	unsigned long gpseq;
 	int idx;
 	int idxnext;
+	unsigned long mask;
 	struct srcu_node *snp;
 
 	/* Prevent more than one additional grace period. */
@@ -486,10 +502,12 @@ static void srcu_gp_end(struct srcu_struct *sp)
 			cbs = snp->srcu_have_cbs[idx] == gpseq;
 		snp->srcu_have_cbs[idx] = gpseq;
 		rcu_seq_set_state(&snp->srcu_have_cbs[idx], 1);
+		mask = snp->srcu_data_have_cbs[idx];
+		snp->srcu_data_have_cbs[idx] = 0;
 		spin_unlock_irq(&snp->lock);
 		if (cbs) {
 			smp_mb(); /* GP end before CB invocation. */
-			srcu_schedule_cbs_snp(sp, snp);
+			srcu_schedule_cbs_snp(sp, snp, mask);
 		}
 	}
 
@@ -536,6 +554,8 @@ static void srcu_funnel_gp_start(struct srcu_struct *sp,
 		spin_lock_irqsave(&snp->lock, flags);
 		if (ULONG_CMP_GE(snp->srcu_have_cbs[idx], s)) {
 			snp_seq = snp->srcu_have_cbs[idx];
+			if (snp == sdp->mynode && snp_seq == s)
+				snp->srcu_data_have_cbs[idx] |= sdp->grpmask;
 			spin_unlock_irqrestore(&snp->lock, flags);
 			if (snp == sdp->mynode && snp_seq != s) {
 				smp_mb(); /* CBs after GP! */
@@ -544,6 +564,8 @@ static void srcu_funnel_gp_start(struct srcu_struct *sp,
 			return;
 		}
 		snp->srcu_have_cbs[idx] = s;
+		if (snp == sdp->mynode)
+			snp->srcu_data_have_cbs[idx] |= sdp->grpmask;
 		spin_unlock_irqrestore(&snp->lock, flags);
 	}
 
@@ -593,6 +615,16 @@ static bool try_check_zero(struct srcu_struct *sp, int idx, int trycount)
  */
 static void srcu_flip(struct srcu_struct *sp)
 {
+	/*
+	 * Ensure that if this updater saw a given reader's increment
+	 * from __srcu_read_lock(), that reader was using an old value
+	 * of ->srcu_idx.  Also ensure that if a given reader sees the
+	 * new value of ->srcu_idx, this updater's earlier scans cannot
+	 * have seen that reader's increments (which is OK, because this
+	 * grace period need not wait on that reader).
+	 */
+	smp_mb(); /* E */  /* Pairs with B and C. */
+
 	WRITE_ONCE(sp->srcu_idx, sp->srcu_idx + 1);
 
 	/*
@@ -994,3 +1026,23 @@ void process_srcu(struct work_struct *work)
 	srcu_reschedule(sp, atomic_read(&sp->srcu_exp_cnt) ? 0 : SRCU_INTERVAL);
 }
 EXPORT_SYMBOL_GPL(process_srcu);
+
+void srcutorture_get_gp_data(enum rcutorture_type test_type,
+					   struct srcu_struct *sp, int *flags,
+					   unsigned long *gpnum,
+					   unsigned long *completed)
+{
+	if (test_type != SRCU_FLAVOR)
+		return;
+	*flags = 0;
+	*completed = rcu_seq_ctr(sp->srcu_gp_seq);
+	*gpnum = rcu_seq_ctr(sp->srcu_gp_seq_needed);
+}
+EXPORT_SYMBOL_GPL(srcutorture_get_gp_data);
+
+static int __init srcu_bootup_announce(void)
+{
+	pr_info("Hierarchical SRCU implementation.\n");
+	return 0;
+}
+early_initcall(srcu_bootup_announce);

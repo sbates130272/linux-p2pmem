@@ -478,7 +478,7 @@ void rcu_note_context_switch(bool preempt)
 	barrier(); /* Avoid RCU read-side critical sections leaking down. */
 	trace_rcu_utilization(TPS("Start context switch"));
 	rcu_sched_qs();
-	rcu_preempt_note_context_switch();
+	rcu_preempt_note_context_switch(preempt);
 	/* Load rcu_urgent_qs before other flags. */
 	if (!smp_load_acquire(this_cpu_ptr(&rcu_dynticks.rcu_urgent_qs)))
 		goto out;
@@ -719,15 +719,11 @@ void rcutorture_get_gp_data(enum rcutorture_type test_type, int *flags,
 	default:
 		break;
 	}
-	if (rsp != NULL) {
-		*flags = READ_ONCE(rsp->gp_flags);
-		*gpnum = READ_ONCE(rsp->gpnum);
-		*completed = READ_ONCE(rsp->completed);
+	if (rsp == NULL)
 		return;
-	}
-	*flags = 0;
-	*gpnum = 0;
-	*completed = 0;
+	*flags = READ_ONCE(rsp->gp_flags);
+	*gpnum = READ_ONCE(rsp->gpnum);
+	*completed = READ_ONCE(rsp->completed);
 }
 EXPORT_SYMBOL_GPL(rcutorture_get_gp_data);
 
@@ -3286,12 +3282,6 @@ static inline int rcu_blocking_is_gp(void)
  * to have executed a full memory barrier during the execution of
  * synchronize_sched() -- even if CPU A and CPU B are the same CPU (but
  * again only if the system has more than one CPU).
- *
- * This primitive provides the guarantees made by the (now removed)
- * synchronize_kernel() API.  In contrast, synchronize_rcu() only
- * guarantees that rcu_read_lock() sections will have completed.
- * In "classic RCU", these two guarantees happen to be one and
- * the same, but can differ in realtime RCU implementations.
  */
 void synchronize_sched(void)
 {
@@ -3584,8 +3574,14 @@ static void rcu_barrier_func(void *type)
 	struct rcu_data *rdp = raw_cpu_ptr(rsp->rda);
 
 	_rcu_barrier_trace(rsp, "IRQ", -1, rsp->barrier_sequence);
-	atomic_inc(&rsp->barrier_cpu_count);
-	rsp->call(&rdp->barrier_head, rcu_barrier_callback);
+	rdp->barrier_head.func = rcu_barrier_callback;
+	debug_rcu_head_queue(&rdp->barrier_head);
+	if (rcu_segcblist_entrain(&rdp->cblist, &rdp->barrier_head, 0)) {
+		atomic_inc(&rsp->barrier_cpu_count);
+	} else {
+		debug_rcu_head_unqueue(&rdp->barrier_head);
+		_rcu_barrier_trace(rsp, "IRQNQ", -1, rsp->barrier_sequence);
+	}
 }
 
 /*
