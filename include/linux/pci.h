@@ -1297,7 +1297,6 @@ struct msix_entry {
 int pci_msi_vec_count(struct pci_dev *dev);
 void pci_disable_msi(struct pci_dev *dev);
 int pci_msix_vec_count(struct pci_dev *dev);
-int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec);
 void pci_disable_msix(struct pci_dev *dev);
 void pci_restore_msi_state(struct pci_dev *dev);
 int pci_msi_enabled(void);
@@ -1325,9 +1324,6 @@ int pci_irq_get_node(struct pci_dev *pdev, int vec);
 static inline int pci_msi_vec_count(struct pci_dev *dev) { return -ENOSYS; }
 static inline void pci_disable_msi(struct pci_dev *dev) { }
 static inline int pci_msix_vec_count(struct pci_dev *dev) { return -ENOSYS; }
-static inline int pci_enable_msix(struct pci_dev *dev,
-				  struct msix_entry *entries, int nvec)
-{ return -ENOSYS; }
 static inline void pci_disable_msix(struct pci_dev *dev) { }
 static inline void pci_restore_msi_state(struct pci_dev *dev) { }
 static inline int pci_msi_enabled(void) { return 0; }

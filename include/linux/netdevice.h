@@ -41,7 +41,6 @@
 
 #include <linux/ethtool.h>
 #include <net/net_namespace.h>
-#include <net/dsa.h>
 #ifdef CONFIG_DCB
 #include <net/dcbnl.h>
 #endif
@@ -57,6 +56,8 @@
 struct netpoll_info;
 struct device;
 struct phy_device;
+struct dsa_switch_tree;
+
 /* 802.11 specific */
 struct wireless_dev;
 /* 802.15.4 specific */
@@ -236,8 +237,7 @@ struct netdev_hw_addr_list {
 	netdev_hw_addr_list_for_each(ha, &(dev)->mc)
 
 struct hh_cache {
-	u16		hh_len;
-	u16		__pad;
+	unsigned int	hh_len;
 	seqlock_t	hh_lock;
 
 	/* cached hardware header; allow for machine alignment needs.        */
@@ -786,11 +786,11 @@ struct tc_cls_u32_offload;
 struct tc_to_netdev {
 	unsigned int type;
 	union {
-		u8 tc;
 		struct tc_cls_u32_offload *cls_u32;
 		struct tc_cls_flower_offload *cls_flower;
 		struct tc_cls_matchall_offload *cls_mall;
 		struct tc_cls_bpf_offload *cls_bpf;
+		struct tc_mqprio_qopt *mqprio;
 	};
 	bool egress_dev;
 };
@@ -822,6 +822,16 @@ struct netdev_xdp {
 		bool prog_attached;
 	};
 };
+
+#ifdef CONFIG_XFRM_OFFLOAD
+struct xfrmdev_ops {
+	int	(*xdo_dev_state_add) (struct xfrm_state *x);
+	void	(*xdo_dev_state_delete) (struct xfrm_state *x);
+	void	(*xdo_dev_state_free) (struct xfrm_state *x);
+	bool	(*xdo_dev_offload_ok) (struct sk_buff *skb,
+				       struct xfrm_state *x);
+};
+#endif
 
 /*
  * This structure defines the management hooks for network devices.
@@ -1696,6 +1706,10 @@ struct net_device {
 	const struct ndisc_ops *ndisc_ops;
 #endif
 
+#ifdef CONFIG_XFRM
+	const struct xfrmdev_ops *xfrmdev_ops;
+#endif
+
 	const struct header_ops *header_ops;
 
 	unsigned int		flags;
@@ -1715,7 +1729,7 @@ struct net_device {
 	unsigned int		max_mtu;
 	unsigned short		type;
 	unsigned short		hard_header_len;
-	unsigned short		min_header_len;
+	unsigned char		min_header_len;
 
 	unsigned short		needed_headroom;
 	unsigned short		needed_tailroom;
@@ -2002,15 +2016,6 @@ static inline
 void dev_net_set(struct net_device *dev, struct net *net)
 {
 	write_pnet(&dev->nd_net, net);
-}
-
-static inline bool netdev_uses_dsa(struct net_device *dev)
-{
-#if IS_ENABLED(CONFIG_NET_DSA)
-	if (dev->dsa_ptr != NULL)
-		return dsa_uses_tagged_protocol(dev->dsa_ptr);
-#endif
-	return false;
 }
 
 /**
@@ -3305,6 +3310,7 @@ static __always_inline int ____dev_forward_skb(struct net_device *dev,
 void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev);
 
 extern int		netdev_budget;
+extern unsigned int	netdev_budget_usecs;
 
 /* Called by rtnetlink.c:rtnl_unlock() */
 void netdev_run_todo(void);
@@ -4078,6 +4084,7 @@ static inline bool net_gso_ok(netdev_features_t features, int gso_type)
 	BUILD_BUG_ON(SKB_GSO_PARTIAL != (NETIF_F_GSO_PARTIAL >> NETIF_F_GSO_SHIFT));
 	BUILD_BUG_ON(SKB_GSO_TUNNEL_REMCSUM != (NETIF_F_GSO_TUNNEL_REMCSUM >> NETIF_F_GSO_SHIFT));
 	BUILD_BUG_ON(SKB_GSO_SCTP    != (NETIF_F_GSO_SCTP >> NETIF_F_GSO_SHIFT));
+	BUILD_BUG_ON(SKB_GSO_ESP != (NETIF_F_GSO_ESP >> NETIF_F_GSO_SHIFT));
 
 	return (features & feature) == feature;
 }
@@ -4178,6 +4185,11 @@ static inline bool netif_is_bridge_port(const struct net_device *dev)
 static inline bool netif_is_ovs_master(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_OPENVSWITCH;
+}
+
+static inline bool netif_is_ovs_port(const struct net_device *dev)
+{
+	return dev->priv_flags & IFF_OVS_DATAPATH;
 }
 
 static inline bool netif_is_team_master(const struct net_device *dev)

@@ -328,21 +328,16 @@ static void fl_destroy_rcu(struct rcu_head *rcu)
 	schedule_work(&head->work);
 }
 
-static bool fl_destroy(struct tcf_proto *tp, bool force)
+static void fl_destroy(struct tcf_proto *tp)
 {
 	struct cls_fl_head *head = rtnl_dereference(tp->root);
 	struct cls_fl_filter *f, *next;
-
-	if (!force && !list_empty(&head->filters))
-		return false;
 
 	list_for_each_entry_safe(f, next, &head->filters, list)
 		__fl_delete(tp, f);
 
 	__module_get(THIS_MODULE);
 	call_rcu(&head->rcu, fl_destroy_rcu);
-
-	return true;
 }
 
 static unsigned long fl_get(struct tcf_proto *tp, u32 handle)
@@ -848,7 +843,8 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	if (!tb)
 		return -ENOBUFS;
 
-	err = nla_parse_nested(tb, TCA_FLOWER_MAX, tca[TCA_OPTIONS], fl_policy);
+	err = nla_parse_nested(tb, TCA_FLOWER_MAX, tca[TCA_OPTIONS],
+			       fl_policy, NULL);
 	if (err < 0)
 		goto errout_tb;
 
@@ -946,7 +942,7 @@ errout_tb:
 	return err;
 }
 
-static int fl_delete(struct tcf_proto *tp, unsigned long arg)
+static int fl_delete(struct tcf_proto *tp, unsigned long arg, bool *last)
 {
 	struct cls_fl_head *head = rtnl_dereference(tp->root);
 	struct cls_fl_filter *f = (struct cls_fl_filter *) arg;
@@ -955,6 +951,7 @@ static int fl_delete(struct tcf_proto *tp, unsigned long arg)
 		rhashtable_remove_fast(&head->ht, &f->ht_node,
 				       head->ht_params);
 	__fl_delete(tp, f);
+	*last = list_empty(&head->filters);
 	return 0;
 }
 

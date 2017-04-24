@@ -3768,11 +3768,12 @@ void tcp_parse_options(const struct sk_buff *skb,
 				    !estab && sysctl_tcp_window_scaling) {
 					__u8 snd_wscale = *(__u8 *)ptr;
 					opt_rx->wscale_ok = 1;
-					if (snd_wscale > 14) {
-						net_info_ratelimited("%s: Illegal window scaling value %d >14 received\n",
+					if (snd_wscale > TCP_MAX_WSCALE) {
+						net_info_ratelimited("%s: Illegal window scaling value %d > %u received\n",
 								     __func__,
-								     snd_wscale);
-						snd_wscale = 14;
+								     snd_wscale,
+								     TCP_MAX_WSCALE);
+						snd_wscale = TCP_MAX_WSCALE;
 					}
 					opt_rx->snd_wscale = snd_wscale;
 				}
@@ -4007,10 +4008,10 @@ void tcp_reset(struct sock *sk)
 	/* This barrier is coupled with smp_rmb() in tcp_poll() */
 	smp_wmb();
 
+	tcp_done(sk);
+
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_error_report(sk);
-
-	tcp_done(sk);
 }
 
 /*
@@ -5579,10 +5580,6 @@ void tcp_finish_connect(struct sock *sk, struct sk_buff *skb)
 	else
 		tp->pred_flags = 0;
 
-	if (!sock_flag(sk, SOCK_DEAD)) {
-		sk->sk_state_change(sk);
-		sk_wake_async(sk, SOCK_WAKE_IO, POLL_OUT);
-	}
 }
 
 static bool tcp_rcv_fastopen_synack(struct sock *sk, struct sk_buff *synack,
@@ -5651,6 +5648,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_fastopen_cookie foc = { .len = -1 };
 	int saved_clamp = tp->rx_opt.mss_clamp;
+	bool fastopen_fail;
 
 	tcp_parse_options(skb, &tp->rx_opt, 0, &foc);
 	if (tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr)
@@ -5754,10 +5752,15 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 		tcp_finish_connect(sk, skb);
 
-		if ((tp->syn_fastopen || tp->syn_data) &&
-		    tcp_rcv_fastopen_synack(sk, skb, &foc))
-			return -1;
+		fastopen_fail = (tp->syn_fastopen || tp->syn_data) &&
+				tcp_rcv_fastopen_synack(sk, skb, &foc);
 
+		if (!sock_flag(sk, SOCK_DEAD)) {
+			sk->sk_state_change(sk);
+			sk_wake_async(sk, SOCK_WAKE_IO, POLL_OUT);
+		}
+		if (fastopen_fail)
+			return -1;
 		if (sk->sk_write_pending ||
 		    icsk->icsk_accept_queue.rskq_defer_accept ||
 		    icsk->icsk_ack.pingpong) {
@@ -6333,36 +6336,14 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 		goto drop_and_free;
 
 	if (isn && tmp_opt.tstamp_ok)
-		af_ops->init_seq(skb, &tcp_rsk(req)->ts_off);
+		af_ops->init_seq_tsoff(skb, &tcp_rsk(req)->ts_off);
 
 	if (!want_cookie && !isn) {
-		/* VJ's idea. We save last timestamp seen
-		 * from the destination in peer table, when entering
-		 * state TIME-WAIT, and check against it before
-		 * accepting new connection request.
-		 *
-		 * If "isn" is not zero, this request hit alive
-		 * timewait bucket, so that all the necessary checks
-		 * are made in the function processing timewait state.
-		 */
-		if (net->ipv4.tcp_death_row.sysctl_tw_recycle) {
-			bool strict;
-
-			dst = af_ops->route_req(sk, &fl, req, &strict);
-
-			if (dst && strict &&
-			    !tcp_peer_is_proven(req, dst, true,
-						tmp_opt.saw_tstamp)) {
-				NET_INC_STATS(sock_net(sk), LINUX_MIB_PAWSPASSIVEREJECTED);
-				goto drop_and_release;
-			}
-		}
 		/* Kill the following clause, if you dislike this way. */
-		else if (!net->ipv4.sysctl_tcp_syncookies &&
-			 (net->ipv4.sysctl_max_syn_backlog - inet_csk_reqsk_queue_len(sk) <
-			  (net->ipv4.sysctl_max_syn_backlog >> 2)) &&
-			 !tcp_peer_is_proven(req, dst, false,
-					     tmp_opt.saw_tstamp)) {
+		if (!net->ipv4.sysctl_tcp_syncookies &&
+		    (net->ipv4.sysctl_max_syn_backlog - inet_csk_reqsk_queue_len(sk) <
+		     (net->ipv4.sysctl_max_syn_backlog >> 2)) &&
+		    !tcp_peer_is_proven(req, dst)) {
 			/* Without syncookies last quarter of
 			 * backlog is filled with destinations,
 			 * proven to be alive.
@@ -6375,10 +6356,10 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			goto drop_and_release;
 		}
 
-		isn = af_ops->init_seq(skb, &tcp_rsk(req)->ts_off);
+		isn = af_ops->init_seq_tsoff(skb, &tcp_rsk(req)->ts_off);
 	}
 	if (!dst) {
-		dst = af_ops->route_req(sk, &fl, req, NULL);
+		dst = af_ops->route_req(sk, &fl, req);
 		if (!dst)
 			goto drop_and_free;
 	}
