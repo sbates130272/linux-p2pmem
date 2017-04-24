@@ -84,8 +84,8 @@ static struct dma_buf_ops tee_shm_dma_buf_ops = {
 	.map_dma_buf = tee_shm_op_map_dma_buf,
 	.unmap_dma_buf = tee_shm_op_unmap_dma_buf,
 	.release = tee_shm_op_release,
-	.kmap_atomic = tee_shm_op_kmap_atomic,
-	.kmap = tee_shm_op_kmap,
+	.map_atomic = tee_shm_op_kmap_atomic,
+	.map = tee_shm_op_kmap,
 	.mmap = tee_shm_op_mmap,
 };
 
