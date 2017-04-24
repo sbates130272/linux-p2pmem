@@ -9,6 +9,6 @@
 #ifndef _UAPI_CRYPTO_H
 #define _UAPI_CRYPTO_H
 
-#define CRYPTO_MAX_ALG_NAME		64
+#define CRYPTO_MAX_ALG_NAME		128
 
 #endif /* _UAPI_CRYPTO_H */
