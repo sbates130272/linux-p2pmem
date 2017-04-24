@@ -404,6 +404,9 @@ config DMA_VIRT_OPS
 	depends on HAS_DMA && (!64BIT || ARCH_DMA_ADDR_T_64BIT)
 	default n
 
+config COPY_FROM_ITER_OPS
+	bool
+
 config CHECK_SIGNATURE
 	bool
 
@@ -544,9 +547,6 @@ config SG_POOL
 
 config ARCH_HAS_SG_CHAIN
 	def_bool n
-
-config ARCH_HAS_PMEM_API
-	bool
 
 config ARCH_HAS_MMIO_FLUSH
 	bool

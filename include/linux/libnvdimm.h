@@ -120,7 +120,7 @@ static inline struct nd_blk_region_desc *to_blk_region_desc(
 }
 
 int nvdimm_bus_add_poison(struct nvdimm_bus *nvdimm_bus, u64 addr, u64 length);
-void nvdimm_clear_from_poison_list(struct nvdimm_bus *nvdimm_bus,
+void nvdimm_forget_poison(struct nvdimm_bus *nvdimm_bus,
 		phys_addr_t start, unsigned int len);
 struct nvdimm_bus *nvdimm_bus_register(struct device *parent,
 		struct nvdimm_bus_descriptor *nfit_desc);
@@ -162,4 +162,17 @@ void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 u64 nd_fletcher64(void *addr, size_t len, bool le);
 void nvdimm_flush(struct nd_region *nd_region);
 int nvdimm_has_flush(struct nd_region *nd_region);
+int nvdimm_region_badblocks_clear(struct device *dev, void *data);
+void __nvdimm_bus_badblocks_clear(struct nvdimm_bus *nvdimm_bus,
+		struct resource *res);
+int nvdimm_has_cache(struct nd_region *nd_region);
+#ifdef CONFIG_ARCH_HAS_PMEM_API
+void arch_memcpy_to_pmem(void *dst, void *src, unsigned size);
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WB
+#else
+static inline void arch_memcpy_to_pmem(void *dst, void *src, unsigned size)
+{
+}
+#define ARCH_MEMREMAP_PMEM MEMREMAP_WT
+#endif /* CONFIG_ARCH_HAS_PMEM_API */
 #endif /* __LIBNVDIMM_H__ */
