@@ -48,9 +48,13 @@
 static int use_threaded_interrupts;
 module_param(use_threaded_interrupts, int, 0);
 
-static bool use_cmb_sqes = true;
-module_param(use_cmb_sqes, bool, 0644);
-MODULE_PARM_DESC(use_cmb_sqes, "use controller's memory buffer for I/O SQes");
+/*
+ * Use same encoding as NVMe CMBSZ register to set what capabilities
+ * you wish to support in the driver.
+ */
+static uint use_cmb;
+module_param(use_cmb, uint, 0644);
+MODULE_PARM_DESC(use_cmb, "use controller's memory buffer");
 
 static unsigned int max_host_mem_size_mb = 128;
 module_param(max_host_mem_size_mb, uint, 0444);
@@ -1223,7 +1227,8 @@ static int nvme_cmb_qdepth(struct nvme_dev *dev, int nr_io_queues,
 static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 				int qid, int depth)
 {
-	if (qid && dev->cmb && use_cmb_sqes && NVME_CMB_SQS(dev->cmbsz)) {
+	if (qid && dev->cmb && NVME_CMB_SQS(use_cmb) &&
+	    NVME_CMB_SQS(dev->cmbsz)) {
 		unsigned offset = (qid - 1) * roundup(SQ_SIZE(depth),
 						      dev->ctrl.page_size);
 		nvmeq->sq_dma_addr = dev->cmb_bus_addr + offset;
@@ -1534,7 +1539,7 @@ static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
 		return NULL;
 	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
 
-	if (!use_cmb_sqes)
+	if (!NVME_CMB_SQS(use_cmb))
 		return NULL;
 
 	szu = (u64)1 << (12 + 4 * NVME_CMB_SZU(dev->cmbsz));
