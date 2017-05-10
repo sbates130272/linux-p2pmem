@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/mutex.h>
+#include <linux/p2pmem.h>
 #include <linux/pci.h>
 #include <linux/poison.h>
 #include <linux/ptrace.h>
@@ -101,7 +102,7 @@ struct nvme_dev {
 	struct timer_list watchdog_timer;
 	struct mutex shutdown_lock;
 	bool subsystem;
-	void __iomem *cmb;
+	bool cmb;
 	dma_addr_t cmb_dma_addr;
 	u64 cmb_size;
 	u32 cmbsz;
@@ -112,6 +113,7 @@ struct nvme_dev {
 	dma_addr_t dbbuf_dbs_dma_addr;
 	u32 *dbbuf_eis;
 	dma_addr_t dbbuf_eis_dma_addr;
+	struct p2pmem_dev *p2pmem;
 };
 
 static inline unsigned int sq_idx(unsigned int qid, u32 stride)
@@ -1138,16 +1140,20 @@ static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 {
 	if (qid && dev->cmb && NVME_CMB_SQS(use_cmb) &&
 	    NVME_CMB_SQS(dev->cmbsz)) {
-		unsigned offset = (qid - 1) * roundup(SQ_SIZE(depth),
-						      dev->ctrl.page_size);
-		nvmeq->sq_dma_addr = dev->cmb_dma_addr + offset;
-		nvmeq->sq_cmds_io = dev->cmb + offset;
-	} else {
-		nvmeq->sq_cmds = dma_alloc_coherent(dev->dev, SQ_SIZE(depth),
-					&nvmeq->sq_dma_addr, GFP_KERNEL);
-		if (!nvmeq->sq_cmds)
-			return -ENOMEM;
+		nvmeq->sq_cmds_io = p2pmem_alloc(dev->p2pmem,
+						 roundup(SQ_SIZE(depth),
+							 dev->ctrl.page_size));
+		if (nvmeq->sq_cmds_io) {
+			nvmeq->sq_dma_addr =
+				(dma_addr_t)virt_to_phys(nvmeq->sq_cmds_io);
+			return 0;
+		}
+
 	}
+	nvmeq->sq_cmds = dma_alloc_coherent(dev->dev, SQ_SIZE(depth),
+					&nvmeq->sq_dma_addr, GFP_KERNEL);
+	if (!nvmeq->sq_cmds)
+		return -ENOMEM;
 
 	return 0;
 }
@@ -1464,21 +1470,46 @@ static ssize_t nvme_cmb_show(struct device *dev,
 }
 static DEVICE_ATTR(cmb, S_IRUGO, nvme_cmb_show, NULL);
 
-static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
+/*
+ * Copied from https://github.com/sbates130272/linux-p2pmem/\
+ * commit/19ea30476314359c7ae22c48434edb4269dda976
+ */
+static int init_p2pmem(struct nvme_dev *dev)
+{
+	struct p2pmem_dev *p;
+	int rc;
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+	struct resource *res = &pdev->resource[NVME_CMB_BIR(dev->cmbloc)];
+
+	p = p2pmem_create(&pdev->dev);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
+
+	rc = p2pmem_add_resource(p, res);
+	if (rc) {
+		p2pmem_unregister(p);
+		return rc;
+	}
+	dev->p2pmem = p;
+
+	return 0;
+}
+
+static void nvme_map_cmb(struct nvme_dev *dev)
 {
 	u64 szu, size, offset;
 	resource_size_t bar_size;
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
-	void __iomem *cmb;
 	dma_addr_t dma_addr;
 
+	dev->cmb = false;
 	dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
 	if (!(NVME_CMB_SZ(dev->cmbsz)))
-		return NULL;
+		return;
 	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
 
-	if (!NVME_CMB_SQS(use_cmb))
-		return NULL;
+	if (!use_cmb)
+		return;
 
 	szu = (u64)1 << (12 + 4 * NVME_CMB_SZU(dev->cmbsz));
 	size = szu * NVME_CMB_SZ(dev->cmbsz);
@@ -1486,7 +1517,7 @@ static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
 	bar_size = pci_resource_len(pdev, NVME_CMB_BIR(dev->cmbloc));
 
 	if (offset > bar_size)
-		return NULL;
+		return;
 
 	/*
 	 * Controllers may support a CMB size larger than their BAR,
@@ -1497,20 +1528,24 @@ static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
 		size = bar_size - offset;
 
 	dma_addr = pci_resource_start(pdev, NVME_CMB_BIR(dev->cmbloc)) + offset;
-	cmb = ioremap_wc(dma_addr, size);
-	if (!cmb)
-		return NULL;
-
+	dev->cmb = true;
 	dev->cmb_dma_addr = dma_addr;
 	dev->cmb_size = size;
-	return cmb;
+
+	/*
+	 * Initialize a p2pmem device for the CMB.
+	 */
+
+	init_p2pmem(dev);
+
 }
 
 static inline void nvme_release_cmb(struct nvme_dev *dev)
 {
 	if (dev->cmb) {
-		iounmap(dev->cmb);
-		dev->cmb = NULL;
+		dev->cmb = false;
+		p2pmem_unregister(dev->p2pmem);
+
 		if (dev->cmbsz) {
 			sysfs_remove_file_from_group(&dev->ctrl.device->kobj,
 						     &dev_attr_cmb.attr, NULL);
@@ -1759,7 +1794,7 @@ static int nvme_pci_enable(struct nvme_dev *dev)
 	 */
 
 	if (readl(dev->bar + NVME_REG_VS) >= NVME_VS(1, 2, 0)) {
-		dev->cmb = nvme_map_cmb(dev);
+		nvme_map_cmb(dev);
 
 		if (dev->cmbsz) {
 			if (sysfs_add_file_to_group(&dev->ctrl.device->kobj,
