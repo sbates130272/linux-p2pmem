@@ -131,6 +131,11 @@ enum {
 	MLX5_CMD_OP_DESTROY_XRQ                   = 0x718,
 	MLX5_CMD_OP_QUERY_XRQ                     = 0x719,
 	MLX5_CMD_OP_ARM_XRQ                       = 0x71a,
+	MLX5_CMD_OP_CREATE_NVMF_BACKEND_CTRL      = 0x720,
+	MLX5_CMD_OP_DESTROY_NVMF_BACKEND_CTRL     = 0x721,
+	MLX5_CMD_OP_QUERY_NVMF_BACKEND_CTRL       = 0x722,
+	MLX5_CMD_OP_ATTACH_NVMF_NAMESPACE         = 0x723,
+	MLX5_CMD_OP_DETACH_NVMF_NAMESPACE         = 0x724,
 	MLX5_CMD_OP_QUERY_VPORT_STATE             = 0x750,
 	MLX5_CMD_OP_MODIFY_VPORT_STATE            = 0x751,
 	MLX5_CMD_OP_QUERY_ESW_VPORT_CONTEXT       = 0x752,
@@ -3068,6 +3073,135 @@ struct mlx5_ifc_tag_matching_topology_context_bits {
 	u8         hw_phase_cnt[0x10];
 
 	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_nvmf_be_ctrl_bits {
+	u8         reserved_at_0[0x6];
+	u8         cq_page_offset[0xa];
+	u8         reserved_at_10[0x6];
+	u8         sq_page_offset[0xa];
+
+	u8         reserved_at_20[0xb];
+	u8         cq_log_page_size[0x5];
+	u8         reserved_at_30[0xb];
+	u8         sq_log_page_size[0x5];
+
+	u8         reserved_at_40[0x20];
+
+	u8         initial_cqh_db_value[0x10];
+	u8         initial_sqt_db_value[0x10];
+
+	u8         reserved_at_80[0x100];
+
+	u8         cqh_dbr_addr[0x40];
+
+	u8         sqt_dbr_addr[0x40];
+
+	u8         reserved_at_200[0x180];
+
+	struct mlx5_ifc_cmd_pas_bits pas[0];
+};
+
+struct mlx5_ifc_create_nvmf_be_ctrl_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x10];
+	u8         backend_controller_id[0x10];
+
+	u8         reserved_at_60[0x20];
+};
+
+struct mlx5_ifc_create_nvmf_be_ctrl_in_bits {
+	u8         opcode[0x10];
+	u8         reserved_at_10[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         xrqn[0x18];
+
+	u8         reserved_at_60[0x20];
+
+	struct mlx5_ifc_nvmf_be_ctrl_bits nvmf_be_ctrl_entry;
+};
+
+struct mlx5_ifc_destroy_nvmf_be_ctrl_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_destroy_nvmf_be_ctrl_in_bits {
+	u8         opcode[0x10];
+	u8         reserved_at_10[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         xrqn[0x18];
+
+	u8         reserved_at_60[0x10];
+	u8         backend_controller_id[0x10];
+};
+
+struct mlx5_ifc_detach_nvmf_namespace_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_detach_nvmf_namespace_in_bits {
+	u8         opcode[0x10];
+	u8         reserved_at_10[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         xrqn[0x18];
+
+	u8         frontend_namespace[0x20];
+};
+
+struct mlx5_ifc_attach_nvmf_namespace_out_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_attach_nvmf_namespace_in_bits {
+	u8         opcode[0x10];
+	u8         reserved_at_10[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x8];
+	u8         xrqn[0x18];
+
+	u8         frontend_namespace[0x20];
+
+	u8         backend_namespace[0x20];
+
+	u8         lba_data_size[0x10];
+	u8         backend_controller_id[0x10];
+
+	u8         reserved_at_c0[0x140];
+
 };
 
 struct mlx5_ifc_nvme_offload_context_bits {
