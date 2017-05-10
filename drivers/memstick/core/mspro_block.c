@@ -580,7 +580,7 @@ static int h_mspro_block_transfer_data(struct memstick_dev *card,
 {
 	struct mspro_block_data *msb = memstick_get_drvdata(card);
 	unsigned char t_val = 0;
-	struct scatterlist t_sg = { 0 };
+	struct scatterlist t_sg = {};
 	size_t t_offset;
 
 	if ((*mrq)->error)
