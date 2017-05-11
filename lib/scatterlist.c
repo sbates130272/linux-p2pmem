@@ -143,6 +143,36 @@ void sg_init_table(struct scatterlist *sgl, unsigned int nents)
 }
 EXPORT_SYMBOL(sg_init_table);
 
+#ifdef CONFIG_SG_UNMAPPABLE
+
+/**
+ * sg_init_unmappable_table - Initialize SG table for use with unmappable
+ *	memory
+ * @sgl:	   The SG table
+ * @nents:	   Number of entries in table
+ *
+ * Notes:
+ *   Unmappable scatterlists have more restrictions than regular scatter
+ *   list that may trigger unexpected BUG_ONs with code that is not ready
+ *   for them. However, they are safe to add IO memory or struct page-less
+ *   memory.
+ *
+ *   Also see the notes for sg_init_table
+ *
+ **/
+void sg_init_unmappable_table(struct scatterlist *sgl, unsigned int nents)
+{
+	unsigned int i;
+
+	sg_init_table(sgl, nents);
+
+	for (i = 0; i < nents; i++)
+		sgl[i].__pfn.val |= PFN_MAYBE_UNMAPPABLE;
+}
+EXPORT_SYMBOL(sg_init_unmappable_table);
+
+#endif
+
 /**
  * sg_init_one - Initialize a single entry sg list
  * @sg:		 SG entry

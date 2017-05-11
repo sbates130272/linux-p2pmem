@@ -8,12 +8,21 @@
  * PFN_SG_LAST - pfn references a page and is the last scatterlist entry
  * PFN_DEV - pfn is not covered by system memmap by default
  * PFN_MAP - pfn has a dynamic page mapping established by a device driver
+ * PFN_MAYBE_UNMAPPABLE - flag used by SG and others to indicate that the
+ *	pfn may sometimes be unmappable and should not be mixed with
+ *	code that tries to map it.
+ * PFN_IOMEM - pfn points to io memory
  */
 #define PFN_FLAGS_MASK (((u64) ~PAGE_MASK) << (BITS_PER_LONG_LONG - PAGE_SHIFT))
 #define PFN_SG_CHAIN (1ULL << (BITS_PER_LONG_LONG - 1))
 #define PFN_SG_LAST (1ULL << (BITS_PER_LONG_LONG - 2))
 #define PFN_DEV (1ULL << (BITS_PER_LONG_LONG - 3))
 #define PFN_MAP (1ULL << (BITS_PER_LONG_LONG - 4))
+
+#ifdef CONFIG_SG_UNMAPPABLE
+#define PFN_MAYBE_UNMAPPABLE (1ULL << (BITS_PER_LONG_LONG - 5))
+#define PFN_IOMEM (1ULL << (BITS_PER_LONG_LONG - 6))
+#endif
 
 #define PFN_FLAGS_TRACE \
 	{ PFN_SG_CHAIN,	"SG_CHAIN" }, \
@@ -44,6 +53,32 @@ static inline bool pfn_t_has_page(pfn_t pfn)
 	return (pfn.val & PFN_MAP) == PFN_MAP || (pfn.val & PFN_DEV) == 0;
 }
 
+#ifdef CONFIG_SG_UNMAPPABLE
+
+static inline bool pfn_t_is_always_mappable(pfn_t pfn)
+{
+	return !(pfn.val & (PFN_MAYBE_UNMAPPABLE | PFN_IOMEM));
+}
+
+static inline bool pfn_t_is_iomem(pfn_t pfn)
+{
+	return pfn.val & PFN_IOMEM;
+}
+
+#else
+
+static inline bool pfn_t_is_always_mappable(pfn_t pfn)
+{
+	return 1;
+}
+
+static inline bool pfn_t_is_iomem(pfn_t pfn)
+{
+	return 0;
+}
+
+#endif /* CONFIG_SG_UNMAPPABLE */
+
 static inline unsigned long pfn_t_to_pfn(pfn_t pfn)
 {
 	return pfn.val & ~PFN_FLAGS_MASK;
@@ -63,7 +98,7 @@ static inline phys_addr_t pfn_t_to_phys(pfn_t pfn)
 
 static inline void *pfn_t_to_virt(pfn_t pfn)
 {
-	if (pfn_t_has_page(pfn))
+	if (pfn_t_has_page(pfn) && !pfn_t_is_iomem(pfn))
 		return __va(pfn_t_to_phys(pfn));
 	return NULL;
 }

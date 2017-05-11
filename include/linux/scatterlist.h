@@ -71,6 +71,12 @@ static inline struct scatterlist *sg_chain_ptr(struct scatterlist *sg)
 	return sg->__chain;
 }
 
+#ifdef CONFIG_SG_UNMAPPABLE
+#define SG_STICKY_FLAGS (PFN_SG_LAST | PFN_MAYBE_UNMAPPABLE)
+#else
+#define SG_STICKY_FLAGS PFN_SG_LAST
+#endif
+
 /**
  * sg_assign_pfn - Assign a given pfn to an SG entry
  * @sg:		   SG entry
@@ -83,10 +89,14 @@ static inline struct scatterlist *sg_chain_ptr(struct scatterlist *sg)
  **/
 static inline void sg_assign_pfn(struct scatterlist *sg, pfn_t pfn)
 {
-	u64 flags = sg->__pfn.val & PFN_SG_LAST;
+	u64 flags = sg->__pfn.val & SG_STICKY_FLAGS;
 
 	pfn.val &= ~(PFN_SG_CHAIN | PFN_SG_LAST);
-	BUG_ON(!pfn_t_has_page(pfn));
+
+	if (likely(pfn_t_is_always_mappable(sg->__pfn))) {
+		BUG_ON(!pfn_t_has_page(pfn) ||
+		       !pfn_t_is_always_mappable(pfn));
+	}
 
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg->sg_magic != SG_MAGIC);
@@ -159,6 +169,8 @@ static inline struct page *sg_page(struct scatterlist *sg)
 	BUG_ON(sg->sg_magic != SG_MAGIC);
 	BUG_ON(sg_is_chain(sg));
 #endif
+
+	BUG_ON(!pfn_t_is_always_mappable(sg->__pfn));
 	return pfn_t_to_page(sg->__pfn);
 }
 
@@ -170,6 +182,11 @@ static inline pfn_t sg_pfn_t(struct scatterlist *sg)
 #endif
 
 	return sg->__pfn;
+}
+
+static inline bool sg_is_always_mappable(struct scatterlist *sg)
+{
+	return pfn_t_is_always_mappable(sg->__pfn);
 }
 
 /**
@@ -207,6 +224,9 @@ static inline void sg_set_buf(struct scatterlist *sg, const void *buf,
 static inline void sg_chain(struct scatterlist *prv, unsigned int prv_nents,
 			    struct scatterlist *sgl)
 {
+	BUG_ON(pfn_t_is_always_mappable(prv->__pfn) !=
+	       pfn_t_is_always_mappable(sgl->__pfn));
+
 	prv[prv_nents - 1].__pfn = __pfn_to_pfn_t(0, PFN_SG_CHAIN);
 	prv[prv_nents - 1].__chain = sgl;
 }
@@ -283,6 +303,13 @@ int sg_nents_for_len(struct scatterlist *sg, u64 len);
 struct scatterlist *sg_next(struct scatterlist *);
 struct scatterlist *sg_last(struct scatterlist *s, unsigned int);
 void sg_init_table(struct scatterlist *, unsigned int);
+
+#ifdef CONFIG_SG_UNMAPPABLE
+void sg_init_unmappable_table(struct scatterlist *sg, unsigned int nents);
+#else
+#define sg_init_unmappable_table sg_init_table
+#endif
+
 void sg_init_one(struct scatterlist *, const void *, unsigned int);
 int sg_split(struct scatterlist *in, const int in_mapped_nents,
 	     const off_t skip, const int nb_splits,

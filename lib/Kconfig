@@ -538,6 +538,17 @@ config SG_POOL
 	 selected by a driver or an API which whishes to allocate chained
 	 scatterlist.
 
+config SG_UNMAPPABLE
+	def_bool n
+	help
+	  This turns on support to enable safely putting unmappable memory
+	  into scatter-gather lists. It turns on a number of BUG_ONs
+	  that may prevent drivers that expect memory to always be mappable
+	  from working with drivers that are using unmappable memory.
+	  This should be selected by a driver wishing to enable
+	  DMA transfers to unmappable memory (eg. Peer-2-Peer DMA transfers
+	  or struct page-less dma).
+
 #
 # sg chaining option
 #
