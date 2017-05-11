@@ -48,6 +48,11 @@ static inline pfn_t phys_to_pfn_t(phys_addr_t addr, u64 flags)
 	return __pfn_to_pfn_t(addr >> PAGE_SHIFT, flags);
 }
 
+static inline bool pfn_t_equal(pfn_t a, pfn_t b)
+{
+	return a.val == b.val;
+}
+
 static inline bool pfn_t_has_page(pfn_t pfn)
 {
 	return (pfn.val & PFN_MAP) == PFN_MAP || (pfn.val & PFN_DEV) == 0;

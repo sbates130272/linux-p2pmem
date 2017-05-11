@@ -429,7 +429,24 @@ extern void bio_init(struct bio *bio, struct bio_vec *table,
 extern void bio_reset(struct bio *);
 void bio_chain(struct bio *, struct bio *);
 
-extern int bio_add_page(struct bio *, struct page *, unsigned int,unsigned int);
+extern int bio_add_pfn(struct bio *bio, pfn_t, unsigned int, unsigned int);
+
+/**
+ *	bio_add_page	-	attempt to add page to bio
+ *	@bio: destination bio
+ *	@page: page to add
+ *	@len: vec entry length
+ *	@offset: vec entry offset
+ *
+ *	Attempt to add a pfn to the bio_vec maplist. This will only fail
+ *	if either bio->bi_vcnt == bio->bi_max_vecs or it's a cloned bio.
+ */
+static inline int bio_add_page(struct bio *bio, struct page *page,
+			       unsigned int len, unsigned int offset)
+{
+	return bio_add_pfn(bio, page_to_pfn_t(page), len, offset);
+}
+
 extern int bio_add_pc_page(struct request_queue *, struct bio *, struct page *,
 			   unsigned int, unsigned int);
 int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter);

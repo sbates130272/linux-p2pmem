@@ -810,17 +810,17 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 EXPORT_SYMBOL(bio_add_pc_page);
 
 /**
- *	bio_add_page	-	attempt to add page to bio
+ *	bio_add_pfn	-	attempt to add pfn to bio
  *	@bio: destination bio
- *	@page: page to add
+ *	@pfn: pfn to add
  *	@len: vec entry length
  *	@offset: vec entry offset
  *
- *	Attempt to add a page to the bio_vec maplist. This will only fail
+ *	Attempt to add a pfn to the bio_vec maplist. This will only fail
  *	if either bio->bi_vcnt == bio->bi_max_vecs or it's a cloned bio.
  */
-int bio_add_page(struct bio *bio, struct page *page,
-		 unsigned int len, unsigned int offset)
+int bio_add_pfn(struct bio *bio, pfn_t pfn, unsigned int len,
+		unsigned int offset)
 {
 	struct bio_vec *bv;
 
@@ -838,7 +838,7 @@ int bio_add_page(struct bio *bio, struct page *page,
 	if (bio->bi_vcnt > 0) {
 		bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
-		if (page == bvec_page(bv) &&
+		if (pfn_t_equal(pfn, bv->bv_pfn) &&
 		    offset == bv->bv_offset + bv->bv_len) {
 			bv->bv_len += len;
 			goto done;
@@ -849,7 +849,7 @@ int bio_add_page(struct bio *bio, struct page *page,
 		return 0;
 
 	bv		= &bio->bi_io_vec[bio->bi_vcnt];
-	bvec_set_page(bv, page);
+	bv->bv_pfn	= pfn;
 	bv->bv_len	= len;
 	bv->bv_offset	= offset;
 
@@ -858,7 +858,7 @@ done:
 	bio->bi_iter.bi_size += len;
 	return len;
 }
-EXPORT_SYMBOL(bio_add_page);
+EXPORT_SYMBOL(bio_add_pfn);
 
 /**
  * bio_iov_iter_get_pages - pin user or kernel pages and add them to a bio
