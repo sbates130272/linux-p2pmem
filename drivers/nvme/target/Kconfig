@@ -35,6 +35,18 @@ config NVME_TARGET_RDMA
 
 	  If unsure, say N.
 
+config NVME_TARGET_RDMA_P2PMEM
+	bool "Support Peer-2-Peer memory (Experimental)"
+	depends on NVME_TARGET_RDMA
+	select SG_UNMAPPABLE
+	help
+	  This enable experimental support for using Peer 2 Peer PCI
+	  memory in the NVME RDMA target driver. Enabling this could trigger
+	  BUG_ONs when using the target with architectures or block devices
+	  that do not currently support DMAing to unmappable memory.
+
+	  If unsure, say N.
+
 config NVME_TARGET_FC
 	tristate "NVMe over Fabrics FC target driver"
 	depends on NVME_TARGET

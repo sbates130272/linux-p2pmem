@@ -75,7 +75,7 @@ static void nvmet_execute_rw(struct nvmet_req *req)
 	bio_set_op_attrs(bio, op, op_flags);
 
 	for_each_sg(req->sg, sg, req->sg_cnt, i) {
-		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+		while (bio_add_pfn(bio, sg_pfn_t(sg), sg->length, sg->offset)
 				!= sg->length) {
 			struct bio *prev = bio;
 

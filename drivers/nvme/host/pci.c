@@ -625,7 +625,8 @@ static int nvme_map_data(struct nvme_dev *dev, struct request *req,
 			DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	int ret = BLK_MQ_RQ_QUEUE_ERROR;
 
-	sg_init_table(iod->sg, blk_rq_nr_phys_segments(req));
+	sg_init_unmappable_table(iod->sg, blk_rq_nr_phys_segments(req));
+
 	iod->nents = blk_rq_map_sg(q, req, iod->sg);
 	if (!iod->nents)
 		goto out;

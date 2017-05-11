@@ -193,10 +193,29 @@ static void nvmet_rdma_free_sgl(struct scatterlist *sgl, unsigned int nents)
 	if (!sgl || !nents)
 		return;
 
-	for_each_sg(sgl, sg, nents, count)
-		__free_page(sg_page(sg));
+	for_each_sg(sgl, sg, nents, count) {
+		struct page *pg = pfn_t_to_page(sg_pfn_t(sg));
+
+		if (pg)
+			__free_page(pg);
+	}
+
 	kfree(sgl);
 }
+
+#ifdef CONFIG_NVME_TARGET_RDMA_P2PMEM
+static void nvmet_rdma_init_sg(struct scatterlist *sg,
+			       unsigned int nent)
+{
+	sg_init_unmappable_table(sg, nent);
+}
+#else
+static void nvmet_rdma_init_sg(struct scatterlist *sg,
+			       unsigned int nent)
+{
+	sg_init_table(sg, nent);
+}
+#endif
 
 static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 		u32 length)
@@ -211,7 +230,7 @@ static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 	if (!sg)
 		goto out;
 
-	sg_init_table(sg, nent);
+	nvmet_rdma_init_sg(sg, nent);
 
 	while (length) {
 		u32 page_len = min_t(u32, length, PAGE_SIZE);
@@ -231,7 +250,9 @@ static int nvmet_rdma_alloc_sgl(struct scatterlist **sgl, unsigned int *nents,
 out_free_pages:
 	while (i > 0) {
 		i--;
-		__free_page(sg_page(&sg[i]));
+		page = pfn_t_to_page(sg_pfn_t(&sg[i]));
+		if (page)
+			__free_page(page);
 	}
 	kfree(sg);
 out:
