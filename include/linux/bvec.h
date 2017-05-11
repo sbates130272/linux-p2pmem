@@ -22,12 +22,13 @@
 
 #include <linux/kernel.h>
 #include <linux/bug.h>
+#include <linux/pfn_t.h>
 
 /*
  * was unsigned short, but we might as well be ready for > 64kB I/O pages
  */
 struct bio_vec {
-	struct page	*bv_page;
+	pfn_t		bv_pfn;
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
 };
@@ -45,12 +46,13 @@ struct bvec_iter {
 
 static inline struct page *bvec_page(const struct bio_vec *bvec)
 {
-	return bvec->bv_page;
+	BUG_ON(!pfn_t_is_always_mappable(bvec->bv_pfn));
+	return pfn_t_to_page(bvec->bv_pfn);
 }
 
 static inline void bvec_set_page(struct bio_vec *bvec, struct page *page)
 {
-	bvec->bv_page = page;
+	bvec->bv_pfn = page_to_pfn_t(page);
 }
 
 /*
@@ -58,6 +60,9 @@ static inline void bvec_set_page(struct bio_vec *bvec, struct page *page)
  * on highmem page vectors
  */
 #define __bvec_iter_bvec(bvec, iter)	(&(bvec)[(iter).bi_idx])
+
+#define bvec_iter_pfn_t(bvec, iter)				\
+	(__bvec_iter_bvec((bvec), (iter))->bv_pfn)
 
 #define bvec_iter_page(bvec, iter)				\
 	(bvec_page(__bvec_iter_bvec((bvec), (iter))))
@@ -71,7 +76,7 @@ static inline void bvec_set_page(struct bio_vec *bvec, struct page *page)
 
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
-	.bv_page	= bvec_iter_page((bvec), (iter)),	\
+	.bv_pfn		= bvec_iter_pfn_t((bvec), (iter)),	\
 	.bv_len		= bvec_iter_len((bvec), (iter)),	\
 	.bv_offset	= bvec_iter_offset((bvec), (iter)),	\
 })
