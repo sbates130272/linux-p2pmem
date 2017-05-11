@@ -2693,7 +2693,7 @@ restart_loop:
 	}
 
 	for (i = 0; i < ctx->npages; i++)
-		put_page(ctx->bv[i].bv_page);
+		put_page(bvec_page(ctx->bv));
 
 	cifs_stats_bytes_written(tcon, ctx->total_len);
 	set_bit(CIFS_INO_INVALID_MAPPING, &CIFS_I(dentry->d_inode)->flags);
@@ -3214,8 +3214,8 @@ again:
 
 	for (i = 0; i < ctx->npages; i++) {
 		if (ctx->should_dirty)
-			set_page_dirty(ctx->bv[i].bv_page);
-		put_page(ctx->bv[i].bv_page);
+			set_page_dirty(bvec_page(ctx->bv));
+		put_page(bvec_page(ctx->bv));
 	}
 
 	ctx->total_len = ctx->len - iov_iter_count(to);

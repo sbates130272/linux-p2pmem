@@ -22,8 +22,9 @@ static int read_one_page(struct page *page)
 	const __u32 blocksize = PAGE_SIZE;	/* inode->i_blksize */
 	const __u32 blockbits = PAGE_SHIFT;	/* inode->i_blkbits */
 	struct iov_iter to;
-	struct bio_vec bv = {.bv_page = page, .bv_len = PAGE_SIZE};
+	struct bio_vec bv = {.bv_len = PAGE_SIZE};
 
+	bvec_set_page(&bv, page);
 	iov_iter_bvec(&to, ITER_BVEC | READ, &bv, 1, PAGE_SIZE);
 
 	gossip_debug(GOSSIP_INODE_DEBUG,

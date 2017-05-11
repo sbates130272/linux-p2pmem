@@ -107,7 +107,7 @@ xfs_finish_page_writeback(
 	ASSERT(end < PAGE_SIZE);
 	ASSERT((bvec->bv_len & (i_blocksize(inode) - 1)) == 0);
 
-	bh = head = page_buffers(bvec->bv_page);
+	bh = head = page_buffers(bvec_page(bvec));
 
 	bsize = bh->b_size;
 	do {

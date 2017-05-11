@@ -532,7 +532,7 @@ void zero_fill_bio(struct bio *bio)
 	bio_for_each_segment(bv, bio, iter) {
 		char *data = bvec_kmap_irq(&bv, &flags);
 		memset(data, 0, bv.bv_len);
-		flush_dcache_page(bv.bv_page);
+		flush_dcache_page(bvec_page(&bv));
 		bvec_kunmap_irq(data, &flags);
 	}
 }
@@ -747,7 +747,7 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	if (bio->bi_vcnt > 0) {
 		struct bio_vec *prev = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
-		if (page == prev->bv_page &&
+		if (page == bvec_page(prev) &&
 		    offset == prev->bv_offset + prev->bv_len) {
 			prev->bv_len += len;
 			bio->bi_iter.bi_size += len;
@@ -770,7 +770,7 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	 * cannot add the page
 	 */
 	bvec = &bio->bi_io_vec[bio->bi_vcnt];
-	bvec->bv_page = page;
+	bvec_set_page(bvec, page);
 	bvec->bv_len = len;
 	bvec->bv_offset = offset;
 	bio->bi_vcnt++;
@@ -799,7 +799,7 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	return len;
 
  failed:
-	bvec->bv_page = NULL;
+	bvec_set_page(bvec, NULL);
 	bvec->bv_len = 0;
 	bvec->bv_offset = 0;
 	bio->bi_vcnt--;
@@ -838,7 +838,7 @@ int bio_add_page(struct bio *bio, struct page *page,
 	if (bio->bi_vcnt > 0) {
 		bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
-		if (page == bv->bv_page &&
+		if (page == bvec_page(bv) &&
 		    offset == bv->bv_offset + bv->bv_len) {
 			bv->bv_len += len;
 			goto done;
@@ -849,7 +849,7 @@ int bio_add_page(struct bio *bio, struct page *page,
 		return 0;
 
 	bv		= &bio->bi_io_vec[bio->bi_vcnt];
-	bv->bv_page	= page;
+	bvec_set_page(bv, page);
 	bv->bv_len	= len;
 	bv->bv_offset	= offset;
 
@@ -894,7 +894,7 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 
 	diff = (nr_pages * PAGE_SIZE - offset) - size;
 	while (nr_pages--) {
-		bv[nr_pages].bv_page = pages[nr_pages];
+		bvec_set_page(&bv[nr_pages], pages[nr_pages]);
 		bv[nr_pages].bv_len = PAGE_SIZE;
 		bv[nr_pages].bv_offset = 0;
 	}
@@ -980,10 +980,10 @@ int bio_alloc_pages(struct bio *bio, gfp_t gfp_mask)
 	struct bio_vec *bv;
 
 	bio_for_each_segment_all(bv, bio, i) {
-		bv->bv_page = alloc_page(gfp_mask);
-		if (!bv->bv_page) {
+		bvec_set_page(bv, alloc_page(gfp_mask));
+		if (!bvec_page(bv)) {
 			while (--bv >= bio->bi_io_vec)
-				__free_page(bv->bv_page);
+				__free_page(bvec_page(bv));
 			return -ENOMEM;
 		}
 	}
@@ -1036,8 +1036,8 @@ void bio_copy_data(struct bio *dst, struct bio *src)
 
 		bytes = min(src_bv.bv_len, dst_bv.bv_len);
 
-		src_p = kmap_atomic(src_bv.bv_page);
-		dst_p = kmap_atomic(dst_bv.bv_page);
+		src_p = kmap_atomic(bvec_page(&src_bv));
+		dst_p = kmap_atomic(bvec_page(&dst_bv));
 
 		memcpy(dst_p + dst_bv.bv_offset,
 		       src_p + src_bv.bv_offset,
@@ -1084,7 +1084,7 @@ static int bio_copy_from_iter(struct bio *bio, struct iov_iter iter)
 	bio_for_each_segment_all(bvec, bio, i) {
 		ssize_t ret;
 
-		ret = copy_page_from_iter(bvec->bv_page,
+		ret = copy_page_from_iter(bvec_page(bvec),
 					  bvec->bv_offset,
 					  bvec->bv_len,
 					  &iter);
@@ -1115,7 +1115,7 @@ static int bio_copy_to_iter(struct bio *bio, struct iov_iter iter)
 	bio_for_each_segment_all(bvec, bio, i) {
 		ssize_t ret;
 
-		ret = copy_page_to_iter(bvec->bv_page,
+		ret = copy_page_to_iter(bvec_page(bvec),
 					bvec->bv_offset,
 					bvec->bv_len,
 					&iter);
@@ -1136,7 +1136,7 @@ void bio_free_pages(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i)
-		__free_page(bvec->bv_page);
+		__free_page(bvec_page(bvec));
 }
 EXPORT_SYMBOL(bio_free_pages);
 
@@ -1432,9 +1432,9 @@ static void __bio_unmap_user(struct bio *bio)
 	 */
 	bio_for_each_segment_all(bvec, bio, i) {
 		if (bio_data_dir(bio) == READ)
-			set_page_dirty_lock(bvec->bv_page);
+			set_page_dirty_lock(bvec_page(bvec));
 
-		put_page(bvec->bv_page);
+		put_page(bvec_page(bvec));
 	}
 
 	bio_put(bio);
@@ -1524,7 +1524,7 @@ static void bio_copy_kern_endio_read(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		memcpy(p, page_address(bvec->bv_page), bvec->bv_len);
+		memcpy(p, page_address(bvec_page(bvec)), bvec->bv_len);
 		p += bvec->bv_len;
 	}
 
@@ -1634,7 +1634,7 @@ void bio_set_pages_dirty(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 
 		if (page && !PageCompound(page))
 			set_page_dirty_lock(page);
@@ -1647,7 +1647,7 @@ static void bio_release_pages(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 
 		if (page)
 			put_page(page);
@@ -1701,11 +1701,11 @@ void bio_check_pages_dirty(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 
 		if (PageDirty(page) || PageCompound(page)) {
 			put_page(page);
-			bvec->bv_page = NULL;
+			bvec_set_page(bvec, NULL);
 		} else {
 			nr_clean_pages++;
 		}
@@ -1759,7 +1759,7 @@ void bio_flush_dcache_pages(struct bio *bi)
 	struct bvec_iter iter;
 
 	bio_for_each_segment(bvec, bi, iter)
-		flush_dcache_page(bvec.bv_page);
+		flush_dcache_page(bvec_page(&bvec));
 }
 EXPORT_SYMBOL(bio_flush_dcache_pages);
 #endif

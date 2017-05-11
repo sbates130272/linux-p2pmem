@@ -173,7 +173,7 @@ static void gfs2_end_log_write_bh(struct gfs2_sbd *sdp, struct bio_vec *bvec,
 				  int error)
 {
 	struct buffer_head *bh, *next;
-	struct page *page = bvec->bv_page;
+	struct page *page = bvec_page(bvec);
 	unsigned size;
 
 	bh = page_buffers(page);
@@ -215,7 +215,7 @@ static void gfs2_end_log_write(struct bio *bio)
 	}
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		page = bvec->bv_page;
+		page = bvec_page(bvec);
 		if (page_has_buffers(page))
 			gfs2_end_log_write_bh(sdp, bvec, bio->bi_error);
 		else

@@ -1310,7 +1310,7 @@ lnet_destroy_rtrbuf(struct lnet_rtrbuf *rb, int npages)
 	int sz = offsetof(struct lnet_rtrbuf, rb_kiov[npages]);
 
 	while (--npages >= 0)
-		__free_page(rb->rb_kiov[npages].bv_page);
+		__free_page(bvec_page(rb->rb_kiov));
 
 	LIBCFS_FREE(rb, sz);
 }
@@ -1336,7 +1336,7 @@ lnet_new_rtrbuf(struct lnet_rtrbufpool *rbp, int cpt)
 				GFP_KERNEL | __GFP_ZERO, 0);
 		if (!page) {
 			while (--i >= 0)
-				__free_page(rb->rb_kiov[i].bv_page);
+				__free_page(bvec_page(rb->rb_kiov));
 
 			LIBCFS_FREE(rb, sz);
 			return NULL;
@@ -1344,7 +1344,7 @@ lnet_new_rtrbuf(struct lnet_rtrbufpool *rbp, int cpt)
 
 		rb->rb_kiov[i].bv_len = PAGE_SIZE;
 		rb->rb_kiov[i].bv_offset = 0;
-		rb->rb_kiov[i].bv_page = page;
+		bvec_set_page(rb->rb_kiov, page);
 	}
 
 	return rb;

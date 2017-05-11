@@ -2846,7 +2846,7 @@ static void __btrfsic_submit_bio(struct bio *bio)
 
 		bio_for_each_segment_all(bvec, bio, i) {
 			BUG_ON(bvec->bv_len != PAGE_SIZE);
-			mapped_datav[i] = kmap(bvec->bv_page);
+			mapped_datav[i] = kmap(bvec_page(bvec));
 
 			if (dev_state->state->print_mask &
 			    BTRFSIC_PRINT_MASK_SUBMIT_BIO_BH_VERBOSE)
@@ -2859,7 +2859,7 @@ static void __btrfsic_submit_bio(struct bio *bio)
 					      bio, &bio_is_patched,
 					      NULL, bio->bi_opf);
 		bio_for_each_segment_all(bvec, bio, i)
-			kunmap(bvec->bv_page);
+			kunmap(bvec_page(bvec));
 		kfree(mapped_datav);
 	} else if (NULL != dev_state && (bio->bi_opf & REQ_PREFLUSH)) {
 		if (dev_state->state->print_mask &

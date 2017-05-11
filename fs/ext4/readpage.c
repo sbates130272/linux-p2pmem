@@ -81,7 +81,7 @@ static void mpage_end_io(struct bio *bio)
 		}
 	}
 	bio_for_each_segment_all(bv, bio, i) {
-		struct page *page = bv->bv_page;
+		struct page *page = bvec_page(bv);
 
 		if (!bio->bi_error) {
 			SetPageUptodate(page);

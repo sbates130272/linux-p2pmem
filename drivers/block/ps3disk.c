@@ -112,7 +112,7 @@ static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
 		else
 			memcpy(buf, dev->bounce_buf+offset, size);
 		offset += size;
-		flush_kernel_dcache_page(bvec.bv_page);
+		flush_kernel_dcache_page(bvec_page(&bvec));
 		bvec_kunmap_irq(buf, &flags);
 		i++;
 	}

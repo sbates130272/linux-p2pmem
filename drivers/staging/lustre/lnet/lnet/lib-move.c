@@ -235,7 +235,7 @@ lnet_copy_kiov2iter(struct iov_iter *to,
 
 		if (copy > nob)
 			copy = nob;
-		n = copy_page_to_iter(siov->bv_page,
+		n = copy_page_to_iter(bvec_page(siov),
 				      siov->bv_offset + soffset,
 				      copy, to);
 		if (n != copy)
@@ -340,7 +340,7 @@ lnet_extract_kiov(int dst_niov, struct bio_vec *dst,
 		LASSERT((int)niov <= dst_niov);
 
 		frag_len = src->bv_len - offset;
-		dst->bv_page = src->bv_page;
+		bvec_set_page(dst, bvec_page(src));
 		dst->bv_offset = src->bv_offset + offset;
 
 		if (len <= frag_len) {

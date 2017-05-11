@@ -244,7 +244,7 @@ static inline u64 nvme_block_nr(struct nvme_ns *ns, sector_t sector)
 static inline void nvme_cleanup_cmd(struct request *req)
 {
 	if (req->rq_flags & RQF_SPECIAL_PAYLOAD) {
-		kfree(page_address(req->special_vec.bv_page) +
+		kfree(page_address(bvec_page(&req->special_vec)) +
 		      req->special_vec.bv_offset);
 	}
 }

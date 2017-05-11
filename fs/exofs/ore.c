@@ -411,9 +411,9 @@ static void _clear_bio(struct bio *bio)
 		unsigned this_count = bv->bv_len;
 
 		if (likely(PAGE_SIZE == this_count))
-			clear_highpage(bv->bv_page);
+			clear_highpage(bvec_page(bv));
 		else
-			zero_user(bv->bv_page, bv->bv_offset, this_count);
+			zero_user(bvec_page(bv), bv->bv_offset, this_count);
 	}
 }
 

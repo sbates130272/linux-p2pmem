@@ -874,7 +874,7 @@ static inline void unstable_page_accounting(struct ptlrpc_bulk_desc *desc,
 	LASSERT(ptlrpc_is_bulk_desc_kiov(desc->bd_type));
 
 	for (i = 0; i < page_count; i++) {
-		pg_data_t *pgdat = page_pgdat(BD_GET_KIOV(desc, i).bv_page);
+		pg_data_t *pgdat = page_pgdat(bvec_page(&BD_GET_KIOV(desc, i)));
 
 		if (likely(pgdat == last)) {
 			++count;

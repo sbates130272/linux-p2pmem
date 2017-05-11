@@ -203,7 +203,7 @@ static int scm_request_prepare(struct scm_request *scmrq)
 	rq_for_each_segment(bv, req, iter) {
 		WARN_ON(bv.bv_offset);
 		msb->blk_count += bv.bv_len >> 12;
-		aidaw->data_addr = (u64) page_address(bv.bv_page);
+		aidaw->data_addr = (u64) page_address(bvec_page(&bv));
 		aidaw++;
 	}
 

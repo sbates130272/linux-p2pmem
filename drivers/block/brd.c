@@ -306,7 +306,8 @@ static blk_qc_t brd_make_request(struct request_queue *q, struct bio *bio)
 		unsigned int len = bvec.bv_len;
 		int err;
 
-		err = brd_do_bvec(brd, bvec.bv_page, len, bvec.bv_offset,
+		err = brd_do_bvec(brd, bvec_page(&bvec), len,
+				  bvec.bv_offset,
 					op_is_write(bio_op(bio)), sector);
 		if (err)
 			goto io_error;

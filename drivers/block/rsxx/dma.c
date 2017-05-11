@@ -737,7 +737,8 @@ int rsxx_dma_queue_bio(struct rsxx_cardinfo *card,
 				st = rsxx_queue_dma(card, &dma_list[tgt],
 							bio_data_dir(bio),
 							dma_off, dma_len,
-							laddr, bvec.bv_page,
+							laddr,
+						    bvec_page(&bvec),
 							bv_off, cb, cb_data);
 				if (st)
 					goto bvec_err;

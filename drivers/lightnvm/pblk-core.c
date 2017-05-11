@@ -205,7 +205,7 @@ void pblk_bio_free_pages(struct pblk *pblk, struct bio *bio, int off,
 	bio_advance(bio, off * PBLK_EXPOSED_PAGE_SIZE);
 	for (i = off; i < nr_pages + off; i++) {
 		bv = bio->bi_io_vec[i];
-		mempool_free(bv.bv_page, pblk->page_pool);
+		mempool_free(bvec_page(&bv), pblk->page_pool);
 	}
 }
 

@@ -1943,7 +1943,7 @@ _transport_smp_handler(struct Scsi_Host *shost, struct sas_rphy *rphy,
 
 		bio_for_each_segment(bvec, req->bio, iter) {
 			memcpy(pci_addr_out + offset,
-			    page_address(bvec.bv_page) + bvec.bv_offset,
+			    page_address(bvec_page(&bvec)) + bvec.bv_offset,
 			    bvec.bv_len);
 			offset += bvec.bv_len;
 		}
@@ -2071,12 +2071,12 @@ _transport_smp_handler(struct Scsi_Host *shost, struct sas_rphy *rphy,
 			    le16_to_cpu(mpi_reply->ResponseDataLength);
 			bio_for_each_segment(bvec, rsp->bio, iter) {
 				if (bytes_to_copy <= bvec.bv_len) {
-					memcpy(page_address(bvec.bv_page) +
+					memcpy(page_address(bvec_page(&bvec)) +
 					    bvec.bv_offset, pci_addr_in +
 					    offset, bytes_to_copy);
 					break;
 				} else {
-					memcpy(page_address(bvec.bv_page) +
+					memcpy(page_address(bvec_page(&bvec)) +
 					    bvec.bv_offset, pci_addr_in +
 					    offset, bvec.bv_len);
 					bytes_to_copy -= bvec.bv_len;

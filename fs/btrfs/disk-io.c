@@ -966,8 +966,8 @@ static int btree_csum_one_bio(struct bio *bio)
 	int i, ret = 0;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		root = BTRFS_I(bvec->bv_page->mapping->host)->root;
-		ret = csum_dirty_buffer(root->fs_info, bvec->bv_page);
+		root = BTRFS_I(bvec_page(bvec)->mapping->host)->root;
+		ret = csum_dirty_buffer(root->fs_info, bvec_page(bvec));
 		if (ret)
 			break;
 	}

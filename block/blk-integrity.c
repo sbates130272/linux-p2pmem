@@ -114,7 +114,8 @@ new_segment:
 				sg = sg_next(sg);
 			}
 
-			sg_set_page(sg, iv.bv_page, iv.bv_len, iv.bv_offset);
+			sg_set_page(sg, bvec_page(&iv), iv.bv_len,
+				    iv.bv_offset);
 			segments++;
 		}
 

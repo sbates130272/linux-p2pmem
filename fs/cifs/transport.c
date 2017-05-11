@@ -270,9 +270,10 @@ __smb_send_rqst(struct TCP_Server_Info *server, struct smb_rqst *rqst)
 				? rqst->rq_tailsz
 				: rqst->rq_pagesz;
 		struct bio_vec bvec = {
-			.bv_page = rqst->rq_pages[i],
 			.bv_len = len
 		};
+
+		bvec_set_page(&bvec, rqst->rq_pages[i]);
 		iov_iter_bvec(&smb_msg.msg_iter, WRITE | ITER_BVEC,
 			      &bvec, 1, len);
 		rc = smb_send_kvec(server, &smb_msg, &sent);

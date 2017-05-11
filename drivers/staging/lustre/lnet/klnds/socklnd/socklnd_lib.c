@@ -109,7 +109,7 @@ ksocknal_lib_send_kiov(struct ksock_conn *conn, struct ksock_tx *tx)
 	if (tx->tx_msg.ksm_zc_cookies[0]) {
 		/* Zero copy is enabled */
 		struct sock *sk = sock->sk;
-		struct page *page = kiov->bv_page;
+		struct page *page = bvec_page(kiov);
 		int offset = kiov->bv_offset;
 		int fragsize = kiov->bv_len;
 		int msgflg = MSG_DONTWAIT;
@@ -238,7 +238,7 @@ ksocknal_lib_recv_kiov(struct ksock_conn *conn)
 		for (i = 0, sum = rc; sum > 0; i++, sum -= fragnob) {
 			LASSERT(i < niov);
 
-			base = kmap(kiov[i].bv_page) + kiov[i].bv_offset;
+			base = kmap(bvec_page(kiov)) + kiov[i].bv_offset;
 			fragnob = kiov[i].bv_len;
 			if (fragnob > sum)
 				fragnob = sum;
@@ -246,7 +246,7 @@ ksocknal_lib_recv_kiov(struct ksock_conn *conn)
 			conn->ksnc_rx_csum = ksocknal_csum(conn->ksnc_rx_csum,
 							   base, fragnob);
 
-			kunmap(kiov[i].bv_page);
+			kunmap(bvec_page(kiov));
 		}
 	}
 	return rc;
@@ -270,12 +270,12 @@ ksocknal_lib_csum_tx(struct ksock_tx *tx)
 
 	if (tx->tx_kiov) {
 		for (i = 0; i < tx->tx_nkiov; i++) {
-			base = kmap(tx->tx_kiov[i].bv_page) +
+			base = kmap(bvec_page(tx->tx_kiov)) +
 			       tx->tx_kiov[i].bv_offset;
 
 			csum = ksocknal_csum(csum, base, tx->tx_kiov[i].bv_len);
 
-			kunmap(tx->tx_kiov[i].bv_page);
+			kunmap(bvec_page(tx->tx_kiov));
 		}
 	} else {
 		for (i = 1; i < tx->tx_niov; i++)

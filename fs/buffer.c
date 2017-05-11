@@ -3085,7 +3085,7 @@ void guard_bio_eod(int op, struct bio *bio)
 
 	/* ..and clear the end of the buffer for reads */
 	if (op == REQ_OP_READ) {
-		zero_user(bvec->bv_page, bvec->bv_offset + bvec->bv_len,
+		zero_user(bvec_page(bvec), bvec->bv_offset + bvec->bv_len,
 				truncated_bytes);
 	}
 }

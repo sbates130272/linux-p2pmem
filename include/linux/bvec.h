@@ -60,7 +60,7 @@ static inline void bvec_set_page(struct bio_vec *bvec, struct page *page)
 #define __bvec_iter_bvec(bvec, iter)	(&(bvec)[(iter).bi_idx])
 
 #define bvec_iter_page(bvec, iter)				\
-	(__bvec_iter_bvec((bvec), (iter))->bv_page)
+	(bvec_page(__bvec_iter_bvec((bvec), (iter))))
 
 #define bvec_iter_len(bvec, iter)				\
 	min((iter).bi_size,					\

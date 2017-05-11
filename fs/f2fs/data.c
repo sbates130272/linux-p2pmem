@@ -56,7 +56,7 @@ static void f2fs_read_end_io(struct bio *bio)
 	int i;
 
 #ifdef CONFIG_F2FS_FAULT_INJECTION
-	if (time_to_inject(F2FS_P_SB(bio->bi_io_vec->bv_page), FAULT_IO)) {
+	if (time_to_inject(F2FS_P_SB(bvec_page(bio->bi_io_vec)), FAULT_IO)) {
 		f2fs_show_injection_info(FAULT_IO);
 		bio->bi_error = -EIO;
 	}
@@ -72,7 +72,7 @@ static void f2fs_read_end_io(struct bio *bio)
 	}
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 
 		if (!bio->bi_error) {
 			if (!PageUptodate(page))
@@ -93,7 +93,7 @@ static void f2fs_write_end_io(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 		enum count_type type = WB_DATA_TYPE(page);
 
 		if (IS_DUMMY_WRITTEN_PAGE(page)) {
@@ -261,10 +261,10 @@ static bool __has_merged_page(struct f2fs_bio_info *io,
 
 	bio_for_each_segment_all(bvec, io->bio, i) {
 
-		if (bvec->bv_page->mapping)
-			target = bvec->bv_page;
+		if (bvec_page(bvec)->mapping)
+			target = bvec_page(bvec);
 		else
-			target = fscrypt_control_page(bvec->bv_page);
+			target = fscrypt_control_page(bvec_page(bvec));
 
 		if (idx != target->index)
 			continue;

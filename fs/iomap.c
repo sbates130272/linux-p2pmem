@@ -698,7 +698,7 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 		int i;
 
 		bio_for_each_segment_all(bvec, bio, i)
-			put_page(bvec->bv_page);
+			put_page(bvec_page(bvec));
 		bio_put(bio);
 	}
 }

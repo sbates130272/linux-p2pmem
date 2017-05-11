@@ -947,13 +947,13 @@ static void drbd_bm_aio_ctx_destroy(struct kref *kref)
 	kfree(ctx);
 }
 
-/* bv_page may be a copy, or may be the original */
+/* bvec_page may be a copy, or may be the original */
 static void drbd_bm_endio(struct bio *bio)
 {
 	struct drbd_bm_aio_ctx *ctx = bio->bi_private;
 	struct drbd_device *device = ctx->device;
 	struct drbd_bitmap *b = device->bitmap;
-	unsigned int idx = bm_page_to_idx(bio->bi_io_vec[0].bv_page);
+	unsigned int idx = bm_page_to_idx(bvec_page(bio->bi_io_vec));
 
 	if ((ctx->flags & BM_AIO_COPY_PAGES) == 0 &&
 	    !bm_test_page_unchanged(b->bm_pages[idx]))
@@ -977,7 +977,7 @@ static void drbd_bm_endio(struct bio *bio)
 	bm_page_unlock_io(device, idx);
 
 	if (ctx->flags & BM_AIO_COPY_PAGES)
-		mempool_free(bio->bi_io_vec[0].bv_page, drbd_md_io_page_pool);
+		mempool_free(bvec_page(bio->bi_io_vec), drbd_md_io_page_pool);
 
 	bio_put(bio);
 

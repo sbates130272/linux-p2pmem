@@ -1894,7 +1894,7 @@ static inline void ptlrpc_release_bulk_page_pin(struct ptlrpc_bulk_desc *desc)
 	int i;
 
 	for (i = 0; i < desc->bd_iov_count ; i++)
-		put_page(BD_GET_KIOV(desc, i).bv_page);
+		put_page(bvec_page(&BD_GET_KIOV(desc, i)));
 }
 
 void ptlrpc_retain_replayable_request(struct ptlrpc_request *req,

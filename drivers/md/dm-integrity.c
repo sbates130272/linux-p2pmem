@@ -1250,7 +1250,7 @@ static void integrity_metadata(struct work_struct *w)
 			char *mem, *checksums_ptr;
 
 again:
-			mem = (char *)kmap_atomic(bv.bv_page) + bv.bv_offset;
+			mem = (char *)kmap_atomic(bvec_page(&bv)) + bv.bv_offset;
 			pos = 0;
 			checksums_ptr = checksums;
 			do {
@@ -1301,8 +1301,8 @@ again:
 				unsigned char *tag;
 				unsigned this_len;
 
-				BUG_ON(PageHighMem(biv.bv_page));
-				tag = lowmem_page_address(biv.bv_page) + biv.bv_offset;
+				BUG_ON(PageHighMem(bvec_page(&biv)));
+				tag = lowmem_page_address(bvec_page(&biv)) + biv.bv_offset;
 				this_len = min(biv.bv_len, data_to_process);
 				r = dm_integrity_rw_tag(ic, tag, &dio->metadata_block, &dio->metadata_offset,
 							this_len, !dio->write ? TAG_READ : TAG_WRITE);
@@ -1422,9 +1422,9 @@ static bool __journal_read_write(struct dm_integrity_io *dio, struct bio *bio,
 		n_sectors -= bv.bv_len >> SECTOR_SHIFT;
 		bio_advance_iter(bio, &bio->bi_iter, bv.bv_len);
 retry_kmap:
-		mem = kmap_atomic(bv.bv_page);
+		mem = kmap_atomic(bvec_page(&bv));
 		if (likely(dio->write))
-			flush_dcache_page(bv.bv_page);
+			flush_dcache_page(bvec_page(&bv));
 
 		do {
 			struct journal_entry *je = access_journal_entry(ic, journal_section, journal_entry);
@@ -1435,7 +1435,7 @@ retry_kmap:
 				unsigned s;
 
 				if (unlikely(journal_entry_is_inprogress(je))) {
-					flush_dcache_page(bv.bv_page);
+					flush_dcache_page(bvec_page(&bv));
 					kunmap_atomic(mem);
 
 					__io_wait_event(ic->copy_to_journal_wait, !journal_entry_is_inprogress(je));
@@ -1474,8 +1474,8 @@ retry_kmap:
 					struct bio_vec biv = bvec_iter_bvec(bip->bip_vec, bip->bip_iter);
 					unsigned tag_now = min(biv.bv_len, tag_todo);
 					char *tag_addr;
-					BUG_ON(PageHighMem(biv.bv_page));
-					tag_addr = lowmem_page_address(biv.bv_page) + biv.bv_offset;
+					BUG_ON(PageHighMem(bvec_page(&biv)));
+					tag_addr = lowmem_page_address(bvec_page(&biv)) + biv.bv_offset;
 					if (likely(dio->write))
 						memcpy(tag_ptr, tag_addr, tag_now);
 					else
@@ -1526,7 +1526,7 @@ retry_kmap:
 		} while (bv.bv_len -= ic->sectors_per_block << SECTOR_SHIFT);
 
 		if (unlikely(!dio->write))
-			flush_dcache_page(bv.bv_page);
+			flush_dcache_page(bvec_page(&bv));
 		kunmap_atomic(mem);
 	} while (n_sectors);
 

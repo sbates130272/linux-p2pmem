@@ -237,7 +237,7 @@ brw_fill_bulk(struct srpc_bulk *bk, int pattern, __u64 magic)
 	for (i = 0; i < bk->bk_niov; i++) {
 		int off, len;
 
-		pg = bk->bk_iovs[i].bv_page;
+		pg = bvec_page(bk->bk_iovs);
 		off = bk->bk_iovs[i].bv_offset;
 		len = bk->bk_iovs[i].bv_len;
 		brw_fill_page(pg, off, len, pattern, magic);
@@ -253,7 +253,7 @@ brw_check_bulk(struct srpc_bulk *bk, int pattern, __u64 magic)
 	for (i = 0; i < bk->bk_niov; i++) {
 		int off, len;
 
-		pg = bk->bk_iovs[i].bv_page;
+		pg = bvec_page(bk->bk_iovs);
 		off = bk->bk_iovs[i].bv_offset;
 		len = bk->bk_iovs[i].bv_len;
 		if (brw_check_page(pg, off, len, pattern, magic)) {

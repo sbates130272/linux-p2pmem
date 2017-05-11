@@ -202,7 +202,7 @@ csum_failed:
 		 * checked so the end_io handlers know about it
 		 */
 		bio_for_each_segment_all(bvec, cb->orig_bio, i)
-			SetPageChecked(bvec->bv_page);
+			SetPageChecked(bvec_page(bvec));
 
 		bio_endio(cb->orig_bio);
 	}
@@ -446,7 +446,7 @@ static u64 bio_end_offset(struct bio *bio)
 {
 	struct bio_vec *last = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
-	return page_offset(last->bv_page) + last->bv_len + last->bv_offset;
+	return page_offset(bvec_page(last)) + last->bv_len + last->bv_offset;
 }
 
 static noinline int add_ra_bio_pages(struct inode *inode,
@@ -596,7 +596,7 @@ int btrfs_submit_compressed_read(struct inode *inode, struct bio *bio,
 	/* we need the actual starting offset of this extent in the file */
 	read_lock(&em_tree->lock);
 	em = lookup_extent_mapping(em_tree,
-				   page_offset(bio->bi_io_vec->bv_page),
+				   page_offset(bvec_page(bio->bi_io_vec)),
 				   PAGE_SIZE);
 	read_unlock(&em_tree->lock);
 	if (!em)
@@ -1027,7 +1027,7 @@ int btrfs_decompress_buf2page(const char *buf, unsigned long buf_start,
 	 * start byte is the first byte of the page we're currently
 	 * copying into relative to the start of the compressed data.
 	 */
-	start_byte = page_offset(bvec.bv_page) - disk_start;
+	start_byte = page_offset(bvec_page(&bvec)) - disk_start;
 
 	/* we haven't yet hit data corresponding to this page */
 	if (total_out <= start_byte)
@@ -1051,10 +1051,10 @@ int btrfs_decompress_buf2page(const char *buf, unsigned long buf_start,
 				PAGE_SIZE - buf_offset);
 		bytes = min(bytes, working_bytes);
 
-		kaddr = kmap_atomic(bvec.bv_page);
+		kaddr = kmap_atomic(bvec_page(&bvec));
 		memcpy(kaddr + bvec.bv_offset, buf + buf_offset, bytes);
 		kunmap_atomic(kaddr);
-		flush_dcache_page(bvec.bv_page);
+		flush_dcache_page(bvec_page(&bvec));
 
 		buf_offset += bytes;
 		working_bytes -= bytes;
@@ -1066,7 +1066,7 @@ int btrfs_decompress_buf2page(const char *buf, unsigned long buf_start,
 			return 0;
 		bvec = bio_iter_iovec(bio, bio->bi_iter);
 		prev_start_byte = start_byte;
-		start_byte = page_offset(bvec.bv_page) - disk_start;
+		start_byte = page_offset(bvec_page(&bvec)) - disk_start;
 
 		/*
 		 * We need to make sure we're only adjusting

@@ -254,9 +254,9 @@ __blkdev_direct_IO_simple(struct kiocb *iocb, struct iov_iter *iter,
 	__set_current_state(TASK_RUNNING);
 
 	bio_for_each_segment_all(bvec, &bio, i) {
-		if (should_dirty && !PageCompound(bvec->bv_page))
-			set_page_dirty_lock(bvec->bv_page);
-		put_page(bvec->bv_page);
+		if (should_dirty && !PageCompound(bvec_page(bvec)))
+			set_page_dirty_lock(bvec_page(bvec));
+		put_page(bvec_page(bvec));
 	}
 
 	if (vecs != inline_vecs)
@@ -317,7 +317,7 @@ static void blkdev_bio_end_io(struct bio *bio)
 		int i;
 
 		bio_for_each_segment_all(bvec, bio, i)
-			put_page(bvec->bv_page);
+			put_page(bvec_page(bvec));
 		bio_put(bio);
 	}
 }

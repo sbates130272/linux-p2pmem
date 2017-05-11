@@ -181,7 +181,7 @@ static int scm_prepare_cluster_request(struct scm_request *scmrq)
 			i++;
 		}
 		rq_for_each_segment(bv, req, iter) {
-			aidaw->data_addr = (u64) page_address(bv.bv_page);
+			aidaw->data_addr = (u64) page_address(bvec_page(&bv));
 			aidaw++;
 			i++;
 		}

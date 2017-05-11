@@ -282,7 +282,7 @@ static void afs_load_bvec(struct afs_call *call, struct msghdr *msg,
 			to = call->last_to;
 			msg->msg_flags &= ~MSG_MORE;
 		}
-		bv[i].bv_page = pages[i];
+		bvec_set_page(bv, pages[i]);
 		bv[i].bv_len = to - offset;
 		bv[i].bv_offset = offset;
 		bytes += to - offset;
@@ -320,7 +320,7 @@ static int afs_send_pages(struct afs_call *call, struct msghdr *msg)
 		ret = rxrpc_kernel_send_data(afs_socket, call->rxcall,
 					     msg, bytes);
 		for (loop = 0; loop < nr; loop++)
-			put_page(bv[loop].bv_page);
+			put_page(bvec_page(bv));
 		if (ret < 0)
 			break;
 

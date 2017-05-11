@@ -159,10 +159,10 @@ static void corrupt_bulk_data(struct ptlrpc_bulk_desc *desc)
 		if (!BD_GET_KIOV(desc, i).bv_len)
 			continue;
 
-		ptr = kmap(BD_GET_KIOV(desc, i).bv_page);
+		ptr = kmap(bvec_page(&BD_GET_KIOV(desc, i)));
 		off = BD_GET_KIOV(desc, i).bv_offset & ~PAGE_MASK;
 		ptr[off] ^= 0x1;
-		kunmap(BD_GET_KIOV(desc, i).bv_page);
+		kunmap(bvec_page(&BD_GET_KIOV(desc, i)));
 		return;
 	}
 }

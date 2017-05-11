@@ -8046,7 +8046,7 @@ static void btrfs_retry_endio_nocsum(struct bio *bio)
 	done->uptodate = 1;
 	bio_for_each_segment_all(bvec, bio, i)
 		clean_io_failure(BTRFS_I(done->inode), done->start,
-				 bvec->bv_page, 0);
+				 bvec_page(bvec), 0);
 end:
 	complete(&done->done);
 	bio_put(bio);
@@ -8080,7 +8080,7 @@ next_block_or_try_again:
 		done.start = start;
 		init_completion(&done.done);
 
-		ret = dio_read_error(inode, &io_bio->bio, bvec->bv_page,
+		ret = dio_read_error(inode, &io_bio->bio, bvec_page(bvec),
 				pgoff, start, start + sectorsize - 1,
 				io_bio->mirror_num,
 				btrfs_retry_endio_nocsum, &done);
@@ -8126,11 +8126,11 @@ static void btrfs_retry_endio(struct bio *bio)
 
 	bio_for_each_segment_all(bvec, bio, i) {
 		ret = __readpage_endio_check(done->inode, io_bio, i,
-					bvec->bv_page, bvec->bv_offset,
+					bvec_page(bvec), bvec->bv_offset,
 					done->start, bvec->bv_len);
 		if (!ret)
 			clean_io_failure(BTRFS_I(done->inode), done->start,
-					bvec->bv_page, bvec->bv_offset);
+					bvec_page(bvec), bvec->bv_offset);
 		else
 			uptodate = 0;
 	}
@@ -8170,7 +8170,7 @@ static int __btrfs_subio_endio_read(struct inode *inode,
 next_block:
 		csum_pos = BTRFS_BYTES_TO_BLKS(fs_info, offset);
 		ret = __readpage_endio_check(inode, io_bio, csum_pos,
-					bvec->bv_page, pgoff, start,
+					bvec_page(bvec), pgoff, start,
 					sectorsize);
 		if (likely(!ret))
 			goto next;
@@ -8179,7 +8179,7 @@ try_again:
 		done.start = start;
 		init_completion(&done.done);
 
-		ret = dio_read_error(inode, &io_bio->bio, bvec->bv_page,
+		ret = dio_read_error(inode, &io_bio->bio, bvec_page(bvec),
 				pgoff, start, start + sectorsize - 1,
 				io_bio->mirror_num,
 				btrfs_retry_endio, &done);
@@ -8501,7 +8501,7 @@ static int btrfs_submit_direct_hook(struct btrfs_dio_private *dip,
 		i = 0;
 next_block:
 		if (unlikely(map_length < submit_len + blocksize ||
-		    bio_add_page(bio, bvec->bv_page, blocksize,
+		    bio_add_page(bio, bvec_page(bvec), blocksize,
 			    bvec->bv_offset + (i * blocksize)) < blocksize)) {
 			/*
 			 * inc the count before we submit the bio so

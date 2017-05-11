@@ -215,7 +215,7 @@ void __ptlrpc_prep_bulk_page(struct ptlrpc_bulk_desc *desc,
 	if (pin)
 		get_page(page);
 
-	kiov->bv_page = page;
+	bvec_set_page(kiov, page);
 	kiov->bv_offset = pageoffset;
 	kiov->bv_len = len;
 

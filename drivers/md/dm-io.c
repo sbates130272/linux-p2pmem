@@ -210,7 +210,7 @@ static void bio_get_page(struct dpages *dp, struct page **p,
 	struct bio_vec bvec = bvec_iter_bvec((struct bio_vec *)dp->context_ptr,
 					     dp->context_bi);
 
-	*p = bvec.bv_page;
+	*p = bvec_page(&bvec);
 	*len = bvec.bv_len;
 	*offset = bvec.bv_offset;
 

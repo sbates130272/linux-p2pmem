@@ -170,7 +170,7 @@ static int __blkdev_issue_write_same(struct block_device *bdev, sector_t sector,
 		bio->bi_iter.bi_sector = sector;
 		bio->bi_bdev = bdev;
 		bio->bi_vcnt = 1;
-		bio->bi_io_vec->bv_page = page;
+		bvec_set_page(bio->bi_io_vec, page);
 		bio->bi_io_vec->bv_offset = 0;
 		bio->bi_io_vec->bv_len = bdev_logical_block_size(bdev);
 		bio_set_op_attrs(bio, REQ_OP_WRITE_SAME, 0);

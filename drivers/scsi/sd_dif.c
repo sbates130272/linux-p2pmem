@@ -139,7 +139,7 @@ void sd_dif_prepare(struct scsi_cmnd *scmd)
 		virt = bip_get_seed(bip) & 0xffffffff;
 
 		bip_for_each_vec(iv, bip, iter) {
-			pi = kmap_atomic(iv.bv_page) + iv.bv_offset;
+			pi = kmap_atomic(bvec_page(&iv)) + iv.bv_offset;
 
 			for (j = 0; j < iv.bv_len; j += tuple_sz, pi++) {
 
@@ -186,7 +186,7 @@ void sd_dif_complete(struct scsi_cmnd *scmd, unsigned int good_bytes)
 		virt = bip_get_seed(bip) & 0xffffffff;
 
 		bip_for_each_vec(iv, bip, iter) {
-			pi = kmap_atomic(iv.bv_page) + iv.bv_offset;
+			pi = kmap_atomic(bvec_page(&iv)) + iv.bv_offset;
 
 			for (j = 0; j < iv.bv_len; j += tuple_sz, pi++) {
 

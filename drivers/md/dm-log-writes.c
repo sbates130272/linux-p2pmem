@@ -174,8 +174,8 @@ static void free_pending_block(struct log_writes_c *lc,
 	int i;
 
 	for (i = 0; i < block->vec_cnt; i++) {
-		if (block->vecs[i].bv_page)
-			__free_page(block->vecs[i].bv_page);
+		if (bvec_page(block->vecs))
+			__free_page(bvec_page(block->vecs));
 	}
 	kfree(block->data);
 	kfree(block);
@@ -273,7 +273,7 @@ static int log_one_block(struct log_writes_c *lc,
 		 * The page offset is always 0 because we allocate a new page
 		 * for every bvec in the original bio for simplicity sake.
 		 */
-		ret = bio_add_page(bio, block->vecs[i].bv_page,
+		ret = bio_add_page(bio, bvec_page(block->vecs),
 				   block->vecs[i].bv_len, 0);
 		if (ret != block->vecs[i].bv_len) {
 			atomic_inc(&lc->io_blocks);
@@ -290,7 +290,7 @@ static int log_one_block(struct log_writes_c *lc,
 			bio->bi_private = lc;
 			bio_set_op_attrs(bio, REQ_OP_WRITE, 0);
 
-			ret = bio_add_page(bio, block->vecs[i].bv_page,
+			ret = bio_add_page(bio, bvec_page(block->vecs),
 					   block->vecs[i].bv_len, 0);
 			if (ret != block->vecs[i].bv_len) {
 				DMERR("Couldn't add page on new bio?");
@@ -642,12 +642,12 @@ static int log_writes_map(struct dm_target *ti, struct bio *bio)
 			return -ENOMEM;
 		}
 
-		src = kmap_atomic(bv.bv_page);
+		src = kmap_atomic(bvec_page(&bv));
 		dst = kmap_atomic(page);
 		memcpy(dst, src + bv.bv_offset, bv.bv_len);
 		kunmap_atomic(dst);
 		kunmap_atomic(src);
-		block->vecs[i].bv_page = page;
+		bvec_set_page(block->vecs, page);
 		block->vecs[i].bv_len = bv.bv_len;
 		block->vec_cnt++;
 		i++;

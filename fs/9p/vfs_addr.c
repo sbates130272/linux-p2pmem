@@ -53,9 +53,11 @@
 static int v9fs_fid_readpage(struct p9_fid *fid, struct page *page)
 {
 	struct inode *inode = page->mapping->host;
-	struct bio_vec bvec = {.bv_page = page, .bv_len = PAGE_SIZE};
+	struct bio_vec bvec = {.bv_len = PAGE_SIZE};
 	struct iov_iter to;
 	int retval, err;
+
+	bvec_set_page(&bvec, page);
 
 	p9_debug(P9_DEBUG_VFS, "\n");
 
@@ -172,7 +174,7 @@ static int v9fs_vfs_writepage_locked(struct page *page)
 	else
 		len = PAGE_SIZE;
 
-	bvec.bv_page = page;
+	bvec_set_page(&bvec, page);
 	bvec.bv_offset = 0;
 	bvec.bv_len = len;
 	iov_iter_bvec(&from, ITER_BVEC | WRITE, &bvec, 1, len);

@@ -264,7 +264,7 @@ static int fd_do_rw(struct se_cmd *cmd, struct file *fd,
 	}
 
 	for_each_sg(sgl, sg, sgl_nents, i) {
-		bvec[i].bv_page = sg_page(sg);
+		bvec_set_page(bvec, sg_page(sg));
 		bvec[i].bv_len = sg->length;
 		bvec[i].bv_offset = sg->offset;
 
@@ -401,7 +401,7 @@ fd_execute_write_same(struct se_cmd *cmd)
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 
 	for (i = 0; i < nolb; i++) {
-		bvec[i].bv_page = sg_page(&cmd->t_data_sg[0]);
+		bvec_set_page(bvec, sg_page(&cmd->t_data_sg[0]));
 		bvec[i].bv_len = cmd->t_data_sg[0].length;
 		bvec[i].bv_offset = cmd->t_data_sg[0].offset;
 

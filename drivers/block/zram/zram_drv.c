@@ -584,7 +584,7 @@ static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 	int ret;
 	struct page *page;
 
-	page = bvec->bv_page;
+	page = bvec_page(bvec);
 	if (is_partial_io(bvec)) {
 		/* Use a temporary buffer to decompress the page */
 		page = alloc_page(GFP_NOIO|__GFP_HIGHMEM);
@@ -597,7 +597,7 @@ static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 		goto out;
 
 	if (is_partial_io(bvec)) {
-		void *dst = kmap_atomic(bvec->bv_page);
+		void *dst = kmap_atomic(bvec_page(bvec));
 		void *src = kmap_atomic(page);
 
 		memcpy(dst + bvec->bv_offset, src + offset, bvec->bv_len);
@@ -687,7 +687,7 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec, u32 index)
 	unsigned int comp_len;
 	void *src, *dst;
 	struct zcomp_strm *zstrm;
-	struct page *page = bvec->bv_page;
+	struct page *page = bvec_page(bvec);
 
 	if (zram_same_page_write(zram, index, page))
 		return 0;
@@ -750,13 +750,13 @@ static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 		if (ret)
 			goto out;
 
-		src = kmap_atomic(bvec->bv_page);
+		src = kmap_atomic(bvec_page(bvec));
 		dst = kmap_atomic(page);
 		memcpy(dst + offset, src + bvec->bv_offset, bvec->bv_len);
 		kunmap_atomic(dst);
 		kunmap_atomic(src);
 
-		vec.bv_page = page;
+		bvec_set_page(&vec, page);
 		vec.bv_len = PAGE_SIZE;
 		vec.bv_offset = 0;
 	}
@@ -819,7 +819,7 @@ static int zram_bvec_rw(struct zram *zram, struct bio_vec *bvec, u32 index,
 	if (!is_write) {
 		atomic64_inc(&zram->stats.num_reads);
 		ret = zram_bvec_read(zram, bvec, index, offset);
-		flush_dcache_page(bvec->bv_page);
+		flush_dcache_page(bvec_page(bvec));
 	} else {
 		atomic64_inc(&zram->stats.num_writes);
 		ret = zram_bvec_write(zram, bvec, index, offset);
@@ -936,7 +936,7 @@ static int zram_rw_page(struct block_device *bdev, sector_t sector,
 	index = sector >> SECTORS_PER_PAGE_SHIFT;
 	offset = (sector & (SECTORS_PER_PAGE - 1)) << SECTOR_SHIFT;
 
-	bv.bv_page = page;
+	bvec_set_page(&bv, page);
 	bv.bv_len = PAGE_SIZE;
 	bv.bv_offset = 0;
 

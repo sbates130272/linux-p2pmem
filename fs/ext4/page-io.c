@@ -64,7 +64,7 @@ static void ext4_finish_bio(struct bio *bio)
 	struct bio_vec *bvec;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 		struct page *data_page = NULL;
 #endif

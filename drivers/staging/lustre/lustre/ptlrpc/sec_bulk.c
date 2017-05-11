@@ -347,12 +347,12 @@ void sptlrpc_enc_pool_put_pages(struct ptlrpc_bulk_desc *desc)
 	LASSERT(page_pools.epp_pools[p_idx]);
 
 	for (i = 0; i < desc->bd_iov_count; i++) {
-		LASSERT(BD_GET_ENC_KIOV(desc, i).bv_page);
+		LASSERT(bvec_page(&BD_GET_ENC_KIOV(desc, i)));
 		LASSERT(g_idx != 0 || page_pools.epp_pools[p_idx]);
 		LASSERT(!page_pools.epp_pools[p_idx][g_idx]);
 
 		page_pools.epp_pools[p_idx][g_idx] =
-			BD_GET_ENC_KIOV(desc, i).bv_page;
+			bvec_page(&BD_GET_ENC_KIOV(desc, i));
 
 		if (++g_idx == PAGES_PER_POOL) {
 			p_idx++;
@@ -544,7 +544,7 @@ int sptlrpc_get_bulk_checksum(struct ptlrpc_bulk_desc *desc, __u8 alg,
 
 	for (i = 0; i < desc->bd_iov_count; i++) {
 		cfs_crypto_hash_update_page(hdesc,
-					    BD_GET_KIOV(desc, i).bv_page,
+					    bvec_page(&BD_GET_KIOV(desc, i)),
 					    BD_GET_KIOV(desc, i).bv_offset &
 					    ~PAGE_MASK,
 					    BD_GET_KIOV(desc, i).bv_len);

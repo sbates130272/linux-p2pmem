@@ -2480,7 +2480,7 @@ static void end_bio_extent_writepage(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 		struct inode *inode = page->mapping->host;
 		struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 
@@ -2550,7 +2550,7 @@ static void end_bio_extent_readpage(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 		struct inode *inode = page->mapping->host;
 		struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 
@@ -2745,7 +2745,7 @@ static int __must_check submit_one_bio(struct bio *bio, int mirror_num,
 {
 	int ret = 0;
 	struct bio_vec *bvec = bio->bi_io_vec + bio->bi_vcnt - 1;
-	struct page *page = bvec->bv_page;
+	struct page *page = bvec_page(bvec);
 	struct extent_io_tree *tree = bio->bi_private;
 	u64 start;
 
@@ -3701,7 +3701,7 @@ static void end_bio_extent_buffer_writepage(struct bio *bio)
 	int i, done;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 
 		eb = (struct extent_buffer *)page->private;
 		BUG_ON(!eb);

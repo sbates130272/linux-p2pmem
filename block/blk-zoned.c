@@ -150,10 +150,10 @@ int blkdev_report_zones(struct block_device *bdev,
 	nr_rep = 0;
 	bio_for_each_segment_all(bv, bio, i) {
 
-		if (!bv->bv_page)
+		if (!bvec_page(bv))
 			break;
 
-		addr = kmap_atomic(bv->bv_page);
+		addr = kmap_atomic(bvec_page(bv));
 
 		/* Get header in the first page */
 		ofst = 0;
@@ -182,7 +182,7 @@ int blkdev_report_zones(struct block_device *bdev,
 	*nr_zones = nz;
 out:
 	bio_for_each_segment_all(bv, bio, i)
-		__free_page(bv->bv_page);
+		__free_page(bvec_page(bv));
 	bio_put(bio);
 
 	return ret;

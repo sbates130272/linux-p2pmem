@@ -56,7 +56,7 @@ static void bounce_copy_vec(struct bio_vec *to, unsigned char *vfrom)
 	unsigned char *vto;
 
 	local_irq_save(flags);
-	vto = kmap_atomic(to->bv_page);
+	vto = kmap_atomic(bvec_page(to));
 	memcpy(vto + to->bv_offset, vfrom, to->bv_len);
 	kunmap_atomic(vto);
 	local_irq_restore(flags);
@@ -65,7 +65,8 @@ static void bounce_copy_vec(struct bio_vec *to, unsigned char *vfrom)
 #else /* CONFIG_HIGHMEM */
 
 #define bounce_copy_vec(to, vfrom)	\
-	memcpy(page_address((to)->bv_page) + (to)->bv_offset, vfrom, (to)->bv_len)
+	memcpy(page_address(bvec_page((to))) + (to)->bv_offset, vfrom, \
+	       (to)->bv_len)
 
 #endif /* CONFIG_HIGHMEM */
 
@@ -106,17 +107,17 @@ static void copy_to_high_bio_irq(struct bio *to, struct bio *from)
 	struct bvec_iter iter;
 
 	bio_for_each_segment(tovec, to, iter) {
-		if (tovec.bv_page != fromvec->bv_page) {
+		if (bvec_page(&tovec) != bvec_page(fromvec)) {
 			/*
 			 * fromvec->bv_offset and fromvec->bv_len might have
 			 * been modified by the block layer, so use the original
 			 * copy, bounce_copy_vec already uses tovec->bv_len
 			 */
-			vfrom = page_address(fromvec->bv_page) +
+			vfrom = page_address(bvec_page(fromvec)) +
 				tovec.bv_offset;
 
 			bounce_copy_vec(&tovec, vfrom);
-			flush_dcache_page(tovec.bv_page);
+			flush_dcache_page(bvec_page(&tovec));
 		}
 
 		fromvec++;
@@ -136,11 +137,11 @@ static void bounce_end_io(struct bio *bio, mempool_t *pool)
 	bio_for_each_segment_all(bvec, bio, i) {
 		org_vec = bio_orig->bi_io_vec + i + start;
 
-		if (bvec->bv_page == org_vec->bv_page)
+		if (bvec_page(bvec) == bvec_page(org_vec))
 			continue;
 
-		dec_zone_page_state(bvec->bv_page, NR_BOUNCE);
-		mempool_free(bvec->bv_page, pool);
+		dec_zone_page_state(bvec_page(bvec), NR_BOUNCE);
+		mempool_free(bvec_page(bvec), pool);
 	}
 
 	bio_orig->bi_error = bio->bi_error;
@@ -189,7 +190,7 @@ static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
 	unsigned i;
 
 	bio_for_each_segment(from, *bio_orig, iter)
-		if (page_to_pfn(from.bv_page) > queue_bounce_pfn(q))
+		if (page_to_pfn(bvec_page(&from)) > queue_bounce_pfn(q))
 			goto bounce;
 
 	return;
@@ -197,20 +198,20 @@ bounce:
 	bio = bio_clone_bioset(*bio_orig, GFP_NOIO, fs_bio_set);
 
 	bio_for_each_segment_all(to, bio, i) {
-		struct page *page = to->bv_page;
+		struct page *page = bvec_page(to);
 
 		if (page_to_pfn(page) <= queue_bounce_pfn(q))
 			continue;
 
-		to->bv_page = mempool_alloc(pool, q->bounce_gfp);
-		inc_zone_page_state(to->bv_page, NR_BOUNCE);
+		bvec_set_page(to, mempool_alloc(pool, q->bounce_gfp));
+		inc_zone_page_state(bvec_page(to), NR_BOUNCE);
 
 		if (rw == WRITE) {
 			char *vto, *vfrom;
 
 			flush_dcache_page(page);
 
-			vto = page_address(to->bv_page) + to->bv_offset;
+			vto = page_address(bvec_page(to)) + to->bv_offset;
 			vfrom = kmap_atomic(page) + to->bv_offset;
 			memcpy(vto, vfrom, to->bv_len);
 			kunmap_atomic(vfrom);

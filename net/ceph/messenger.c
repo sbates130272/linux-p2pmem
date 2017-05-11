@@ -537,7 +537,6 @@ static int ceph_tcp_recvpage(struct socket *sock, struct page *page,
 		     int page_offset, size_t length)
 {
 	struct bio_vec bvec = {
-		.bv_page = page,
 		.bv_offset = page_offset,
 		.bv_len = length
 	};
@@ -545,6 +544,7 @@ static int ceph_tcp_recvpage(struct socket *sock, struct page *page,
 	int r;
 
 	BUG_ON(page_offset + length > PAGE_SIZE);
+	bvec_set_page(&bvec, page);
 	iov_iter_bvec(&msg.msg_iter, READ | ITER_BVEC, &bvec, 1, length);
 	r = sock_recvmsg(sock, &msg, msg.msg_flags);
 	if (r == -EAGAIN)
@@ -598,7 +598,7 @@ static int ceph_tcp_sendpage(struct socket *sock, struct page *page,
 	if (page_count(page) >= 1)
 		return __ceph_tcp_sendpage(sock, page, offset, size, more);
 
-	bvec.bv_page = page;
+	bvec_set_page(&bvec, page);
 	bvec.bv_offset = offset;
 	bvec.bv_len = size;
 
@@ -875,7 +875,7 @@ static struct page *ceph_msg_data_bio_next(struct ceph_msg_data_cursor *cursor,
 	BUG_ON(*length > cursor->resid);
 	BUG_ON(*page_offset + *length > PAGE_SIZE);
 
-	return bio_vec.bv_page;
+	return bvec_page(&bio_vec);
 }
 
 static bool ceph_msg_data_bio_advance(struct ceph_msg_data_cursor *cursor,

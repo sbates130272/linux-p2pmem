@@ -162,7 +162,7 @@ static blk_qc_t pmem_make_request(struct request_queue *q, struct bio *bio)
 
 	do_acct = nd_iostat_start(bio, &start);
 	bio_for_each_segment(bvec, bio, iter) {
-		rc = pmem_do_bvec(pmem, bvec.bv_page, bvec.bv_len,
+		rc = pmem_do_bvec(pmem, bvec_page(&bvec), bvec.bv_len,
 				bvec.bv_offset, op_is_write(bio_op(bio)),
 				iter.bi_sector);
 		if (rc) {

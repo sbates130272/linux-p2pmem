@@ -2018,7 +2018,7 @@ init_read_bvec(struct page **pages, unsigned int npages, unsigned int data_size,
 		return -ENOMEM;
 
 	for (i = 0; i < npages; i++) {
-		bvec[i].bv_page = pages[i];
+		bvec_set_page(bvec, pages[i]);
 		bvec[i].bv_offset = (i == 0) ? cur_off : 0;
 		bvec[i].bv_len = min_t(unsigned int, PAGE_SIZE, data_size);
 		data_size -= bvec[i].bv_len;

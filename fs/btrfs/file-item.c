@@ -229,7 +229,7 @@ static int __btrfs_lookup_bio_sums(struct inode *inode, struct bio *bio,
 			goto next;
 
 		if (!dio)
-			offset = page_offset(bvec->bv_page) + bvec->bv_offset;
+			offset = page_offset(bvec_page(bvec)) + bvec->bv_offset;
 		count = btrfs_find_ordered_sum(inode, offset, disk_bytenr,
 					       (u32 *)csum, nblocks);
 		if (count)
@@ -467,14 +467,14 @@ int btrfs_csum_one_bio(struct inode *inode, struct bio *bio,
 
 	bio_for_each_segment_all(bvec, bio, j) {
 		if (!contig)
-			offset = page_offset(bvec->bv_page) + bvec->bv_offset;
+			offset = page_offset(bvec_page(bvec)) + bvec->bv_offset;
 
 		if (!ordered) {
 			ordered = btrfs_lookup_ordered_extent(inode, offset);
 			BUG_ON(!ordered); /* Logic error */
 		}
 
-		data = kmap_atomic(bvec->bv_page);
+		data = kmap_atomic(bvec_page(bvec));
 
 		nr_sectors = BTRFS_BYTES_TO_BLKS(fs_info,
 						 bvec->bv_len + fs_info->sectorsize
@@ -504,7 +504,7 @@ int btrfs_csum_one_bio(struct inode *inode, struct bio *bio,
 					+ total_bytes;
 				index = 0;
 
-				data = kmap_atomic(bvec->bv_page);
+				data = kmap_atomic(bvec_page(bvec));
 			}
 
 			sums->sums[index] = ~(u32)0;

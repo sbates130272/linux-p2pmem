@@ -735,8 +735,8 @@ static int sd_setup_unmap_cmnd(struct scsi_cmnd *cmd)
 	unsigned int data_len = 24;
 	char *buf;
 
-	rq->special_vec.bv_page = alloc_page(GFP_ATOMIC | __GFP_ZERO);
-	if (!rq->special_vec.bv_page)
+	bvec_set_page(&rq->special_vec, alloc_page(GFP_ATOMIC | __GFP_ZERO));
+	if (!bvec_page(&rq->special_vec))
 		return BLKPREP_DEFER;
 	rq->special_vec.bv_offset = 0;
 	rq->special_vec.bv_len = data_len;
@@ -746,7 +746,7 @@ static int sd_setup_unmap_cmnd(struct scsi_cmnd *cmd)
 	cmd->cmnd[0] = UNMAP;
 	cmd->cmnd[8] = 24;
 
-	buf = page_address(rq->special_vec.bv_page);
+	buf = page_address(bvec_page(&rq->special_vec));
 	put_unaligned_be16(6 + 16, &buf[0]);
 	put_unaligned_be16(16, &buf[2]);
 	put_unaligned_be64(sector, &buf[8]);
@@ -768,8 +768,8 @@ static int sd_setup_write_same16_cmnd(struct scsi_cmnd *cmd, bool unmap)
 	u32 nr_sectors = blk_rq_sectors(rq) >> (ilog2(sdp->sector_size) - 9);
 	u32 data_len = sdp->sector_size;
 
-	rq->special_vec.bv_page = alloc_page(GFP_ATOMIC | __GFP_ZERO);
-	if (!rq->special_vec.bv_page)
+	bvec_set_page(&rq->special_vec, alloc_page(GFP_ATOMIC | __GFP_ZERO));
+	if (!bvec_page(&rq->special_vec))
 		return BLKPREP_DEFER;
 	rq->special_vec.bv_offset = 0;
 	rq->special_vec.bv_len = data_len;
@@ -798,8 +798,8 @@ static int sd_setup_write_same10_cmnd(struct scsi_cmnd *cmd, bool unmap)
 	u32 nr_sectors = blk_rq_sectors(rq) >> (ilog2(sdp->sector_size) - 9);
 	u32 data_len = sdp->sector_size;
 
-	rq->special_vec.bv_page = alloc_page(GFP_ATOMIC | __GFP_ZERO);
-	if (!rq->special_vec.bv_page)
+	bvec_set_page(&rq->special_vec, alloc_page(GFP_ATOMIC | __GFP_ZERO));
+	if (!bvec_page(&rq->special_vec))
 		return BLKPREP_DEFER;
 	rq->special_vec.bv_offset = 0;
 	rq->special_vec.bv_len = data_len;
@@ -1255,7 +1255,7 @@ static void sd_uninit_command(struct scsi_cmnd *SCpnt)
 	struct request *rq = SCpnt->request;
 
 	if (rq->rq_flags & RQF_SPECIAL_PAYLOAD)
-		__free_page(rq->special_vec.bv_page);
+		__free_page(bvec_page(&rq->special_vec));
 
 	if (SCpnt->cmnd != scsi_req(rq)->cmd) {
 		mempool_free(SCpnt->cmnd, sd_cdb_pool);

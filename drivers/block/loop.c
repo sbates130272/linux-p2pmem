@@ -315,12 +315,12 @@ static int lo_write_transfer(struct loop_device *lo, struct request *rq,
 		return -ENOMEM;
 
 	rq_for_each_segment(bvec, rq, iter) {
-		ret = lo_do_transfer(lo, WRITE, page, 0, bvec.bv_page,
+		ret = lo_do_transfer(lo, WRITE, page, 0, bvec_page(&bvec),
 			bvec.bv_offset, bvec.bv_len, pos >> 9);
 		if (unlikely(ret))
 			break;
 
-		b.bv_page = page;
+		bvec_set_page(&b, page);
 		b.bv_offset = 0;
 		b.bv_len = bvec.bv_len;
 		ret = lo_write_bvec(lo->lo_backing_file, &b, &pos);
@@ -346,7 +346,7 @@ static int lo_read_simple(struct loop_device *lo, struct request *rq,
 		if (len < 0)
 			return len;
 
-		flush_dcache_page(bvec.bv_page);
+		flush_dcache_page(bvec_page(&bvec));
 
 		if (len != bvec.bv_len) {
 			struct bio *bio;
@@ -378,7 +378,7 @@ static int lo_read_transfer(struct loop_device *lo, struct request *rq,
 	rq_for_each_segment(bvec, rq, iter) {
 		loff_t offset = pos;
 
-		b.bv_page = page;
+		bvec_set_page(&b, page);
 		b.bv_offset = 0;
 		b.bv_len = bvec.bv_len;
 
@@ -389,12 +389,12 @@ static int lo_read_transfer(struct loop_device *lo, struct request *rq,
 			goto out_free_page;
 		}
 
-		ret = lo_do_transfer(lo, READ, page, 0, bvec.bv_page,
+		ret = lo_do_transfer(lo, READ, page, 0, bvec_page(&bvec),
 			bvec.bv_offset, len, offset >> 9);
 		if (ret)
 			goto out_free_page;
 
-		flush_dcache_page(bvec.bv_page);
+		flush_dcache_page(bvec_page(&bvec));
 
 		if (len != bvec.bv_len) {
 			struct bio *bio;

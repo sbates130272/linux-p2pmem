@@ -192,7 +192,7 @@ static void gfs2_meta_read_endio(struct bio *bio)
 	int i;
 
 	bio_for_each_segment_all(bvec, bio, i) {
-		struct page *page = bvec->bv_page;
+		struct page *page = bvec_page(bvec);
 		struct buffer_head *bh = page_buffers(page);
 		unsigned int len = bvec->bv_len;
 

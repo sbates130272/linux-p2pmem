@@ -126,7 +126,7 @@ axon_ram_make_request(struct request_queue *queue, struct bio *bio)
 			return BLK_QC_T_NONE;
 		}
 
-		user_mem = page_address(vec.bv_page) + vec.bv_offset;
+		user_mem = page_address(bvec_page(&vec)) + vec.bv_offset;
 		if (bio_data_dir(bio) == READ)
 			memcpy(user_mem, (void *) phys_mem, vec.bv_len);
 		else
