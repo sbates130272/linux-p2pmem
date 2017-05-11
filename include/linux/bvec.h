@@ -43,6 +43,16 @@ struct bvec_iter {
 						   current bvec */
 };
 
+static inline struct page *bvec_page(const struct bio_vec *bvec)
+{
+	return bvec->bv_page;
+}
+
+static inline void bvec_set_page(struct bio_vec *bvec, struct page *page)
+{
+	bvec->bv_page = page;
+}
+
 /*
  * various member access, note that bio_data should of course not be used
  * on highmem page vectors
