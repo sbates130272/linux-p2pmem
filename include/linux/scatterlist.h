@@ -447,11 +447,14 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
 #define SG_MITER_ATOMIC		(1 << 0)	 /* use kmap_atomic */
 #define SG_MITER_TO_SG		(1 << 1)	/* flush back to phys on unmap */
 #define SG_MITER_FROM_SG	(1 << 2)	/* nop */
+#define SG_MITRE_SUPPORTS_IOMEM (1 << 3)	/* io memory is supported by
+						 * the iteratee */
 
 struct sg_mapping_iter {
 	/* the following three fields can be accessed directly */
 	struct page		*page;		/* currently mapped page */
 	void			*addr;		/* pointer to the mapped area */
+	void __iomem            *ioaddr;	/* address to io memory */
 	size_t			length;		/* length of the mapped area */
 	size_t			consumed;	/* number of consumed bytes */
 	struct sg_page_iter	piter;		/* page iterator */

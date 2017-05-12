@@ -601,6 +601,8 @@ EXPORT_SYMBOL(sg_miter_skip);
  */
 bool sg_miter_next(struct sg_mapping_iter *miter)
 {
+	pfn_t pfn = miter->piter.sg->__pfn;
+
 	sg_miter_stop(miter);
 
 	/*
@@ -610,8 +612,19 @@ bool sg_miter_next(struct sg_mapping_iter *miter)
 	if (!sg_miter_get_next_page(miter))
 		return false;
 
-	miter->page = sg_page_iter_page(&miter->piter);
 	miter->consumed = miter->length = miter->__remaining;
+
+	if (!(miter->__flags & SG_MITRE_SUPPORTS_IOMEM)) {
+		BUG_ON(!pfn_t_is_always_mappable(pfn));
+	} else if (pfn_t_is_iomem(pfn)) {
+		miter->ioaddr = ioremap(pfn_t_to_phys(pfn), PAGE_SIZE);
+		miter->addr = NULL;
+		return true;
+	}
+
+	miter->ioaddr = NULL;
+	miter->page = pfn_t_to_page(pfn);
+	BUG_ON(!miter->page);
 
 	if (miter->__flags & SG_MITER_ATOMIC)
 		miter->addr = kmap_atomic(miter->page) + miter->__offset;
@@ -660,6 +673,9 @@ void sg_miter_stop(struct sg_mapping_iter *miter)
 		miter->length = 0;
 		miter->consumed = 0;
 	}
+
+	if (miter->ioaddr)
+		iounmap(miter->ioaddr);
 }
 EXPORT_SYMBOL(sg_miter_stop);
 
@@ -681,7 +697,7 @@ size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
 {
 	unsigned int offset = 0;
 	struct sg_mapping_iter miter;
-	unsigned int sg_flags = SG_MITER_ATOMIC;
+	unsigned int sg_flags = SG_MITER_ATOMIC | SG_MITRE_SUPPORTS_IOMEM;
 
 	if (to_buffer)
 		sg_flags |= SG_MITER_FROM_SG;
@@ -698,10 +714,17 @@ size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
 
 		len = min(miter.length, buflen - offset);
 
-		if (to_buffer)
-			memcpy(buf + offset, miter.addr, len);
-		else
-			memcpy(miter.addr, buf + offset, len);
+		if (miter.addr) {
+			if (to_buffer)
+				memcpy(buf + offset, miter.addr, len);
+			else
+				memcpy(miter.addr, buf + offset, len);
+		} else if (miter.ioaddr) {
+			if (to_buffer)
+				memcpy_fromio(buf + offset, miter.addr, len);
+			else
+				memcpy_toio(miter.addr, buf + offset, len);
+		}
 
 		offset += len;
 	}
