@@ -295,10 +295,20 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	ns->size = i_size_read(ns->bdev->bd_inode);
 	ns->blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
 
+	if (ns->pdev) {
+		 if (!ns->pdev->driver ||
+		     strcmp(ns->pdev->driver->name, "nvme") ||
+		     !nvme_pdev_is_bdev(ns->pdev, ns->bdev)) {
+				pr_err("P2P pdev doesn't match to the ns bdev\n");
+				ret = -EINVAL;
+				goto out_dev_put;
+			}
+	}
+
 	ret = percpu_ref_init(&ns->ref, nvmet_destroy_namespace,
 				0, GFP_KERNEL);
 	if (ret)
-		goto out_blkdev_put;
+		goto out_dev_put;
 
 	if (ns->nsid > subsys->max_nsid)
 		subsys->max_nsid = ns->nsid;
@@ -329,7 +339,11 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 out_unlock:
 	mutex_unlock(&subsys->lock);
 	return ret;
-out_blkdev_put:
+out_dev_put:
+	if (ns->pdev) {
+		pci_dev_put(ns->pdev);
+		ns->pdev = NULL;
+	}
 	blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
 	ns->bdev = NULL;
 	goto out_unlock;
@@ -369,6 +383,8 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 
 	if (ns->bdev)
 		blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
+	if (ns->pdev)
+		pci_dev_put(ns->pdev);
 out_unlock:
 	mutex_unlock(&subsys->lock);
 }
