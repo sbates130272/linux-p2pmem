@@ -46,6 +46,8 @@
 #define bio_iter_iovec(bio, iter)				\
 	bvec_iter_bvec((bio)->bi_io_vec, (iter))
 
+#define bio_iter_pfn_t(bio, iter)				\
+	bvec_iter_pfn_t((bio)->bi_io_vec, (iter))
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))
 #define bio_iter_len(bio, iter)					\
@@ -53,6 +55,7 @@
 #define bio_iter_offset(bio, iter)				\
 	bvec_iter_offset((bio)->bi_io_vec, (iter))
 
+#define bio_pfn_t(bio)		bio_iter_pfn_t((bio), (bio)->bi_iter)
 #define bio_page(bio)		bio_iter_page((bio), (bio)->bi_iter)
 #define bio_offset(bio)		bio_iter_offset((bio), (bio)->bi_iter)
 #define bio_iovec(bio)		bio_iter_iovec((bio), (bio)->bi_iter)
@@ -118,8 +121,8 @@ static inline void *bio_data(struct bio *bio)
 /*
  * will die
  */
-#define bio_to_phys(bio)	(page_to_phys(bio_page((bio))) + (unsigned long) bio_offset((bio)))
-#define bvec_to_phys(bv)	(page_to_phys(bvec_page((bv))) + (unsigned long) (bv)->bv_offset)
+#define bio_to_phys(bio)	(pfn_t_to_phys(bio_pfn_t((bio))) + (unsigned long) bio_offset((bio)))
+#define bvec_to_phys(bv)	(pfn_t_to_phys((bv)->bv_pfn) + (unsigned long) (bv)->bv_offset)
 
 /*
  * queues that have highmem support enabled may still need to revert to
