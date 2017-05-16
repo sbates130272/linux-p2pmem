@@ -1089,15 +1089,15 @@ static int crypt_convert_block_aead(struct crypt_config *cc,
 	sg_init_table(dmreq->sg_in, 4);
 	sg_set_buf(&dmreq->sg_in[0], sector, sizeof(uint64_t));
 	sg_set_buf(&dmreq->sg_in[1], org_iv, cc->iv_size);
-	sg_set_page(&dmreq->sg_in[2], bvec_page(&bv_in), cc->sector_size,
-		    bv_in.bv_offset);
+	sg_set_pfn(&dmreq->sg_in[2], bv_in.bv_pfn, cc->sector_size,
+		   bv_in.bv_offset);
 	sg_set_buf(&dmreq->sg_in[3], tag, cc->integrity_tag_size);
 
 	sg_init_table(dmreq->sg_out, 4);
 	sg_set_buf(&dmreq->sg_out[0], sector, sizeof(uint64_t));
 	sg_set_buf(&dmreq->sg_out[1], org_iv, cc->iv_size);
-	sg_set_page(&dmreq->sg_out[2], bvec_page(&bv_out), cc->sector_size,
-		    bv_out.bv_offset);
+	sg_set_pfn(&dmreq->sg_out[2], bv_out.bv_pfn, cc->sector_size,
+		   bv_out.bv_offset);
 	sg_set_buf(&dmreq->sg_out[3], tag, cc->integrity_tag_size);
 
 	if (cc->iv_gen_ops) {
@@ -1180,12 +1180,10 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	sg_out = &dmreq->sg_out[0];
 
 	sg_init_table(sg_in, 1);
-	sg_set_page(sg_in, bvec_page(&bv_in), cc->sector_size,
-		    bv_in.bv_offset);
+	sg_set_pfn(sg_in, bv_in.bv_pfn, cc->sector_size, bv_in.bv_offset);
 
 	sg_init_table(sg_out, 1);
-	sg_set_page(sg_out, bvec_page(&bv_out), cc->sector_size,
-		    bv_out.bv_offset);
+	sg_set_pfn(sg_out, bv_out.bv_pfn, cc->sector_size, bv_out.bv_offset);
 
 	if (cc->iv_gen_ops) {
 		/* For READs use IV stored in integrity metadata */

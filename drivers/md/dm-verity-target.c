@@ -412,7 +412,7 @@ int verity_for_io_block(struct dm_verity *v, struct dm_verity_io *io,
 		 * until you consider the typical block size is 4,096B.
 		 * Going through this loops twice should be very rare.
 		 */
-		sg_set_page(&sg, bvec_page(&bv), len, bv.bv_offset);
+		sg_set_pfn(&sg, bv.bv_pfn, len, bv.bv_offset);
 		ahash_request_set_crypt(req, &sg, NULL, len);
 		r = verity_complete_op(res, crypto_ahash_update(req));
 

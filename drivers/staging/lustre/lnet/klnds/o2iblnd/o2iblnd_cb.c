@@ -724,8 +724,8 @@ kiblnd_setup_rd_kiov(struct lnet_ni *ni, struct kib_tx *tx,
 
 		fragnob = min((int)(kiov->bv_len - offset), nob);
 
-		sg_set_page(sg, bvec_page(kiov), fragnob,
-			    kiov->bv_offset + offset);
+		sg_set_pfn(sg, kiov->bv_pfn, fragnob,
+			   kiov->bv_offset + offset);
 		sg = sg_next(sg);
 		if (!sg) {
 			CERROR("lacking enough sg entries to map tx\n");

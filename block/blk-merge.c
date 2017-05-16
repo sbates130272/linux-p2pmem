@@ -412,7 +412,7 @@ new_segment:
 			*sg = sg_next(*sg);
 		}
 
-		sg_set_page(*sg, bvec_page(bvec), nbytes, bvec->bv_offset);
+		sg_set_pfn(*sg, bvec->bv_pfn, nbytes, bvec->bv_offset);
 		(*nsegs)++;
 	}
 	*bvprv = *bvec;
@@ -422,7 +422,7 @@ static inline int __blk_bvec_map_sg(struct request_queue *q, struct bio_vec bv,
 		struct scatterlist *sglist, struct scatterlist **sg)
 {
 	*sg = sglist;
-	sg_set_page(*sg, bvec_page(&bv), bv.bv_len, bv.bv_offset);
+	sg_set_pfn(*sg, bv.bv_pfn, bv.bv_len, bv.bv_offset);
 	return 1;
 }
 

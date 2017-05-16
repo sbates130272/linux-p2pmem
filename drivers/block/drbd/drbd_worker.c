@@ -327,8 +327,7 @@ void drbd_csum_bio(struct crypto_ahash *tfm, struct bio *bio, void *digest)
 	crypto_ahash_init(req);
 
 	bio_for_each_segment(bvec, bio, iter) {
-		sg_set_page(&sg, bvec_page(&bvec), bvec.bv_len,
-			    bvec.bv_offset);
+		sg_set_pfn(&sg, bvec.bv_pfn, bvec.bv_len, bvec.bv_offset);
 		ahash_request_set_crypt(req, &sg, NULL, sg.length);
 		crypto_ahash_update(req);
 		/* REQ_OP_WRITE_SAME has only one segment,
