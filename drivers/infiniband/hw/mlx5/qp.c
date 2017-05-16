@@ -2427,7 +2427,8 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 					  MLX5_QP_OPTPAR_RAE		|
 					  MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_PM_STATE	|
-					  MLX5_QP_OPTPAR_RNR_TIMEOUT,
+					  MLX5_QP_OPTPAR_RNR_TIMEOUT	|
+					  MLX5_QP_OPTPAR_OFFLOAD_TYPE,
 			[MLX5_QP_ST_UC] = MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
 					  MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_PM_STATE,
@@ -2441,7 +2442,8 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 					  MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_RNR_TIMEOUT	|
 					  MLX5_QP_OPTPAR_PM_STATE	|
-					  MLX5_QP_OPTPAR_ALT_ADDR_PATH,
+					  MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
+					  MLX5_QP_OPTPAR_OFFLOAD_TYPE,
 			[MLX5_QP_ST_UC] = MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_PM_STATE	|
 					  MLX5_QP_OPTPAR_ALT_ADDR_PATH,
@@ -2507,11 +2509,32 @@ static int ib_nr_to_mlx5_nr(int ib_mask)
 			MLX5_QP_OPTPAR_RRE | MLX5_QP_OPTPAR_RAE;
 	case IB_QP_PATH_MIG_STATE:
 		return MLX5_QP_OPTPAR_PM_STATE;
+	case IB_QP_OFFLOAD_TYPE:
+		return MLX5_QP_OPTPAR_OFFLOAD_TYPE;
 	case IB_QP_CAP:
 		return 0;
 	case IB_QP_DEST_QPN:
 		return 0;
 	}
+	return 0;
+}
+
+static int mlx5_ib_set_qp_offload_type(struct mlx5_qp_context *context,
+				       struct ib_qp *qp,
+				       enum ib_qp_offload_type offload_type)
+{
+	switch (offload_type) {
+	case IB_QP_OFFLOAD_NVMF:
+		if (qp->srq &&
+		    qp->srq->srq_type == IB_EXP_SRQT_NVMF) {
+			context->flags |= cpu_to_be32(MLX5_QPC_OFFLOAD_TYPE_NVMF << 4);
+			break;
+		}
+	/* Fall through */
+	default:
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -2933,6 +2956,12 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 	op = optab[mlx5_cur][mlx5_new];
 	optpar = ib_mask_to_mlx5_opt(attr_mask);
 	optpar &= opt_mask[mlx5_cur][mlx5_new][mlx5_st];
+
+	if (attr_mask & IB_QP_OFFLOAD_TYPE) {
+		if (mlx5_ib_set_qp_offload_type(context, ibqp,
+						attr->offload_type))
+			goto out;
+	}
 
 	if (qp->ibqp.qp_type == IB_QPT_RAW_PACKET ||
 	    qp->flags & MLX5_IB_QP_UNDERLAY) {
