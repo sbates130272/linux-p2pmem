@@ -298,6 +298,22 @@ static inline void *sg_virt(struct scatterlist *sg)
 	return page_address(sg_page(sg)) + sg->offset;
 }
 
+/**
+ * sg_try_virt - Return virtual address of an sg entry or NULL if it is
+ *	unmappable
+ * @sg:      SG entry
+ *
+ * Description:
+ *   This is the same as sg_virt but is safe to call with unmappable
+ *   memory. This function will return NULL in case the sg is is
+ *   unmappable.
+ *
+ **/
+static inline void *sg_try_virt(struct scatterlist *sg)
+{
+	return pfn_t_to_virt(sg->__pfn);
+}
+
 int sg_nents(struct scatterlist *sg);
 int sg_nents_for_len(struct scatterlist *sg, u64 len);
 struct scatterlist *sg_next(struct scatterlist *);
