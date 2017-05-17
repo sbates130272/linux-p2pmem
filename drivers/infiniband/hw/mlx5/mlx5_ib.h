@@ -41,6 +41,7 @@
 #include <linux/mlx5/cq.h>
 #include <linux/mlx5/qp.h>
 #include <linux/mlx5/srq.h>
+#include <linux/mlx5/nvmf.h>
 #include <linux/types.h>
 #include <linux/mlx5/transobj.h>
 #include <rdma/ib_user_verbs.h>
@@ -960,6 +961,32 @@ int mlx5_ib_destroy_rwq_ind_table(struct ib_rwq_ind_table *wq_ind_table);
 
 /* NVMEoF target offlod */
 void mlx5_ib_internal_fill_nvmf_caps(struct mlx5_ib_dev *dev);
+struct mlx5_ib_nvmf_be_ctrl {
+	struct ib_nvmf_ctrl		ibctrl;
+	struct mlx5_core_nvmf_be_ctrl	mctrl;
+};
+
+struct mlx5_ib_nvmf_ns {
+	struct ib_nvmf_ns		ibns;
+	struct mlx5_core_nvmf_ns	mns;
+};
+
+static inline struct mlx5_ib_nvmf_be_ctrl *to_mctrl(struct ib_nvmf_ctrl *ibctrl)
+{
+	return container_of(ibctrl, struct mlx5_ib_nvmf_be_ctrl, ibctrl);
+}
+
+static inline struct mlx5_ib_nvmf_ns *to_mns(struct ib_nvmf_ns *ibns)
+{
+	return container_of(ibns, struct mlx5_ib_nvmf_ns, ibns);
+}
+
+struct ib_nvmf_ctrl *mlx5_ib_create_nvmf_backend_ctrl(struct ib_srq *srq,
+		struct ib_nvmf_backend_ctrl_init_attr *init_attr);
+int mlx5_ib_destroy_nvmf_backend_ctrl(struct ib_nvmf_ctrl *ctrl);
+struct ib_nvmf_ns *mlx5_ib_attach_nvmf_ns(struct ib_nvmf_ctrl *ctrl,
+		struct ib_nvmf_ns_init_attr *init_attr);
+int mlx5_ib_detach_nvmf_ns(struct ib_nvmf_ns *ns);
 
 #ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
 void mlx5_ib_internal_fill_odp_caps(struct mlx5_ib_dev *dev);
