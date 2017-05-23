@@ -235,6 +235,63 @@ static void destroy_srq_kernel(struct mlx5_ib_dev *dev, struct mlx5_ib_srq *srq)
 	mlx5_db_free(dev->mdev, &srq->db);
 }
 
+static int mlx5_ib_check_nvmf_srq_attrs(struct ib_srq_init_attr *init_attr)
+{
+	switch (init_attr->ext.nvmf.type) {
+	case IB_NVMF_WRITE_OFFLOAD:
+	case IB_NVMF_READ_OFFLOAD:
+	case IB_NVMF_READ_WRITE_OFFLOAD:
+	case IB_NVMF_READ_WRITE_FLUSH_OFFLOAD:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/* Must be called after checking that offload type values are valid */
+static enum mlx5_nvmf_offload_type to_mlx5_nvmf_offload_type(enum ib_nvmf_offload_type type)
+{
+	switch (type) {
+	case IB_NVMF_WRITE_OFFLOAD:
+		return MLX5_NVMF_WRITE_OFFLOAD;
+	case IB_NVMF_READ_OFFLOAD:
+		return MLX5_NVMF_READ_OFFLOAD;
+	case IB_NVMF_READ_WRITE_OFFLOAD:
+		return MLX5_NVMF_READ_WRITE_OFFLOAD;
+	case IB_NVMF_READ_WRITE_FLUSH_OFFLOAD:
+		return MLX5_NVMF_READ_WRITE_FLUSH_OFFLOAD;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int mlx5_ib_exp_set_nvmf_srq_attrs(struct mlx5_nvmf_attr *nvmf,
+					  struct ib_srq_init_attr *init_attr)
+{
+	int err;
+
+	err = mlx5_ib_check_nvmf_srq_attrs(init_attr);
+	if (err)
+		return -EINVAL;
+
+	nvmf->type = to_mlx5_nvmf_offload_type(init_attr->ext.nvmf.type);
+	nvmf->log_max_namespace = init_attr->ext.nvmf.log_max_namespace;
+	nvmf->offloaded_capsules_count = init_attr->ext.nvmf.offloaded_capsules_count;
+	nvmf->ioccsz = init_attr->ext.nvmf.cmd_size;
+	nvmf->icdoff = init_attr->ext.nvmf.data_offset;
+	nvmf->log_max_io_size = init_attr->ext.nvmf.log_max_io_size;
+	nvmf->nvme_memory_log_page_size = init_attr->ext.nvmf.nvme_memory_log_page_size;
+	nvmf->staging_buffer_log_page_size = init_attr->ext.nvmf.staging_buffer_log_page_size;
+	nvmf->staging_buffer_number_of_pages = init_attr->ext.nvmf.staging_buffer_number_of_pages;
+	nvmf->staging_buffer_page_offset = init_attr->ext.nvmf.staging_buffer_page_offset;
+	nvmf->nvme_queue_size = init_attr->ext.nvmf.nvme_queue_size;
+	nvmf->staging_buffer_pas = init_attr->ext.nvmf.staging_buffer_pas;
+
+	return err;
+}
+
 struct ib_srq *mlx5_ib_create_srq(struct ib_pd *pd,
 				  struct ib_srq_init_attr *init_attr,
 				  struct ib_udata *udata)
@@ -308,6 +365,12 @@ struct ib_srq *mlx5_ib_create_srq(struct ib_pd *pd,
 			goto err_usr_kern_srq;
 		}
 		in.flags |= MLX5_SRQ_FLAG_RNDV;
+	} else if (init_attr->srq_type == IB_EXP_SRQT_NVMF) {
+		err = mlx5_ib_exp_set_nvmf_srq_attrs(&in.nvmf, init_attr);
+		if (err) {
+			mlx5_ib_warn(dev, "setting nvmf srq attrs failed, err %d\n", err);
+			goto err_usr_kern_srq;
+		}
 	}
 
 	if (ib_srq_has_cq(init_attr->srq_type))
