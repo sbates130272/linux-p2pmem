@@ -120,6 +120,7 @@ static inline struct nvmet_port *to_nvmet_port(struct config_item *item)
 
 struct nvmet_ctrl {
 	struct nvmet_subsys	*subsys;
+	struct nvmet_port	*port;
 	struct nvmet_cq		**cqs;
 	struct nvmet_sq		**sqs;
 
