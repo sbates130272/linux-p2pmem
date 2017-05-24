@@ -73,6 +73,17 @@ static inline void ioport_unmap(void __iomem *p)
 #define __raw_writel	zpci_write_u32
 #define __raw_writeq	zpci_write_u64
 
+#else
+
+static inline void __iomem *ioremap(unsigned long offset, unsigned long size)
+{
+	return NULL;
+}
+
+static inline void iounmap(void __iomem *addr)
+{
+}
+
 #endif /* CONFIG_PCI */
 
 #include <asm-generic/io.h>
