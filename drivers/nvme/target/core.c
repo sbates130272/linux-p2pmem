@@ -964,6 +964,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		/* keep-alive timeout in seconds */
 		ctrl->kato = DIV_ROUND_UP(kato, 1000);
 	}
+	ctrl->port = req->port;
 	nvmet_start_keep_alive_timer(ctrl);
 
 	mutex_lock(&subsys->lock);
