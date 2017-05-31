@@ -76,6 +76,11 @@ enum nvme_quirks {
 	 * The deepest sleep state should not be used.
 	 */
 	NVME_QUIRK_NO_DEEPEST_PS		= (1 << 5),
+
+	/*
+	 * Create a pseudo-CMB using BAR4
+	 */
+	NVME_QUIRK_PSEUDO_CMB			= (1 << 6),
 };
 
 /*
