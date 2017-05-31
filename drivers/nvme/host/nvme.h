@@ -77,6 +77,21 @@ enum nvme_quirks {
 	 * readiness, which is done by reading the NVME_CSTS_RDY bit.
 	 */
 	NVME_QUIRK_DELAY_BEFORE_CHK_RDY		= (1 << 3),
+
+	/*
+	 * APST should not be used.
+	 */
+	NVME_QUIRK_NO_APST			= (1 << 4),
+
+	/*
+	 * The deepest sleep state should not be used.
+	 */
+	NVME_QUIRK_NO_DEEPEST_PS		= (1 << 5),
+
+	/*
+	 * Create a pseudo-CMB using BAR4
+	 */
+	NVME_QUIRK_PSEUDO_CMB			= (1 << 6),
 };
 
 /*

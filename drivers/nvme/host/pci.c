@@ -1395,6 +1395,31 @@ static int init_p2pmem(struct nvme_dev *dev)
 	return 0;
 }
 
+/*
+ * The Microsemi (formerly PMC-Sierra) NVRAM card has a mappable PCIe
+ * BAR at base address 4 which can be used as a pseudo CMB (discuss
+ * the caveats of this with your Microsemi support team). This quirk
+ * enables the CMB components of the driver even though the device
+ * does not advertise or set CMBSZ or CMBLOC.
+ */
+
+static void nvme_setup_pseudo_cmb(struct nvme_dev *dev, int bar)
+{
+	size_t sz, szu;
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+
+	sz = pci_resource_len(pdev, bar);
+	if (sz < SZ_2G) {
+		sz /= SZ_4K;
+		szu = 0;
+	} else {
+		sz /= SZ_64K;
+		szu = 1;
+	}
+	dev->cmbsz = (sz << 12) | (szu << 8) | 0x1f;
+	dev->cmbloc = bar;
+}
+
 static void nvme_map_cmb(struct nvme_dev *dev)
 {
 	u64 szu, size, offset;
@@ -1403,11 +1428,14 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 	dma_addr_t dma_addr;
 
 	dev->cmb = false;
-	dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
-	if (!(NVME_CMB_SZ(dev->cmbsz)))
-		return;
-	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
-
+	if (dev->ctrl.quirks & NVME_QUIRK_PSEUDO_CMB) {
+		nvme_setup_pseudo_cmb(dev, 4);
+	} else {
+		dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
+		if (!(NVME_CMB_SZ(dev->cmbsz)))
+			return;
+		dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
+	}
 	if (!use_cmb)
 		return;
 
@@ -1688,7 +1716,8 @@ static int nvme_pci_enable(struct nvme_dev *dev)
 	 * NULL as final argument to sysfs_add_file_to_group.
 	 */
 
-	if (readl(dev->bar + NVME_REG_VS) >= NVME_VS(1, 2, 0)) {
+	if (dev->ctrl.quirks & NVME_QUIRK_PSEUDO_CMB ||
+	    readl(dev->bar + NVME_REG_VS) >= NVME_VS(1, 2, 0)) {
 		nvme_map_cmb(dev);
 
 		if (dev->cmbsz) {
@@ -2167,6 +2196,8 @@ static const struct pci_device_id nvme_id_table[] = {
 		.driver_data = NVME_QUIRK_DELAY_BEFORE_CHK_RDY, },
 	{ PCI_DEVICE(0x1c5f, 0x0540),	/* Memblaze Pblaze4 adapter */
 		.driver_data = NVME_QUIRK_DELAY_BEFORE_CHK_RDY, },
+	{ PCI_DEVICE(0x11f8, 0xf117),	/* Microsemi NVRAM adaptor */
+		.driver_data = NVME_QUIRK_PSEUDO_CMB, },
 	{ PCI_DEVICE_CLASS(PCI_CLASS_STORAGE_EXPRESS, 0xffffff) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2001) },
 	{ 0, }
