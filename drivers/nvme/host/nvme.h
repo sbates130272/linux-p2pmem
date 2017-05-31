@@ -80,6 +80,11 @@ enum nvme_quirks {
 	 * Supports the LighNVM command set if indicated in vs[1].
 	 */
 	NVME_QUIRK_LIGHTNVM			= (1 << 6),
+
+	/*
+	 * Create a pseudo-CMB using BAR4
+	 */
+	NVME_QUIRK_PSEUDO_CMB			= (1 << 7),
 };
 
 /*
