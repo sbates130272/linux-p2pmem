@@ -518,11 +518,19 @@ static int nvmet_rdma_init_st_pool(struct nvmet_rdma_staging_buf_pool *pool,
 				   unsigned int buffer_size)
 {
 	struct nvmet_rdma_staging_buf *st, *tmp;
-	int i, err;
+	int i, err = -EINVAL;
 	int size = mem_size / buffer_size;
+	unsigned long start_pfn, end_pfn;
 
 	if (!PAGE_ALIGNED(mem_start))
-		return -EINVAL;
+		goto out;
+
+	start_pfn = PFN_DOWN(mem_start);
+	end_pfn = PFN_DOWN(mem_start + mem_size * SZ_1M);
+	for (; start_pfn < end_pfn; start_pfn++) {
+		if (pfn_valid(start_pfn))
+			goto out;
+	}
 
 	for (i = 0; i < size; i++) {
 		st = nvmet_rdma_alloc_st_buff(1, buffer_size, false);
@@ -548,6 +556,7 @@ error:
 		list_del(&st->entry);
 		nvmet_rdma_free_st_buff(st);
 	}
+out:
 	return err;
 }
 
