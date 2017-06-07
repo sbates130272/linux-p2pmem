@@ -771,6 +771,16 @@ static void __meminit free_pmd_table(pmd_t *pmd_start, pud_t *pud)
 	spin_unlock(&init_mm.page_table_lock);
 }
 
+/*
+ * For 4 levels page table we do not want to free puds but for 5 levels
+ * we should free them. This code also need to change to adapt for boot
+ * time switching between 4 and 5 level.
+ */
+#if CONFIG_PGTABLE_LEVELS == 4
+static inline void free_pud_table(pud_t *pud_start, p4d_t *p4d)
+{
+}
+#else /* CONFIG_PGTABLE_LEVELS == 4 */
 static void __meminit free_pud_table(pud_t *pud_start, p4d_t *p4d)
 {
 	pud_t *pud;
@@ -788,6 +798,7 @@ static void __meminit free_pud_table(pud_t *pud_start, p4d_t *p4d)
 	p4d_clear(p4d);
 	spin_unlock(&init_mm.page_table_lock);
 }
+#endif /* CONFIG_PGTABLE_LEVELS == 4 */
 
 static void __meminit
 remove_pte_table(pte_t *pte_start, unsigned long addr, unsigned long end,
