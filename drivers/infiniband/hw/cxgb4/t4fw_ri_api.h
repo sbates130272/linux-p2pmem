@@ -101,7 +101,8 @@ enum fw_ri_stag_type {
 enum fw_ri_data_op {
 	FW_RI_DATA_IMMD			= 0x81,
 	FW_RI_DATA_DSGL			= 0x82,
-	FW_RI_DATA_ISGL			= 0x83
+	FW_RI_DATA_ISGL			= 0x83,
+	FW_RI_DATA_ASGL			= 0x86
 };
 
 enum fw_ri_sgl_depth {
@@ -138,6 +139,29 @@ struct fw_ri_isgl {
 	__be32	r2;
 #ifndef C99_NOT_SUPPORTED
 	struct fw_ri_sge sge[0];
+#endif
+};
+
+#if 0
+struct fw_ri_memaddr {
+	__u8	r1[3];
+	__u8	len16; /* in units of 16 bytes. 0-1KB */
+	__be32	addr; /* 32B aligned */
+};
+#else
+struct fw_ri_memaddr {
+	__be32	len;
+	__be32	addr;
+};
+#endif
+
+struct fw_ri_asgl {
+	__u8	op;  /* FW_RI_DATA_ASGL */
+	__u8	r1;
+	__be16	naddr;
+	__be32	r2;
+#ifndef C99_NOT_SUPPORTED
+	struct fw_ri_memaddr addrs[0];
 #endif
 };
 
@@ -539,6 +563,7 @@ struct fw_ri_rdma_write_wr {
 	union {
 		struct fw_ri_immd immd_src[0];
 		struct fw_ri_isgl isgl_src[0];
+		struct fw_ri_asgl asgl_src[0];
 	} u;
 #endif
 };
