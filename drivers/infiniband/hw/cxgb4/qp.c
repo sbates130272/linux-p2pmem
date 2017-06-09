@@ -523,9 +523,70 @@ static int build_rdma_send(struct t4_sq *sq, union t4_wr *wqe,
 	return 0;
 }
 
-static int build_rdma_write(struct t4_sq *sq, union t4_wr *wqe,
+static __u32 dev_memaddr(struct cxgb4_lld_info *lip, u64 sge_addr)
+{
+	__u32 a = sge_addr - lip->p2pmem_dma_addr;
+
+	return a;
+}
+
+static bool addr_is_p2pmem(struct cxgb4_lld_info *lip, struct ib_sge *sgep)
+{
+	bool ret;
+
+	ret = !sgep->lkey && lip->p2pmem_dev_size &&
+	       sgep->addr >= lip->p2pmem_dma_addr &&
+	       (sgep->addr + sgep->length - 1) < (lip->p2pmem_dma_addr + lip->p2pmem_dev_size);
+	return ret;
+}
+
+static int build_asgl(struct cxgb4_lld_info *lip, __be64 *queue_start,
+		      __be64 *queue_end, struct fw_ri_asgl *asglp,
+		      struct ib_sge *sg_list, int num_sge, u32 *plenp)
+{
+	struct fw_ri_memaddr *map = (struct fw_ri_memaddr *)asglp->addrs;
+	u32 plen = 0;
+	int i;
+
+	for (i = 0; i < num_sge; i++) {
+		u32 len = sg_list[i].length;
+		u64 addr = sg_list[i].addr;
+
+		/* All entries must be p2pmem */
+		if (!addr_is_p2pmem(lip, &sg_list[i]))
+			return -EINVAL;
+
+		/* Only support STAG0 */
+		if (sg_list[i].lkey)
+			return -EINVAL;
+
+		if ((plen + len) < plen)
+			return -EMSGSIZE;
+		plen += len;
+
+		map->len = cpu_to_be32(len);
+		map->addr = cpu_to_be32(dev_memaddr(lip, addr));
+
+		pr_debug("sge: addr 0x%x len %u\n", be32_to_cpu(map->addr), be32_to_cpu(len));
+
+		if (++map == (struct fw_ri_memaddr *)queue_end)
+			map = (struct fw_ri_memaddr *)queue_start;
+	}
+
+	asglp->op = FW_RI_DATA_ASGL;
+	asglp->r1 = 0;
+	asglp->naddr = cpu_to_be16(num_sge);
+	asglp->r2 = 0;
+
+	*plenp = plen;
+
+	return 0;
+}
+
+static int build_rdma_write(struct c4iw_qp *qhp, union t4_wr *wqe,
 			    struct ib_send_wr *wr, u8 *len16)
 {
+	struct t4_sq *sq = &qhp->wq.sq;
 	u32 plen;
 	int size;
 	int ret;
@@ -544,14 +605,23 @@ static int build_rdma_write(struct t4_sq *sq, union t4_wr *wqe,
 			size = sizeof wqe->write + sizeof(struct fw_ri_immd) +
 			       plen;
 		} else {
-			ret = build_isgl((__be64 *)sq->queue,
+			ret = build_asgl(&qhp->rhp->rdev.lldi, (__be64 *)sq->queue,
 					 (__be64 *)&sq->queue[sq->size],
-					 wqe->write.u.isgl_src,
+					 wqe->write.u.asgl_src,
 					 wr->sg_list, wr->num_sge, &plen);
-			if (ret)
-				return ret;
-			size = sizeof wqe->write + sizeof(struct fw_ri_isgl) +
-			       wr->num_sge * sizeof(struct fw_ri_sge);
+			if (!ret) {
+				size = sizeof wqe->write + sizeof(struct fw_ri_asgl) +
+				       wr->num_sge * sizeof(struct fw_ri_sge);
+			} else {
+				ret = build_isgl((__be64 *)sq->queue,
+						 (__be64 *)&sq->queue[sq->size],
+						 wqe->write.u.isgl_src,
+						 wr->sg_list, wr->num_sge, &plen);
+				if (ret)
+					return ret;
+				size = sizeof wqe->write + sizeof(struct fw_ri_isgl) +
+				       wr->num_sge * sizeof(struct fw_ri_sge);
+			}
 		}
 	} else {
 		wqe->write.u.immd_src[0].op = FW_RI_DATA_IMMD;
@@ -910,7 +980,7 @@ int c4iw_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		case IB_WR_RDMA_WRITE:
 			fw_opcode = FW_RI_RDMA_WRITE_WR;
 			swsqe->opcode = FW_RI_RDMA_WRITE;
-			err = build_rdma_write(&qhp->wq.sq, wqe, wr, &len16);
+			err = build_rdma_write(qhp, wqe, wr, &len16);
 			break;
 		case IB_WR_RDMA_READ:
 		case IB_WR_RDMA_READ_WITH_INV:
@@ -1674,7 +1744,8 @@ int c4iw_modify_qp(struct c4iw_dev *rhp, struct c4iw_qp *qhp,
 		goto err;
 		break;
 	default:
-		pr_err("%s in a bad state %d\n", __func__, qhp->attr.state);
+		printk(KERN_ERR "%s in a bad state %d\n",
+		       __func__, qhp->attr.state);
 		ret = -EINVAL;
 		goto err;
 		break;
