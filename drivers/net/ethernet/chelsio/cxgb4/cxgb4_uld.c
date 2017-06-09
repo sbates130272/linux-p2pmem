@@ -611,6 +611,7 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
 {
 	int i;
 
+	memset(lld, 0, sizeof *lld);
 	lld->pdev = adap->pdev;
 	lld->pf = adap->pf;
 	lld->l2t = adap->l2t;
@@ -648,6 +649,14 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
 	lld->ulptx_memwrite_dsgl = adap->params.ulptx_memwrite_dsgl;
 	lld->nodeid = dev_to_node(adap->pdev_dev);
 	lld->fr_nsmr_tpte_wr_support = adap->params.fr_nsmr_tpte_wr_support;
+	if (adap->p2pmem) {
+		lld->p2pmem_dev_addr = t4_read_reg(adap, CIM_EXTMEM2_BASE_ADDR_A);
+		lld->p2pmem_dev_size = t4_read_reg(adap, CIM_EXTMEM2_ADDR_SIZE_A);
+		lld->p2pmem_dma_addr = adap->pdev->resource[4].start + lld->p2pmem_dev_size;
+		dev_info(adap->pdev_dev,
+			"p2pmem dma_addr 0x%llx dev_addr 0x%x dev_size %d\n",
+			lld->p2pmem_dma_addr, lld->p2pmem_dev_addr, lld->p2pmem_dev_size);
+	}
 }
 
 static void uld_attach(struct adapter *adap, unsigned int uld)

@@ -325,6 +325,10 @@ struct cxgb4_lld_info {
 	void **iscsi_ppm;		     /* iscsi page pod manager */
 	int nodeid;			     /* device numa node id */
 	bool fr_nsmr_tpte_wr_support;	     /* FW supports FR_NSMR_TPTE_WR */
+
+	u64 p2pmem_dma_addr;
+	u32 p2pmem_dev_addr;
+	u32 p2pmem_dev_size;
 };
 
 struct cxgb4_uld_info {
