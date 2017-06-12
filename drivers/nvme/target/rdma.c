@@ -644,8 +644,12 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 
 	rsp->req.p2pmem = rsp->queue->p2pmem;
 
-	/* Only use p2pmem for NVMF READs (RDMA WRITEs) due to T6 issue */
-	if (nvmet_data_dir(&rsp->req) == DMA_FROM_DEVICE)
+	/*
+	 * Disable p2pmem if this is an NVMF WRITE but p2pmem usage is not 
+	 * allowed for writes.  T6 workaround...
+	 */
+	if (!rsp->queue->port->allow_p2pmem_nvmf_write &&
+	    nvmet_data_dir(&rsp->req) == DMA_FROM_DEVICE)
 		rsp->req.p2pmem = NULL;
 
 	status = nvmet_rdma_alloc_sgl(&rsp->req.sg, &rsp->req.sg_cnt,

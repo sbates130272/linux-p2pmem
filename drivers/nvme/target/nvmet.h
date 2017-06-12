@@ -96,6 +96,7 @@ struct nvmet_port {
 	void				*priv;
 	bool				enabled;
 	bool				allow_p2pmem;
+	bool				allow_p2pmem_nvmf_write;
 };
 
 static inline struct nvmet_port *to_nvmet_port(struct config_item *item)

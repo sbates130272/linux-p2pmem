@@ -801,6 +801,30 @@ static ssize_t nvmet_allow_p2pmem_store(struct config_item *item,
 	return count;
 }
 CONFIGFS_ATTR(nvmet_, allow_p2pmem);
+
+static ssize_t nvmet_allow_p2pmem_nvmf_write_show(struct config_item *item, char *page)
+{
+	return sprintf(page, "%d\n", to_nvmet_port(item)->allow_p2pmem_nvmf_write);
+}
+
+static ssize_t nvmet_allow_p2pmem_nvmf_write_store(struct config_item *item,
+					const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item);
+	bool allow;
+	int ret;
+
+	ret = strtobool(page, &allow);
+	if (ret)
+		return ret;
+
+	down_write(&nvmet_config_sem);
+	port->allow_p2pmem_nvmf_write = allow;
+	up_write(&nvmet_config_sem);
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_, allow_p2pmem_nvmf_write);
 #endif
 
 static struct configfs_attribute *nvmet_port_attrs[] = {
@@ -812,6 +836,7 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 
 	#ifdef CONFIG_P2PMEM
 	&nvmet_attr_allow_p2pmem,
+	&nvmet_attr_allow_p2pmem_nvmf_write,
 	#endif
 
 	NULL,
