@@ -1816,6 +1816,18 @@ static int nvme_create_io_queues(struct nvme_dev *dev)
 	return ret >= 0 ? 0 : ret;
 }
 
+static ssize_t nvme_num_p2p_queues_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct nvme_dev *ndev = to_nvme_dev(dev_get_drvdata(dev));
+	int num_p2p_queues = ndev->online_queues > 1 ? ndev->num_p2p_queues : 0;
+
+	return scnprintf(buf, PAGE_SIZE, "num_p2p_queues: %d\n",
+			 num_p2p_queues);
+}
+static DEVICE_ATTR(num_p2p_queues, S_IRUGO, nvme_num_p2p_queues_show, NULL);
+
 static ssize_t nvme_cmb_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
@@ -2688,6 +2700,18 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto release_pools;
 
 	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_RESETTING);
+
+	/*
+	 * We populate sysfs to know how many p2p queues can be totaly created.
+	 * Note that we add the P2P attribute to the nvme_ctrl kobj which removes
+	 * the need to remove it on exit. Since nvme_dev_attrs_group has no name we can pass
+	 * NULL as final argument to sysfs_add_file_to_group.
+	 */
+	if (sysfs_add_file_to_group(&dev->ctrl.device->kobj,
+				    &dev_attr_num_p2p_queues.attr, NULL))
+		dev_warn(dev->ctrl.device,
+			 "failed to add sysfs attribute for num P2P queues\n");
+
 	dev_info(dev->ctrl.device, "pci function %s\n", dev_name(&pdev->dev));
 
 	queue_work(nvme_wq, &dev->ctrl.reset_work);
