@@ -214,6 +214,9 @@ static int drm_minor_register(struct drm_device *dev, unsigned int type)
 
 	DRM_DEBUG("\n");
 
+	if (!drm_debugfs_root)
+		return -ENODEV;
+
 	minor = *drm_minor_get_slot(dev, type);
 	if (!minor)
 		return 0;
@@ -935,6 +938,7 @@ static void drm_core_exit(void)
 {
 	unregister_chrdev(DRM_MAJOR, "drm");
 	debugfs_remove(drm_debugfs_root);
+	drm_debugfs_root = NULL;
 	drm_sysfs_destroy();
 	idr_destroy(&drm_minors_idr);
 	drm_connector_ida_destroy();
