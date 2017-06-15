@@ -102,7 +102,6 @@ struct nvme_dev {
 	struct timer_list watchdog_timer;
 	struct mutex shutdown_lock;
 	bool subsystem;
-	bool cmb;
 	dma_addr_t cmb_dma_addr;
 	u64 cmb_size;
 	u32 cmbsz;
@@ -1138,7 +1137,7 @@ static int nvme_cmb_qdepth(struct nvme_dev *dev, int nr_io_queues,
 static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 				int qid, int depth)
 {
-	if (qid && dev->cmb && NVME_CMB_SQS(use_cmb) &&
+	if (qid && dev->cmbsz && NVME_CMB_SQS(use_cmb) &&
 	    NVME_CMB_SQS(dev->cmbsz)) {
 		nvmeq->sq_cmds_io = p2pmem_alloc(dev->p2pmem,
 						 roundup(SQ_SIZE(depth),
@@ -1514,7 +1513,6 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 	dma_addr_t dma_addr;
 
-	dev->cmb = false;
 	if (dev->ctrl.quirks & NVME_QUIRK_PSEUDO_CMB) {
 		dev->cmbsz = PSEUDO_CMB_CMBSZ;
 		dev->cmbloc = PSEUDO_CMB_CMBLOC;
@@ -1544,7 +1542,6 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 		size = bar_size - offset;
 
 	dma_addr = pci_resource_start(pdev, NVME_CMB_BIR(dev->cmbloc)) + offset;
-	dev->cmb = true;
 	dev->cmb_dma_addr = dma_addr;
 	dev->cmb_size = size;
 
@@ -1558,8 +1555,7 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 
 static inline void nvme_release_cmb(struct nvme_dev *dev)
 {
-	if (dev->cmb) {
-		dev->cmb = false;
+	if (dev->cmbsz) {
 		p2pmem_unregister(dev->p2pmem);
 		sysfs_remove_file_from_group(&dev->ctrl.device->kobj,
 					     &dev_attr_cmb.attr, NULL);
@@ -1586,7 +1582,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	if (nr_io_queues == 0)
 		return 0;
 
-	if (dev->cmb && NVME_CMB_SQS(dev->cmbsz)) {
+	if (dev->cmbsz && NVME_CMB_SQS(dev->cmbsz)) {
 		result = nvme_cmb_qdepth(dev, nr_io_queues,
 				sizeof(struct nvme_command));
 		if (result > 0)
