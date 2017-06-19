@@ -66,6 +66,7 @@ static void bad_io_access(unsigned long port, const char *access)
 #ifndef mmio_read16be
 #define mmio_read16be(addr) be16_to_cpu(__raw_readw(addr))
 #define mmio_read32be(addr) be32_to_cpu(__raw_readl(addr))
+#define mmio_read64be(addr) be64_to_cpu(__raw_readq(addr))
 #endif
 
 unsigned int ioread8(void __iomem *addr)
@@ -93,11 +94,45 @@ unsigned int ioread32be(void __iomem *addr)
 	IO_COND(addr, return pio_read32be(port), return mmio_read32be(addr));
 	return 0xffffffff;
 }
+
+#ifdef readq
+u64 ioread64(void __iomem *addr)
+{
+	IO_COND(addr, bad_io_access(port, "ioread64"), return readq(addr));
+	return 0xffffffffffffffffLL;
+}
+u64 ioread64be(void __iomem *addr)
+{
+	IO_COND(addr, bad_io_access(port, "ioread64be"),
+		return mmio_read64be(addr));
+	return 0xffffffffffffffffLL;
+}
+#else
+u64 ioread64(void __iomem *addr)
+{
+	u64 low, high;
+
+	low = ioread32(addr);
+	high = ioread32(addr + sizeof(u32));
+	return low | (high << 32);
+}
+u64 ioread64be(void __iomem *addr)
+{
+	u64 low, high;
+
+	low = ioread32be(addr + sizeof(u32));
+	high = ioread32be(addr);
+	return low | (high << 32);
+}
+#endif
+
 EXPORT_SYMBOL(ioread8);
 EXPORT_SYMBOL(ioread16);
 EXPORT_SYMBOL(ioread16be);
 EXPORT_SYMBOL(ioread32);
 EXPORT_SYMBOL(ioread32be);
+EXPORT_SYMBOL(ioread64);
+EXPORT_SYMBOL(ioread64be);
 
 #ifndef pio_write16be
 #define pio_write16be(val,port) outw(swab16(val),port)
@@ -107,6 +142,7 @@ EXPORT_SYMBOL(ioread32be);
 #ifndef mmio_write16be
 #define mmio_write16be(val,port) __raw_writew(be16_to_cpu(val),port)
 #define mmio_write32be(val,port) __raw_writel(be32_to_cpu(val),port)
+#define mmio_write64be(val,port) __raw_writeq(be64_to_cpu(val),port)
 #endif
 
 void iowrite8(u8 val, void __iomem *addr)
@@ -129,11 +165,37 @@ void iowrite32be(u32 val, void __iomem *addr)
 {
 	IO_COND(addr, pio_write32be(val,port), mmio_write32be(val, addr));
 }
+
+#ifdef writeq
+void iowrite64(u64 val, void __iomem *addr)
+{
+	IO_COND(addr, bad_io_access(port, "iowrite64"), writeq(val, addr));
+}
+void iowrite64be(u64 val, void __iomem *addr)
+{
+	IO_COND(addr, bad_io_access(port, "iowrite64be"),
+		mmio_write64be(val, addr));
+}
+#else
+void iowrite64(u64 val, void __iomem *addr)
+{
+	iowrite32(val, addr);
+	iowrite32(val >> 32, addr + sizeof(u32));
+}
+void iowrite64be(u64 val, void __iomem *addr)
+{
+	iowrite32be(val >> 32, addr);
+	iowrite32be(val, addr + sizeof(u32));
+}
+#endif
+
 EXPORT_SYMBOL(iowrite8);
 EXPORT_SYMBOL(iowrite16);
 EXPORT_SYMBOL(iowrite16be);
 EXPORT_SYMBOL(iowrite32);
 EXPORT_SYMBOL(iowrite32be);
+EXPORT_SYMBOL(iowrite64);
+EXPORT_SYMBOL(iowrite64be);
 
 /*
  * These are the "repeat MMIO read/write" functions.
