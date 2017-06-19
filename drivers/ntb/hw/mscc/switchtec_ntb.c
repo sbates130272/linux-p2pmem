@@ -473,7 +473,6 @@ static int switchtec_ntb_link_notification(struct notifier_block *nb,
 	struct switchtec_ntb *sndev = container_of(nb, struct switchtec_ntb,
 						   link_notifier);
 
-	dev_dbg(&sndev->stdev->dev, "%s", __func__);
 	switchtec_ntb_check_link(sndev);
 
 	return NOTIFY_OK;
