@@ -585,15 +585,24 @@ static inline u32 ioread32(const volatile void __iomem *addr)
 }
 #endif
 
-#ifdef CONFIG_64BIT
 #ifndef ioread64
 #define ioread64 ioread64
-static inline u64 ioread64(const volatile void __iomem *addr)
+#ifdef readq
+static inline u64 ioread64(const void __iomem *addr)
 {
 	return readq(addr);
 }
+#else
+static inline u64 ioread64(const void __iomem *addr)
+{
+	u64 low, high;
+
+	low = ioread32(addr);
+	high = ioread32(addr + sizeof(u32));
+	return low | (high << 32);
+}
 #endif
-#endif /* CONFIG_64BIT */
+#endif
 
 #ifndef iowrite8
 #define iowrite8 iowrite8
@@ -619,15 +628,21 @@ static inline void iowrite32(u32 value, volatile void __iomem *addr)
 }
 #endif
 
-#ifdef CONFIG_64BIT
 #ifndef iowrite64
 #define iowrite64 iowrite64
-static inline void iowrite64(u64 value, volatile void __iomem *addr)
+#ifdef writeq
+static inline void iowrite64(u64 value, void __iomem *addr)
 {
 	writeq(value, addr);
 }
+#else
+static inline void iowrite64(u64 value, void __iomem *addr)
+{
+	iowrite32(value, addr);
+	iowrite32(value >> 32, addr + sizeof(u32));
+}
 #endif
-#endif /* CONFIG_64BIT */
+#endif
 
 #ifndef ioread16be
 #define ioread16be ioread16be
@@ -645,15 +660,24 @@ static inline u32 ioread32be(const volatile void __iomem *addr)
 }
 #endif
 
-#ifdef CONFIG_64BIT
 #ifndef ioread64be
 #define ioread64be ioread64be
-static inline u64 ioread64be(const volatile void __iomem *addr)
+#ifdef readq
+static inline u64 ioread64be(const void __iomem *addr)
 {
 	return swab64(readq(addr));
 }
+#else
+static inline u64 ioread64be(const void __iomem *addr)
+{
+	u64 low, high;
+
+	low = ioread32be(addr + sizeof(u32));
+	high = ioread32be(addr);
+	return low | (high << 32);
+}
 #endif
-#endif /* CONFIG_64BIT */
+#endif
 
 #ifndef iowrite16be
 #define iowrite16be iowrite16be
@@ -671,15 +695,21 @@ static inline void iowrite32be(u32 value, volatile void __iomem *addr)
 }
 #endif
 
-#ifdef CONFIG_64BIT
 #ifndef iowrite64be
 #define iowrite64be iowrite64be
-static inline void iowrite64be(u64 value, volatile void __iomem *addr)
+#ifdef writeq
+static inline void iowrite64be(u64 value, void __iomem *addr)
 {
 	writeq(swab64(value), addr);
 }
+#else
+static inline void iowrite64be(u64 value, void __iomem *addr)
+{
+	iowrite32be(value >> 32, addr);
+	iowrite32be(value, addr + sizeof(u32));
+}
 #endif
-#endif /* CONFIG_64BIT */
+#endif
 
 #ifndef ioread8_rep
 #define ioread8_rep ioread8_rep
