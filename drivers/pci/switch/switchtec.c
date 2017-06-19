@@ -35,11 +35,8 @@ MODULE_PARM_DESC(max_devices, "max number of switchtec device instances");
 static dev_t switchtec_devt;
 static DEFINE_IDA(switchtec_minor_ida);
 
-struct class switchtec_class = {
-	.owner = THIS_MODULE,
-	.name = "switchtec",
-};
-EXPORT_SYMBOL(switchtec_class);
+struct class *switchtec_class;
+EXPORT_SYMBOL_GPL(switchtec_class);
 
 enum mrpc_state {
 	MRPC_IDLE = 0,
@@ -1073,7 +1070,7 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 
 	dev = &stdev->dev;
 	device_initialize(dev);
-	dev->class = &switchtec_class;
+	dev->class = switchtec_class;
 	dev->parent = &pdev->dev;
 	dev->groups = switchtec_device_groups;
 	dev->release = stdev_release;
@@ -1367,9 +1364,11 @@ static int __init switchtec_init(void)
 	if (rc)
 		return rc;
 
-	rc = class_register(&switchtec_class);
-	if (rc)
+	switchtec_class = class_create(THIS_MODULE, "switchtec");
+	if (IS_ERR(switchtec_class)) {
+		rc = PTR_ERR(switchtec_class);
 		goto err_create_class;
+	}
 
 	rc = pci_register_driver(&switchtec_pci_driver);
 	if (rc)
@@ -1380,7 +1379,7 @@ static int __init switchtec_init(void)
 	return 0;
 
 err_pci_register:
-	class_unregister(&switchtec_class);
+	class_destroy(switchtec_class);
 
 err_create_class:
 	unregister_chrdev_region(switchtec_devt, max_devices);
@@ -1392,7 +1391,7 @@ module_init(switchtec_init);
 static void __exit switchtec_exit(void)
 {
 	pci_unregister_driver(&switchtec_pci_driver);
-	class_unregister(&switchtec_class);
+	class_destroy(switchtec_class);
 	unregister_chrdev_region(switchtec_devt, max_devices);
 	ida_destroy(&switchtec_minor_ida);
 
