@@ -493,8 +493,10 @@ extern inline void writeq(u64 b, volatile void __iomem *addr)
 
 #define ioread16be(p) be16_to_cpu(ioread16(p))
 #define ioread32be(p) be32_to_cpu(ioread32(p))
+#define ioread64be(p) be64_to_cpu(ioread64(p))
 #define iowrite16be(v,p) iowrite16(cpu_to_be16(v), (p))
 #define iowrite32be(v,p) iowrite32(cpu_to_be32(v), (p))
+#define iowrite64be(v,p) iowrite32(cpu_to_be64(v), (p))
 
 #define inb_p		inb
 #define inw_p		inw

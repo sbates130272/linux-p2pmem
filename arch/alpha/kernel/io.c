@@ -59,6 +59,24 @@ EXPORT_SYMBOL(iowrite8);
 EXPORT_SYMBOL(iowrite16);
 EXPORT_SYMBOL(iowrite32);
 
+u64 ioread64(void __iomem *addr)
+{
+	u64 low, high;
+
+	low = ioread32(addr);
+	high = ioread32(addr + sizeof(u32));
+	return low | (high << 32);
+}
+
+void iowrite64(u64 val, void __iomem *addr)
+{
+	iowrite32(val, addr);
+	iowrite32(val >> 32, addr + sizeof(u32));
+}
+
+EXPORT_SYMBOL(ioread64);
+EXPORT_SYMBOL(iowrite64);
+
 u8 inb(unsigned long port)
 {
 	return ioread8(ioport_map(port, 1));
