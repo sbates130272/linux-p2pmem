@@ -1009,6 +1009,11 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		ctrl->kato = DIV_ROUND_UP(kato, 1000);
 	}
 	ctrl->port = req->port;
+	if (ctrl->port->offload)
+		ctrl->sqe_inline_size = ctrl->ops->peer_to_peer_sqe_inline_size(ctrl);
+	else
+		ctrl->sqe_inline_size = ctrl->ops->sqe_inline_size;
+
 	nvmet_start_keep_alive_timer(ctrl);
 	nvmet_setup_p2pmem(ctrl, req);
 
