@@ -505,6 +505,27 @@ static u8 nvmet_rdma_peer_to_peer_mdts(struct nvmet_port *port)
 	return ilog2(cm_id->device->attrs.nvmf_caps.max_io_sz / SZ_4K);
 }
 
+static unsigned int __nvmet_rdma_peer_to_peer_sqe_inline_size(struct ib_nvmf_caps *nvmf_caps)
+{
+	unsigned int sqe_inline_size = nvmet_rdma_ops.sqe_inline_size;
+	int p2p_sqe_inline_size = (nvmf_caps->max_cmd_size * 16) - sizeof(struct nvme_command);
+
+	if (p2p_sqe_inline_size >= 0)
+		sqe_inline_size = min_t(unsigned int,
+					p2p_sqe_inline_size,
+					sqe_inline_size);
+
+	return sqe_inline_size;
+}
+
+static unsigned int nvmet_rdma_peer_to_peer_sqe_inline_size(struct nvmet_ctrl *ctrl)
+{
+	struct rdma_cm_id *cm_id = ctrl->port->priv;
+	struct ib_nvmf_caps *nvmf_caps = &cm_id->device->attrs.nvmf_caps;
+
+	return __nvmet_rdma_peer_to_peer_sqe_inline_size(nvmf_caps);
+}
+
 static bool nvmet_rdma_peer_to_peer_capable(struct nvmet_port *port)
 {
 	struct rdma_cm_id *cm_id = port->priv;
