@@ -141,6 +141,8 @@ struct nvmet_ctrl {
 
 	char			subsysnqn[NVMF_NQN_FIELD_LEN];
 	char			hostnqn[NVMF_NQN_FIELD_LEN];
+
+	unsigned int		sqe_inline_size;
 };
 
 struct nvmet_subsys {
