@@ -17,6 +17,9 @@
 
 #include "rdma_offload.h"
 
+static unsigned int
+__nvmet_rdma_peer_to_peer_sqe_inline_size(struct ib_nvmf_caps *nvmf_caps);
+
 static void nvmet_rdma_stop_master_peer(struct pci_dev *pdev)
 {
 	pr_info("%s: pdev %p\n", __func__, pdev);
@@ -26,10 +29,11 @@ static int nvmet_rdma_fill_srq_nvmf_attrs(struct ib_srq_init_attr *srq_attr,
 					  struct nvmet_rdma_xrq *xrq)
 {
 	struct ib_nvmf_caps *nvmf_caps = &xrq->ndev->device->attrs.nvmf_caps;
+	unsigned int sqe_inline_size = __nvmet_rdma_peer_to_peer_sqe_inline_size(nvmf_caps);
 
 	srq_attr->ext.nvmf.type = IB_NVMF_READ_WRITE_FLUSH_OFFLOAD;
 	srq_attr->ext.nvmf.log_max_namespace = nvmf_caps->max_namespace;
-	srq_attr->ext.nvmf.cmd_size = (sizeof(struct nvme_command) + NVMET_RDMA_INLINE_DATA_SIZE) / 16;
+	srq_attr->ext.nvmf.cmd_size = (sizeof(struct nvme_command) + sqe_inline_size) / 16;
 	srq_attr->ext.nvmf.data_offset = 0;
 	srq_attr->ext.nvmf.log_max_io_size = ilog2(nvmf_caps->max_io_sz);
 	srq_attr->ext.nvmf.nvme_memory_log_page_size = 0;
