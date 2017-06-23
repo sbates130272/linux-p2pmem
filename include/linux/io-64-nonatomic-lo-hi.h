@@ -54,4 +54,20 @@ static inline void lo_hi_writeq_relaxed(__u64 val, volatile void __iomem *addr)
 #define writeq_relaxed lo_hi_writeq_relaxed
 #endif
 
+#ifndef ioread64
+#define ioread64 readq
+#endif
+
+#ifndef iowrite64
+#define iowrite64 writeq
+#endif
+
+#ifndef ioread64be
+#define ioread64be(p) be64_to_cpu(ioread64(p))
+#endif
+
+#ifndef iowrite64be
+#define iowrite64be(v, p) iowrite64(cpu_to_be64(v), (p))
+#endif
+
 #endif	/* _LINUX_IO_64_NONATOMIC_LO_HI_H_ */
