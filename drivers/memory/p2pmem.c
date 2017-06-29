@@ -120,7 +120,7 @@ static void p2pmem_vma_close(struct vm_area_struct *vma)
 	kfree(pv);
 }
 
-static int p2pmem_vma_fault(struct vm_fault *vmf)
+static int p2pmem_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	struct p2pmem_vma *pv = vmf->vma->vm_private_data;
 	unsigned int pg_idx;
