@@ -172,8 +172,14 @@ EXPORT_SYMBOL(devm_memunmap);
 #ifdef CONFIG_ZONE_DEVICE
 static DEFINE_MUTEX(pgmap_lock);
 static RADIX_TREE(pgmap_radix, GFP_KERNEL);
+
+#ifndef SECTION_MASK
 #define SECTION_MASK ~((1UL << PA_SECTION_SHIFT) - 1)
+#endif
+
+#ifndef SECTION_SIZE
 #define SECTION_SIZE (1UL << PA_SECTION_SHIFT)
+#endif
 
 struct page_map {
 	struct resource res;
