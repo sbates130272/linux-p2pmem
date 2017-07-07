@@ -58,6 +58,10 @@ static int max_fr_immd = T4_MAX_FR_IMMD;
 module_param(max_fr_immd, int, 0644);
 MODULE_PARM_DESC(max_fr_immd, "fastreg threshold for using DSGL instead of immedate");
 
+static int disable_asgl = 0;
+module_param(disable_asgl, int, 0644);
+MODULE_PARM_DESC(disable_asgl, "Disable using asgl on rdma writes\n");
+
 static int alloc_ird(struct c4iw_dev *dev, u32 ird)
 {
 	int ret = 0;
@@ -547,6 +551,9 @@ static int build_asgl(struct cxgb4_lld_info *lip, __be64 *queue_start,
 	struct fw_ri_memaddr *map = (struct fw_ri_memaddr *)asglp->addrs;
 	u32 plen = 0;
 	int i;
+
+	if (disable_asgl)
+		return -ENOSYS;
 
 	for (i = 0; i < num_sge; i++) {
 		u32 len = sg_list[i].length;
