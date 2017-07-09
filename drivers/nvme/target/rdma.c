@@ -99,6 +99,7 @@ struct nvmet_rdma_queue {
 	struct nvmet_rdma_cmd	*cmds;
 
 	struct work_struct	release_work;
+	struct work_struct	disconnect_work;
 	struct list_head	rsp_wait_list;
 	struct list_head	rsp_wr_wait_list;
 	spinlock_t		rsp_wr_wait_lock;
@@ -1052,6 +1053,15 @@ static void nvmet_rdma_release_queue_work(struct work_struct *w)
 	kref_put(&dev->ref, nvmet_rdma_free_dev);
 }
 
+static void nvmet_rdma_disconnect_queue_work(struct work_struct *w)
+{
+	struct nvmet_rdma_queue *queue =
+		container_of(w, struct nvmet_rdma_queue, disconnect_work);
+
+	if (queue)
+		nvmet_rdma_queue_disconnect(queue);
+}
+
 static int
 nvmet_rdma_parse_cm_connect_req(struct rdma_conn_param *conn,
 				struct nvmet_rdma_queue *queue)
@@ -1125,6 +1135,7 @@ nvmet_rdma_alloc_queue(struct nvmet_rdma_device *ndev,
 	 * inside a CM callback would trigger a deadlock. (great API design..)
 	 */
 	INIT_WORK(&queue->release_work, nvmet_rdma_release_queue_work);
+	INIT_WORK(&queue->disconnect_work, nvmet_rdma_disconnect_queue_work);
 	queue->dev = ndev;
 	queue->cm_id = cm_id;
 	queue->port = cm_id->context;
@@ -1197,6 +1208,11 @@ static void nvmet_rdma_qp_event(struct ib_event *event, void *priv)
 	switch (event->event) {
 	case IB_EVENT_COMM_EST:
 		rdma_notify(queue->cm_id, event->event);
+		break;
+	case IB_EXP_EVENT_XRQ_QP_ERR:
+		pr_info("queue %p received IB QP event: %s (%d)\n",
+			queue, ib_event_msg(event->event), event->event);
+		schedule_work(&queue->disconnect_work);
 		break;
 	default:
 		pr_err("received IB QP event: %s (%d)\n",
