@@ -58,6 +58,10 @@ static int fastreg_support = 1;
 module_param(fastreg_support, int, 0644);
 MODULE_PARM_DESC(fastreg_support, "Advertise fastreg support (default=1)");
 
+static int max_send_sge = T4_MAX_SEND_SGE;
+module_param(max_send_sge, int, 0644);
+MODULE_PARM_DESC(max_send_sge, "Max SQ SGE to advertise");
+
 static struct ib_ah *c4iw_ah_create(struct ib_pd *pd,
 				    struct rdma_ah_attr *ah_attr,
 				    struct ib_udata *udata)
@@ -341,7 +345,7 @@ static int c4iw_query_device(struct ib_device *ibdev, struct ib_device_attr *pro
 	props->max_qp = dev->rdev.lldi.vr->qp.size / 2;
 	props->max_qp_wr = dev->rdev.hw_queue.t4_max_qp_depth;
 	props->max_sge = T4_MAX_RECV_SGE;
-	props->max_send_sge = T4_MAX_SEND_SGE;
+	props->max_send_sge = max_send_sge;
 	props->max_sge_rd = 1;
 	props->max_res_rd_atom = dev->rdev.lldi.max_ird_adapter;
 	props->max_qp_rd_atom = min(dev->rdev.lldi.max_ordird_qp,
