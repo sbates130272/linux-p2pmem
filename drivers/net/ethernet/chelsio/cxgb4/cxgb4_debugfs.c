@@ -954,6 +954,36 @@ static int clk_show(struct seq_file *seq, void *v)
 
 DEFINE_SIMPLE_DEBUGFS_FILE(clk);
 
+/*
+ * Dump the chip uP (microprocessor) Load Average if available.
+ */
+static int upload_show(struct seq_file *seq, void *v)
+{
+	struct adapter *adap = seq->private;
+	u32 param, val;
+	int ret;
+
+	param = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DEV) |
+		 FW_PARAMS_PARAM_X_V(FW_PARAMS_PARAM_DEV_LOAD));
+	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 1,
+			      &param, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val == 0xffffffff) {
+		seq_printf(seq, "uP load: <not available>\n");
+		return 0;
+	}
+
+	/* dump the three moving averages */
+	seq_printf(seq, "uP load: %d, %d, %d\n",
+		   (val >>  0) & 0xff,
+		   (val >>  8) & 0xff,
+		   (val >> 16) & 0xff);
+	return 0;
+}
+DEFINE_SIMPLE_DEBUGFS_FILE(upload);
+
 /* Firmware Device Log dump. */
 static const char * const devlog_level_strings[] = {
 	[FW_DEVLOG_LEVEL_EMERG]		= "EMERG",
@@ -3097,6 +3127,7 @@ int t4_setup_debugfs(struct adapter *adap)
 		{ "cim_ma_la", &cim_ma_la_fops, S_IRUSR, 0 },
 		{ "cim_qcfg", &cim_qcfg_fops, S_IRUSR, 0 },
 		{ "clk", &clk_debugfs_fops, S_IRUSR, 0 },
+		{ "upload", &upload_debugfs_fops, S_IRUSR, 0 },
 		{ "devlog", &devlog_fops, S_IRUSR, 0 },
 		{ "mboxlog", &mboxlog_fops, S_IRUSR, 0 },
 		{ "mbox0", &mbox_debugfs_fops, S_IRUSR | S_IWUSR, 0 },
