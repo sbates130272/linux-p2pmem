@@ -618,7 +618,7 @@ static int build_rdma_write(struct c4iw_qp *qhp, union t4_wr *wqe,
 					 wr->sg_list, wr->num_sge, &plen);
 			if (!ret) {
 				size = sizeof wqe->write + sizeof(struct fw_ri_asgl) +
-				       wr->num_sge * sizeof(struct fw_ri_sge);
+				       wr->num_sge * sizeof(struct fw_ri_memaddr);
 			} else {
 				ret = build_isgl((__be64 *)sq->queue,
 						 (__be64 *)&sq->queue[sq->size],
