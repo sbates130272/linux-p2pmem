@@ -947,6 +947,9 @@ static int nvmet_rdma_create_queue_ib(struct nvmet_rdma_queue *queue)
 	qp_attr.cap.max_send_sge = max(ndev->device->attrs.max_sge_rd,
 					ndev->device->attrs.max_sge);
 
+	if (ndev->device->attrs.max_send_sge)
+		qp_attr.cap.max_send_sge = ndev->device->attrs.max_send_sge;
+
 	if (ndev->srq) {
 		qp_attr.srq = ndev->srq;
 	} else {
