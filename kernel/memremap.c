@@ -470,9 +470,14 @@ unsigned long vmem_altmap_offset(struct vmem_altmap *altmap)
 	return altmap->reserve + altmap->free;
 }
 
-void vmem_altmap_free(struct vmem_altmap *altmap, unsigned long nr_pfns)
+bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
-	altmap->alloc -= nr_pfns;
+	struct vmem_altmap *pgmap = to_vmem_altmap((uintptr_t)page);
+
+	if (!pgmap)
+		return false;
+	pgmap->alloc -= nr_pages;
+	return true;
 }
 
 struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)

@@ -804,12 +804,9 @@ static void __meminit free_pagetable(struct page *page, int order)
 {
 	unsigned long magic;
 	unsigned int nr_pages = 1 << order;
-	struct vmem_altmap *altmap = to_vmem_altmap((unsigned long) page);
 
-	if (altmap) {
-		vmem_altmap_free(altmap, nr_pages);
+	if (dev_pagemap_free_pages(page, nr_pages))
 		return;
-	}
 
 	/* bootmem page has reserved flag */
 	if (PageReserved(page)) {
