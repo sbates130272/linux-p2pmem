@@ -136,8 +136,8 @@ struct dev_pagemap {
 #ifdef CONFIG_ZONE_DEVICE
 void *devm_memremap_pages(struct device *dev, struct resource *res,
 		struct percpu_ref *ref, struct vmem_altmap *altmap);
-struct dev_pagemap *find_dev_pagemap(resource_size_t phys);
-
+struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
+		struct dev_pagemap *pgmap);
 static inline bool is_zone_device_page(const struct page *page);
 #else
 static inline void *devm_memremap_pages(struct device *dev,
@@ -153,11 +153,12 @@ static inline void *devm_memremap_pages(struct device *dev,
 	return ERR_PTR(-ENXIO);
 }
 
-static inline struct dev_pagemap *find_dev_pagemap(resource_size_t phys)
+static inline struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
+		struct dev_pagemap *pgmap)
 {
 	return NULL;
 }
-#endif
+#endif /* CONFIG_ZONE_DEVICE */
 
 #if defined(CONFIG_DEVICE_PRIVATE) || defined(CONFIG_DEVICE_PUBLIC)
 static inline bool is_device_private_page(const struct page *page)
@@ -172,39 +173,6 @@ static inline bool is_device_public_page(const struct page *page)
 		page->pgmap->type == MEMORY_DEVICE_PUBLIC;
 }
 #endif /* CONFIG_DEVICE_PRIVATE || CONFIG_DEVICE_PUBLIC */
-
-/**
- * get_dev_pagemap() - take a new live reference on the dev_pagemap for @pfn
- * @pfn: page frame number to lookup page_map
- * @pgmap: optional known pgmap that already has a reference
- *
- * @pgmap allows the overhead of a lookup to be bypassed when @pfn lands in the
- * same mapping.
- */
-static inline struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
-		struct dev_pagemap *pgmap)
-{
-	const struct resource *res = pgmap ? pgmap->res : NULL;
-	resource_size_t phys = PFN_PHYS(pfn);
-
-	/*
-	 * In the cached case we're already holding a live reference so
-	 * we can simply do a blind increment
-	 */
-	if (res && phys >= res->start && phys <= res->end) {
-		percpu_ref_get(pgmap->ref);
-		return pgmap;
-	}
-
-	/* fall back to slow path lookup */
-	rcu_read_lock();
-	pgmap = find_dev_pagemap(phys);
-	if (pgmap && !percpu_ref_tryget_live(pgmap->ref))
-		pgmap = NULL;
-	rcu_read_unlock();
-
-	return pgmap;
-}
 
 static inline void put_dev_pagemap(struct dev_pagemap *pgmap)
 {
