@@ -316,14 +316,6 @@ static void devm_memremap_pages_release(void *data)
 		      "%s: failed to free all reserved pages\n", __func__);
 }
 
-/* assumes rcu_read_lock() held at entry */
-static struct dev_pagemap *find_dev_pagemap(resource_size_t phys)
-{
-	WARN_ON_ONCE(!rcu_read_lock_held());
-
-	return radix_tree_lookup(&pgmap_radix, PHYS_PFN(phys));
-}
-
 /**
  * devm_memremap_pages - remap and provide memmap backing for the given resource
  * @dev: hosting device for @res
@@ -496,7 +488,7 @@ struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
 	 * the memmap.
 	 */
 	rcu_read_lock();
-	pgmap = find_dev_pagemap(__pfn_to_phys(page_to_pfn(page)));
+	pgmap = radix_tree_lookup(&pgmap_radix, page_to_pfn(page));
 	rcu_read_unlock();
 
 	if (!pgmap || !pgmap->altmap_valid)
@@ -515,12 +507,12 @@ struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
 struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 		struct dev_pagemap *pgmap)
 {
-	resource_size_t phys = PFN_PHYS(pfn);
-
 	/*
 	 * In the cached case we're already holding a live reference.
 	 */
 	if (pgmap) {
+		resource_size_t phys = PFN_PHYS(pfn);
+
 		if (phys >= pgmap->res.start && phys <= pgmap->res.end)
 			return pgmap;
 		put_dev_pagemap(pgmap);
@@ -528,7 +520,7 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 
 	/* fall back to slow path lookup */
 	rcu_read_lock();
-	pgmap = find_dev_pagemap(phys);
+	pgmap = radix_tree_lookup(&pgmap_radix, pfn);
 	if (pgmap && !percpu_ref_tryget_live(pgmap->ref))
 		pgmap = NULL;
 	rcu_read_unlock();
