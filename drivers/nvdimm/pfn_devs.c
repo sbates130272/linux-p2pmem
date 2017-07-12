@@ -525,14 +525,14 @@ EXPORT_SYMBOL(nd_pfn_probe);
  * We hotplug memory at section granularity, pad the reserved area from
  * the previous section base to the namespace base address.
  */
-static unsigned long init_altmap_base(resource_size_t base)
+static unsigned long init_pgmap_base(resource_size_t base)
 {
 	unsigned long base_pfn = PHYS_PFN(base);
 
 	return PFN_SECTION_ALIGN_DOWN(base_pfn);
 }
 
-static unsigned long init_altmap_reserve(resource_size_t base)
+static unsigned long init_pgmap_reserve(resource_size_t base)
 {
 	unsigned long reserve = PHYS_PFN(SZ_8K);
 	unsigned long base_pfn = PHYS_PFN(base);
@@ -544,7 +544,6 @@ static unsigned long init_altmap_reserve(resource_size_t base)
 static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 {
 	struct resource *res = &pgmap->res;
-	struct vmem_altmap *altmap = &pgmap->altmap;
 	struct nd_pfn_sb *pfn_sb = nd_pfn->pfn_sb;
 	u64 offset = le64_to_cpu(pfn_sb->dataoff);
 	u32 start_pad = __le32_to_cpu(pfn_sb->start_pad);
@@ -552,10 +551,6 @@ static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 	struct nd_namespace_common *ndns = nd_pfn->ndns;
 	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
 	resource_size_t base = nsio->res.start + start_pad;
-	struct vmem_altmap __altmap = {
-		.base_pfn = init_altmap_base(base),
-		.reserve = init_altmap_reserve(base),
-	};
 
 	memcpy(res, &nsio->res, sizeof(*res));
 	res->start += start_pad;
@@ -565,7 +560,6 @@ static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 		if (offset < SZ_8K)
 			return -EINVAL;
 		nd_pfn->npfns = le64_to_cpu(pfn_sb->npfns);
-		pgmap->altmap_valid = false;
 	} else if (nd_pfn->mode == PFN_MODE_PMEM) {
 		nd_pfn->npfns = PFN_SECTION_ALIGN_UP((resource_size(res)
 					- offset) / PAGE_SIZE);
@@ -574,10 +568,10 @@ static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 					"number of pfns truncated from %lld to %ld\n",
 					le64_to_cpu(nd_pfn->pfn_sb->npfns),
 					nd_pfn->npfns);
-		memcpy(altmap, &__altmap, sizeof(*altmap));
-		altmap->free = PHYS_PFN(offset - SZ_8K);
-		altmap->alloc = 0;
-		pgmap->altmap_valid = true;
+		pgmap->base_pfn = init_pgmap_base(base),
+		pgmap->reserve = init_pgmap_reserve(base),
+		pgmap->free = PHYS_PFN(offset - SZ_8K);
+		pgmap->alloc = 0;
 	} else
 		return -ENXIO;
 
@@ -660,7 +654,7 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 			/ PAGE_SIZE);
 	if (nd_pfn->mode == PFN_MODE_PMEM) {
 		/*
-		 * The altmap should be padded out to the block size used
+		 * The page map should be padded out to the block size used
 		 * when populating the vmemmap. This *should* be equal to
 		 * PMD_SIZE for most architectures.
 		 */
@@ -697,7 +691,7 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 }
 
 /*
- * Determine the effective resource range and vmem_altmap from an nd_pfn
+ * Determine the effective resource range and page map from an nd_pfn
  * instance.
  */
 int nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)

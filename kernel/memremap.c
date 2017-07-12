@@ -241,7 +241,7 @@ int device_private_entry_fault(struct vm_area_struct *vma,
 EXPORT_SYMBOL(device_private_entry_fault);
 #endif /* CONFIG_DEVICE_PRIVATE */
 
-static unsigned long __dev_pagemap_offset(struct vmem_altmap *pgmap)
+static unsigned long __dev_pagemap_offset(struct dev_pagemap *pgmap)
 {
 	/* number of pfns from base where pfn_to_page() is valid */
 	return pgmap ? (pgmap->reserve + pgmap->free) : 0;
@@ -267,12 +267,11 @@ static void pgmap_radix_release(struct resource *res)
 static unsigned long pfn_first(struct dev_pagemap *pgmap)
 {
 	const struct resource *res = &pgmap->res;
-	struct vmem_altmap *altmap = &pgmap->altmap;
 	unsigned long pfn;
 
 	pfn = res->start >> PAGE_SHIFT;
-	if (pgmap->altmap_valid)
-		pfn += __dev_pagemap_offset(altmap);
+	if (pgmap->base_pfn)
+		pfn += __dev_pagemap_offset(pgmap);
 	return pfn;
 }
 
@@ -312,7 +311,7 @@ static void devm_memremap_pages_release(void *data)
 
 	untrack_pfn(NULL, PHYS_PFN(align_start), align_size);
 	pgmap_radix_release(res);
-	dev_WARN_ONCE(dev, pgmap->altmap.alloc,
+	dev_WARN_ONCE(dev, pgmap->alloc,
 		      "%s: failed to free all reserved pages\n", __func__);
 }
 
@@ -325,16 +324,13 @@ static void devm_memremap_pages_release(void *data)
  * 1/ At a minimum the res, ref and type members of @pgmap must be initialized
  *    by the caller before passing it to this function
  *
- * 2/ The altmap field may optionally be initialized, in which case altmap_valid
- *    must be set to true
- *
- * 3/ pgmap.ref must be 'live' on entry and 'dead' before devm_memunmap_pages()
+ * 2/ pgmap.ref must be 'live' on entry and 'dead' before devm_memunmap_pages()
  *    time (or devm release event). The expected order of events is that ref has
  *    been through percpu_ref_kill() before devm_memremap_pages_release(). The
  *    wait for the completion of all references being dropped and
  *    percpu_ref_exit() must occur after devm_memremap_pages_release().
  *
- * 4/ res is expected to be a host memory range that could feasibly be
+ * 3/ res is expected to be a host memory range that could feasibly be
  *    treated as a "System RAM" range, i.e. not a device mmio range, but
  *    this is not enforced.
  */
@@ -433,7 +429,7 @@ EXPORT_SYMBOL(devm_memremap_pages);
 
 int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 {
-	struct vmem_altmap *pgmap;
+	struct dev_pagemap *pgmap;
 
 	pgmap = to_vmem_altmap((unsigned long) pfn_to_page(phys_start_pfn));
 	if (!pgmap)
@@ -451,7 +447,7 @@ int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 
 unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
 {
-	struct vmem_altmap *pgmap = to_vmem_altmap(__pfn_to_phys(start_pfn));
+	struct dev_pagemap *pgmap = to_vmem_altmap(__pfn_to_phys(start_pfn));
 
 	if (pgmap && start_pfn == pgmap->base_pfn)
 		return pgmap->reserve;
@@ -460,7 +456,7 @@ unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
 
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
-	struct vmem_altmap *pgmap = to_vmem_altmap((uintptr_t)page);
+	struct dev_pagemap *pgmap = to_vmem_altmap((uintptr_t)page);
 
 	if (!pgmap)
 		return false;
@@ -468,7 +464,7 @@ bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 	return true;
 }
 
-struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
+struct dev_pagemap *to_vmem_altmap(unsigned long memmap_start)
 {
 	/*
 	 * 'memmap_start' is the virtual address for the first "struct
@@ -491,9 +487,9 @@ struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
 	pgmap = radix_tree_lookup(&pgmap_radix, page_to_pfn(page));
 	rcu_read_unlock();
 
-	if (!pgmap || !pgmap->altmap_valid)
+	if (!pgmap || !pgmap->base_pfn)
 		return NULL;
-	return &pgmap->altmap;
+	return pgmap;
 }
 
 /**

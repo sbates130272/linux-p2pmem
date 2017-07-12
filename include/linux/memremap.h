@@ -10,26 +10,10 @@
 struct resource;
 struct device;
 
-/**
- * struct vmem_altmap - pre-allocated storage for vmemmap_populate
- * @base_pfn: base of the entire dev_pagemap mapping
- * @reserve: pages mapped, but reserved for driver use (relative to @base)
- * @free: free pages set aside in the mapping for memmap storage
- * @align: pages reserved to meet allocation alignments
- * @alloc: track pages consumed, private to vmemmap_populate()
- */
-struct vmem_altmap {
-	const unsigned long base_pfn;
-	const unsigned long reserve;
-	unsigned long free;
-	unsigned long align;
-	unsigned long alloc;
-};
-
 #ifdef CONFIG_ZONE_DEVICE
-struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start);
+struct dev_pagemap *to_vmem_altmap(unsigned long memmap_start);
 #else
-static inline struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
+static inline struct dev_pagemap *to_vmem_altmap(unsigned long memmap_start)
 {
 	return NULL;
 }
@@ -112,7 +96,11 @@ typedef void (*dev_page_free_t)(struct page *page, void *data);
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
  * @page_fault: callback when CPU fault on an unaddressable device page
  * @page_free: free page callback when page refcount reaches 1
- * @altmap: pre-allocated/reserved memory for vmemmap allocations
+ * @base_pfn: base of the entire dev_pagemap mapping
+ * @reserve: pages mapped, but reserved for driver use (relative to @base)
+ * @free: free pages set aside in the mapping for memmap storage
+ * @align: pages reserved to meet allocation alignments
+ * @alloc: track pages consumed, private to vmemmap_populate()
  * @res: physical address range covered by @ref
  * @ref: reference count that pins the devm_memremap_pages() mapping
  * @dev: host device of the mapping for debug
@@ -122,8 +110,11 @@ typedef void (*dev_page_free_t)(struct page *page, void *data);
 struct dev_pagemap {
 	dev_page_fault_t page_fault;
 	dev_page_free_t page_free;
-	struct vmem_altmap altmap;
-	bool altmap_valid;
+	unsigned long base_pfn;
+	unsigned long reserve;
+	unsigned long free;
+	unsigned long align;
+	unsigned long alloc;
 	struct resource res;
 	struct percpu_ref *ref;
 	struct device *dev;

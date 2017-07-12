@@ -33,6 +33,7 @@ struct file_ra_state;
 struct user_struct;
 struct writeback_control;
 struct bdi_writeback;
+struct dev_pagemap;
 
 void init_mm_internals(void);
 
@@ -2545,9 +2546,8 @@ pud_t *vmemmap_pud_populate(p4d_t *p4d, unsigned long addr, int node);
 pmd_t *vmemmap_pmd_populate(pud_t *pud, unsigned long addr, int node);
 pte_t *vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node);
 void *vmemmap_alloc_block(unsigned long size, int node);
-struct vmem_altmap;
 void *vmemmap_alloc_block_buf(unsigned long size, int node);
-void *dev_pagemap_alloc_block_buf(struct vmem_altmap *pgmap,
+void *dev_pagemap_alloc_block_buf(struct dev_pagemap *pgmap,
 		unsigned long size);
 void vmemmap_verify(pte_t *, int, unsigned long, unsigned long);
 int vmemmap_populate_basepages(unsigned long start, unsigned long end,

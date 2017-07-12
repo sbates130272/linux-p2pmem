@@ -91,18 +91,17 @@ void * __meminit vmemmap_alloc_block_buf(unsigned long size, int node)
 	return ptr;
 }
 
-static unsigned long __meminit vmem_altmap_next_pfn(struct vmem_altmap *altmap)
+static unsigned long __meminit dev_pagemap_next_pfn(struct dev_pagemap *pgmap)
 {
-	return altmap->base_pfn + altmap->reserve + altmap->alloc
-		+ altmap->align;
+	return pgmap->base_pfn + pgmap->reserve + pgmap->alloc + pgmap->align;
 }
 
-static unsigned long __meminit vmem_altmap_nr_free(struct vmem_altmap *altmap)
+static unsigned long __meminit dev_pagemap_nr_free(struct dev_pagemap *pgmap)
 {
-	unsigned long allocated = altmap->alloc + altmap->align;
+	unsigned long allocated = pgmap->alloc + pgmap->align;
 
-	if (altmap->free > allocated)
-		return altmap->free - allocated;
+	if (pgmap->free > allocated)
+		return pgmap->free - allocated;
 	return 0;
 }
 
@@ -113,7 +112,7 @@ static unsigned long __meminit vmem_altmap_nr_free(struct vmem_altmap *altmap)
  *
  * Allocations are aligned to the size of the request.
  */
-void * __meminit dev_pagemap_alloc_block_buf(struct vmem_altmap *pgmap,
+void * __meminit dev_pagemap_alloc_block_buf(struct dev_pagemap *pgmap,
 		unsigned long size)
 {
 	unsigned long pfn, nr_pfns, nr_align;
@@ -124,11 +123,11 @@ void * __meminit dev_pagemap_alloc_block_buf(struct vmem_altmap *pgmap,
 		return NULL;
 	}
 
-	pfn = vmem_altmap_next_pfn(pgmap);
+	pfn = dev_pagemap_next_pfn(pgmap);
 	nr_pfns = size >> PAGE_SHIFT;
 	nr_align = 1UL << find_first_bit(&nr_pfns, BITS_PER_LONG);
 	nr_align = ALIGN(pfn, nr_align) - pfn;
-	if (nr_pfns + nr_align > vmem_altmap_nr_free(pgmap))
+	if (nr_pfns + nr_align > dev_pagemap_nr_free(pgmap))
 		return NULL;
 
 	pgmap->alloc += nr_pfns;

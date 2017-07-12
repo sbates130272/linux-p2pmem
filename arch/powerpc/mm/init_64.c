@@ -193,17 +193,17 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 	pr_debug("vmemmap_populate %lx..%lx, node %d\n", start, end, node);
 
 	for (; start < end; start += page_size) {
-		struct vmem_altmap *altmap;
+		struct dev_pagemap *pgmap;
 		void *p;
 		int rc;
 
 		if (vmemmap_populated(start, page_size))
 			continue;
 
-		/* altmap lookups only work at section boundaries */
-		altmap = to_vmem_altmap(SECTION_ALIGN_DOWN(start));
-		if (altmap)
-			p = dev_pagemap_alloc_block_buf(altmap, page_size);
+		/* pgmap lookups only work at section boundaries */
+		pgmap = to_vmem_altmap(SECTION_ALIGN_DOWN(start));
+		if (pgmap)
+			p = dev_pagemap_alloc_block_buf(pgmap, page_size);
 		else
 			p = vmemmap_alloc_block_buf(page_size, node);
 		if (!p)

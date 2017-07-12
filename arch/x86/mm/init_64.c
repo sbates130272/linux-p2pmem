@@ -1343,7 +1343,7 @@ static void __meminitdata *p_start, *p_end;
 static int __meminitdata node_start;
 
 static int __meminit vmemmap_populate_hugepages(unsigned long start,
-		unsigned long end, int node, struct vmem_altmap *altmap)
+		unsigned long end, int node, struct dev_pagemap *pgmap)
 {
 	unsigned long addr;
 	unsigned long next;
@@ -1371,8 +1371,8 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 		if (pmd_none(*pmd)) {
 			void *p;
 
-			if (altmap)
-				p = dev_pagemap_alloc_block_buf(altmap, PMD_SIZE);
+			if (pgmap)
+				p = dev_pagemap_alloc_block_buf(pgmap, PMD_SIZE);
 			else
 				p = vmemmap_alloc_block_buf(PMD_SIZE, node);
 			if (p) {
@@ -1395,7 +1395,7 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 				addr_end = addr + PMD_SIZE;
 				p_end = p + PMD_SIZE;
 				continue;
-			} else if (altmap)
+			} else if (pgmap)
 				return -ENOMEM; /* no fallback */
 		} else if (pmd_large(*pmd)) {
 			vmemmap_verify((pte_t *)pmd, node, addr, next);
@@ -1409,13 +1409,13 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 {
-	struct vmem_altmap *altmap = to_vmem_altmap(start);
+	struct dev_pagemap *pgmap = to_vmem_altmap(start);
 	int err;
 
 	if (boot_cpu_has(X86_FEATURE_PSE))
-		err = vmemmap_populate_hugepages(start, end, node, altmap);
-	else if (altmap) {
-		pr_err_once("%s: no cpu support for altmap allocations\n",
+		err = vmemmap_populate_hugepages(start, end, node, pgmap);
+	else if (pgmap) {
+		pr_err_once("%s: no cpu support for device page map allocations\n",
 				__func__);
 		err = -ENOMEM;
 	} else
