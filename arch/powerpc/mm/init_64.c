@@ -203,7 +203,7 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 		/* altmap lookups only work at section boundaries */
 		altmap = to_vmem_altmap(SECTION_ALIGN_DOWN(start));
 		if (altmap)
-			p = dev_pagemap_alloc_block_buf(page_size, altmap);
+			p = dev_pagemap_alloc_block_buf(altmap, page_size);
 		else
 			p = vmemmap_alloc_block_buf(page_size, node);
 		if (!p)

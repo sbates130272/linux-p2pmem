@@ -1372,7 +1372,7 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 			void *p;
 
 			if (altmap)
-				p = dev_pagemap_alloc_block_buf(PMD_SIZE, altmap);
+				p = dev_pagemap_alloc_block_buf(altmap, PMD_SIZE);
 			else
 				p = vmemmap_alloc_block_buf(PMD_SIZE, node);
 			if (p) {
