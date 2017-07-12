@@ -1556,6 +1556,12 @@ static int init_p2pmem(struct nvme_dev *dev)
  * the caveats of this with your Microsemi support team). This quirk
  * enables the CMB components of the driver even though the device
  * does not advertise or set CMBSZ or CMBLOC.
+ *
+ * This quirk also applies to the Everspin nvNitro card which does set
+ * CMBLOC and CMBSZ but does not set the CMB capabilities fields in
+ * CMBSZ. Given that they implement their CMB via BAR4 this quirk
+ * works for them too. Convenient. For now we enable all CMB modes on
+ * their card even though the card *may* not support them all.
  */
 
 #define PSEUDO_CMB_CMBSZ ((pci_resource_len(pdev, 4) / (1 << 24)) << 12 | \
@@ -2578,6 +2584,8 @@ static const struct pci_device_id nvme_id_table[] = {
 	{ PCI_DEVICE(0x1d1d, 0x2807),	/* CNEX WL */
 		.driver_data = NVME_QUIRK_LIGHTNVM, },
 	{ PCI_DEVICE(0x11f8, 0xf117),	/* Microsemi NVRAM adaptor */
+		.driver_data = NVME_QUIRK_PSEUDO_CMB, },
+	{ PCI_DEVICE(0x1db1, 0x0002),	/* Everspin nvNitro adaptor */
 		.driver_data = NVME_QUIRK_PSEUDO_CMB, },
 	{ PCI_DEVICE_CLASS(PCI_CLASS_STORAGE_EXPRESS, 0xffffff) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2001) },
