@@ -139,6 +139,7 @@ static inline bool is_zone_device_page(const struct page *page);
 int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages);
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages);
 unsigned long dev_pagemap_offset(struct page *page);
+unsigned long dev_pagemap_start_pfn(unsigned long start_pfn);
 #else
 static inline void *devm_memremap_pages(struct device *dev,
 		struct resource *res, struct percpu_ref *ref,
@@ -171,6 +172,11 @@ static inline bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 }
 
 static inline unsigned long dev_pagemap_offset(struct page *page)
+{
+	return 0;
+}
+
+static inline unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
 {
 	return 0;
 }

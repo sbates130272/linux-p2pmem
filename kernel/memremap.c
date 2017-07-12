@@ -493,6 +493,15 @@ int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 	return 0;
 }
 
+unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
+{
+	struct vmem_altmap *pgmap = to_vmem_altmap(__pfn_to_phys(start_pfn));
+
+	if (pgmap && start_pfn == pgmap->base_pfn)
+		return pgmap->reserve;
+	return 0;
+}
+
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
 	struct vmem_altmap *pgmap = to_vmem_altmap((uintptr_t)page);
