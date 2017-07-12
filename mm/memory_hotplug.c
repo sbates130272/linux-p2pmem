@@ -565,12 +565,7 @@ int __remove_pages(struct zone *zone, unsigned long phys_start_pfn,
 
 	/* In the ZONE_DEVICE case device driver owns the memory region */
 	if (is_dev_zone(zone)) {
-		struct page *page = pfn_to_page(phys_start_pfn);
-		struct vmem_altmap *altmap;
-
-		altmap = to_vmem_altmap((unsigned long) page);
-		if (altmap)
-			map_offset = vmem_altmap_offset(altmap);
+		map_offset = dev_pagemap_offset(pfn_to_page(phys_start_pfn));
 	} else {
 		resource_size_t start, size;
 

@@ -152,18 +152,15 @@ int arch_remove_memory(u64 start, u64 size)
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
-	struct vmem_altmap *altmap;
 	struct page *page;
 	int ret;
 
 	/*
-	 * If we have an altmap then we need to skip over any reserved PFNs
-	 * when querying the zone.
+	 * If we have a device page map then we need to skip over any reserved
+	 * PFNs when querying the zone.
 	 */
 	page = pfn_to_page(start_pfn);
-	altmap = to_vmem_altmap((unsigned long) page);
-	if (altmap)
-		page += vmem_altmap_offset(altmap);
+	page += dev_pagemap_offset(page);
 
 	ret = __remove_pages(page_zone(page), start_pfn, nr_pages);
 	if (ret)

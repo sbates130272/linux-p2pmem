@@ -26,8 +26,6 @@ struct vmem_altmap {
 	unsigned long alloc;
 };
 
-unsigned long vmem_altmap_offset(struct vmem_altmap *altmap);
-
 #ifdef CONFIG_ZONE_DEVICE
 struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start);
 #else
@@ -140,6 +138,7 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 static inline bool is_zone_device_page(const struct page *page);
 int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages);
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages);
+unsigned long dev_pagemap_offset(struct page *page);
 #else
 static inline void *devm_memremap_pages(struct device *dev,
 		struct resource *res, struct percpu_ref *ref,
@@ -169,6 +168,11 @@ static inline int dev_pagemap_add_pages(unsigned long phys_start_pfn,
 static inline bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
 	return false;
+}
+
+static inline unsigned long dev_pagemap_offset(struct page *page)
+{
+	return 0;
 }
 #endif /* CONFIG_ZONE_DEVICE */
 

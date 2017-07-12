@@ -248,6 +248,17 @@ int device_private_entry_fault(struct vm_area_struct *vma,
 EXPORT_SYMBOL(device_private_entry_fault);
 #endif /* CONFIG_DEVICE_PRIVATE */
 
+static unsigned long __dev_pagemap_offset(struct vmem_altmap *pgmap)
+{
+	/* number of pfns from base where pfn_to_page() is valid */
+	return pgmap ? (pgmap->reserve + pgmap->free) : 0;
+}
+
+unsigned long dev_pagemap_offset(struct page *page)
+{
+	return __dev_pagemap_offset(to_vmem_altmap((uintptr_t)page));
+}
+
 static void pgmap_radix_release(struct resource *res)
 {
 	unsigned long pgoff, order;
@@ -269,7 +280,7 @@ static unsigned long pfn_first(struct page_map *page_map)
 
 	pfn = res->start >> PAGE_SHIFT;
 	if (altmap)
-		pfn += vmem_altmap_offset(altmap);
+		pfn += __dev_pagemap_offset(altmap);
 	return pfn;
 }
 
@@ -464,12 +475,6 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 }
 EXPORT_SYMBOL(devm_memremap_pages);
 
-unsigned long vmem_altmap_offset(struct vmem_altmap *altmap)
-{
-	/* number of pfns from base where pfn_to_page() is valid */
-	return altmap->reserve + altmap->free;
-}
-
 int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 {
 	struct vmem_altmap *pgmap;
@@ -479,7 +484,7 @@ int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 		return 0;
 
 	if (pgmap->base_pfn != phys_start_pfn ||
-	    vmem_altmap_offset(pgmap) > nr_pages) {
+	    __dev_pagemap_offset(pgmap) > nr_pages) {
 		pr_warn_once("memory add fail, invalid map\n");
 		return -EINVAL;
 	}
