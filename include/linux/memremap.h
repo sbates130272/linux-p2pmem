@@ -132,8 +132,7 @@ struct dev_pagemap {
 };
 
 #ifdef CONFIG_ZONE_DEVICE
-void *devm_memremap_pages(struct device *dev, struct resource *res,
-		struct percpu_ref *ref, struct vmem_altmap *altmap);
+void *devm_memremap_pages(struct device *dev, struct dev_pagemap *pgmap);
 struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 		struct dev_pagemap *pgmap);
 static inline bool is_zone_device_page(const struct page *page);
@@ -143,8 +142,7 @@ unsigned long dev_pagemap_offset(struct page *page);
 unsigned long dev_pagemap_start_pfn(unsigned long start_pfn);
 #else
 static inline void *devm_memremap_pages(struct device *dev,
-		struct resource *res, struct percpu_ref *ref,
-		struct vmem_altmap *altmap)
+		struct dev_pagemap *pgmap)
 {
 	/*
 	 * Fail attempts to call devm_memremap_pages() without
