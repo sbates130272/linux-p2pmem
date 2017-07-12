@@ -201,11 +201,14 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 			continue;
 
 		/* pgmap lookups only work at section boundaries */
-		pgmap = to_vmem_altmap(SECTION_ALIGN_DOWN(start));
+		rcu_read_lock();
+		pgmap = __lookup_dev_pagemap((struct page *)
+				SECTION_ALIGN_DOWN(start));
 		if (pgmap)
 			p = dev_pagemap_alloc_block_buf(pgmap, page_size);
 		else
 			p = vmemmap_alloc_block_buf(page_size, node);
+		rcu_read_unlock();
 		if (!p)
 			return -ENOMEM;
 

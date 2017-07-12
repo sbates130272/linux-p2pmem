@@ -241,6 +241,16 @@ int device_private_entry_fault(struct vm_area_struct *vma,
 EXPORT_SYMBOL(device_private_entry_fault);
 #endif /* CONFIG_DEVICE_PRIVATE */
 
+struct dev_pagemap *__lookup_dev_pagemap(struct page *start_page)
+{
+	struct dev_pagemap *pgmap;
+
+	pgmap = radix_tree_lookup(&pgmap_radix, page_to_pfn(start_page));
+	if (!pgmap || !pgmap->base_pfn)
+		return NULL;
+	return pgmap;
+}
+
 static unsigned long __dev_pagemap_offset(struct dev_pagemap *pgmap)
 {
 	/* number of pfns from base where pfn_to_page() is valid */
@@ -249,7 +259,16 @@ static unsigned long __dev_pagemap_offset(struct dev_pagemap *pgmap)
 
 unsigned long dev_pagemap_offset(struct page *page)
 {
-	return __dev_pagemap_offset(to_vmem_altmap((uintptr_t)page));
+	struct dev_pagemap *pgmap;
+	unsigned long ret = 0;
+
+	rcu_read_lock();
+	pgmap = __lookup_dev_pagemap(page);
+	if (pgmap)
+		ret = __dev_pagemap_offset(pgmap);
+	rcu_read_unlock();
+
+	return ret;
 }
 
 static void pgmap_radix_release(struct resource *res)
@@ -430,66 +449,51 @@ EXPORT_SYMBOL(devm_memremap_pages);
 int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
 {
 	struct dev_pagemap *pgmap;
+	int ret = 0;
 
-	pgmap = to_vmem_altmap((unsigned long) pfn_to_page(phys_start_pfn));
-	if (!pgmap)
-		return 0;
+	rcu_read_lock();
+	pgmap = __lookup_dev_pagemap(pfn_to_page(phys_start_pfn));
+	if (pgmap) {
+		if (pgmap->base_pfn != phys_start_pfn ||
+		    __dev_pagemap_offset(pgmap) > nr_pages) {
+			pr_warn_once("memory add fail, invalid map\n");
+			ret = -EINVAL;
+		}
 
-	if (pgmap->base_pfn != phys_start_pfn ||
-	    __dev_pagemap_offset(pgmap) > nr_pages) {
-		pr_warn_once("memory add fail, invalid map\n");
-		return -EINVAL;
+		pgmap->alloc = 0;
 	}
-
-	pgmap->alloc = 0;
-	return 0;
+	rcu_read_unlock();
+	return ret;
 }
 
 unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
 {
-	struct dev_pagemap *pgmap = to_vmem_altmap(__pfn_to_phys(start_pfn));
+	struct page *page = (struct page *)__pfn_to_phys(start_pfn);
+	struct dev_pagemap *pgmap;
+	unsigned long ret = 0;
 
+	rcu_read_lock();
+	pgmap = __lookup_dev_pagemap(page);
 	if (pgmap && start_pfn == pgmap->base_pfn)
-		return pgmap->reserve;
-	return 0;
+		ret = pgmap->reserve;
+	rcu_read_unlock();
+	return ret;
 }
 
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
-	struct dev_pagemap *pgmap = to_vmem_altmap((uintptr_t)page);
-
-	if (!pgmap)
-		return false;
-	pgmap->alloc -= nr_pages;
-	return true;
-}
-
-struct dev_pagemap *to_vmem_altmap(unsigned long memmap_start)
-{
-	/*
-	 * 'memmap_start' is the virtual address for the first "struct
-	 * page" in this range of the vmemmap array.  In the case of
-	 * CONFIG_SPARSEMEM_VMEMMAP a page_to_pfn conversion is simple
-	 * pointer arithmetic, so we can perform this to_vmem_altmap()
-	 * conversion without concern for the initialization state of
-	 * the struct page fields.
-	 */
-	struct page *page = (struct page *) memmap_start;
 	struct dev_pagemap *pgmap;
+	bool ret = false;
 
-	/*
-	 * Unconditionally retrieve a dev_pagemap associated with the
-	 * given physical address, this is only for use in the
-	 * arch_{add|remove}_memory() for setting up and tearing down
-	 * the memmap.
-	 */
 	rcu_read_lock();
-	pgmap = radix_tree_lookup(&pgmap_radix, page_to_pfn(page));
+	pgmap = __lookup_dev_pagemap(page);
+	if (pgmap) {
+		pgmap->alloc -= nr_pages;
+		ret = true;
+	}
 	rcu_read_unlock();
 
-	if (!pgmap || !pgmap->base_pfn)
-		return NULL;
-	return pgmap;
+	return ret;
 }
 
 /**

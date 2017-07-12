@@ -1409,9 +1409,11 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 {
-	struct dev_pagemap *pgmap = to_vmem_altmap(start);
+	struct dev_pagemap *pgmap;
 	int err;
 
+	rcu_read_lock();
+	pgmap = __lookup_dev_pagemap((struct page *)start);
 	if (boot_cpu_has(X86_FEATURE_PSE))
 		err = vmemmap_populate_hugepages(start, end, node, pgmap);
 	else if (pgmap) {
@@ -1420,6 +1422,7 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 		err = -ENOMEM;
 	} else
 		err = vmemmap_populate_basepages(start, end, node);
+	rcu_read_unlock();
 	if (!err)
 		sync_global_pgds(start, end - 1);
 	return err;
