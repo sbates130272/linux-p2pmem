@@ -470,6 +470,24 @@ unsigned long vmem_altmap_offset(struct vmem_altmap *altmap)
 	return altmap->reserve + altmap->free;
 }
 
+int dev_pagemap_add_pages(unsigned long phys_start_pfn, unsigned nr_pages)
+{
+	struct vmem_altmap *pgmap;
+
+	pgmap = to_vmem_altmap((unsigned long) pfn_to_page(phys_start_pfn));
+	if (!pgmap)
+		return 0;
+
+	if (pgmap->base_pfn != phys_start_pfn ||
+	    vmem_altmap_offset(pgmap) > nr_pages) {
+		pr_warn_once("memory add fail, invalid map\n");
+		return -EINVAL;
+	}
+
+	pgmap->alloc = 0;
+	return 0;
+}
+
 bool dev_pagemap_free_pages(struct page *page, unsigned nr_pages)
 {
 	struct vmem_altmap *pgmap = to_vmem_altmap((uintptr_t)page);

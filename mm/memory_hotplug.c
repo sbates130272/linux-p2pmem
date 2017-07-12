@@ -297,25 +297,14 @@ int __ref __add_pages(int nid, unsigned long phys_start_pfn,
 	unsigned long i;
 	int err = 0;
 	int start_sec, end_sec;
-	struct vmem_altmap *altmap;
 
 	/* during initialize mem_map, align hot-added range to section */
 	start_sec = pfn_to_section_nr(phys_start_pfn);
 	end_sec = pfn_to_section_nr(phys_start_pfn + nr_pages - 1);
 
-	altmap = to_vmem_altmap((unsigned long) pfn_to_page(phys_start_pfn));
-	if (altmap) {
-		/*
-		 * Validate altmap is within bounds of the total request
-		 */
-		if (altmap->base_pfn != phys_start_pfn
-				|| vmem_altmap_offset(altmap) > nr_pages) {
-			pr_warn_once("memory add fail, invalid altmap\n");
-			err = -EINVAL;
-			goto out;
-		}
-		altmap->alloc = 0;
-	}
+	err = dev_pagemap_add_pages(phys_start_pfn, nr_pages);
+	if (err)
+		return err;
 
 	for (i = start_sec; i <= end_sec; i++) {
 		err = __add_section(nid, section_nr_to_pfn(i), want_memblock);
@@ -326,13 +315,11 @@ int __ref __add_pages(int nid, unsigned long phys_start_pfn,
 		 * Warning will be printed if there is collision.
 		 */
 		if (err && (err != -EEXIST))
-			break;
-		err = 0;
+			return err;
 		cond_resched();
 	}
 	vmemmap_populate_print_last();
-out:
-	return err;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(__add_pages);
 
