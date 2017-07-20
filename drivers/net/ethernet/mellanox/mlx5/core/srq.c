@@ -561,8 +561,13 @@ static int create_xrq_cmd(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 	err = mlx5_cmd_exec(dev, create_in, inlen, create_out,
 			    sizeof(create_out));
 	kvfree(create_in);
-	if (!err)
+	if (!err) {
 		srq->srqn = MLX5_GET(create_xrq_out, create_out, xrqn);
+		if (in->type == IB_EXP_SRQT_NVMF) {
+			spin_lock_init(&srq->lock);
+			INIT_LIST_HEAD(&srq->ctrl_list);
+		}
+	}
 
 	return err;
 }

@@ -448,6 +448,9 @@ struct mlx5_core_srq {
 
 	atomic_t		refcount;
 	struct completion	free;
+	/* protect ctrl list */
+	spinlock_t		lock;
+	struct list_head	ctrl_list;
 };
 
 struct mlx5_eq_table {
