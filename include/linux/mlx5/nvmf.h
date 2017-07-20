@@ -59,6 +59,7 @@ struct mlx5_core_nvmf_be_ctrl {
 	int			id;
 	spinlock_t		lock;
 	struct list_head	ns_list;
+	struct list_head	entry;
 };
 
 struct mlx5_core_nvmf_ns {
