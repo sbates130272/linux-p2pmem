@@ -122,6 +122,10 @@ int mlx5_core_create_nvmf_backend_ctrl(struct mlx5_core_dev *dev,
 
 	ctrl->id = MLX5_GET(create_nvmf_be_ctrl_out, out,
 			    backend_controller_id);
+	spin_lock(&srq->lock);
+	list_add_tail(&ctrl->entry, &srq->ctrl_list);
+	spin_unlock(&srq->lock);
+
 	spin_lock_init(&ctrl->lock);
 	INIT_LIST_HEAD(&ctrl->ns_list);
 
@@ -135,6 +139,10 @@ int mlx5_core_destroy_nvmf_backend_ctrl(struct mlx5_core_dev *dev,
 {
 	u32 in[MLX5_ST_SZ_DW(destroy_nvmf_be_ctrl_in)]   = {0};
 	u32 out[MLX5_ST_SZ_DW(destroy_nvmf_be_ctrl_out)] = {0};
+
+	spin_lock(&srq->lock);
+	list_del(&ctrl->entry);
+	spin_unlock(&srq->lock);
 
 	MLX5_SET(destroy_nvmf_be_ctrl_in, in, opcode,
 		 MLX5_CMD_OP_DESTROY_NVMF_BACKEND_CTRL);
