@@ -664,6 +664,7 @@ enum ib_event_type {
 	IB_EVENT_GID_CHANGE,
 	IB_EVENT_WQ_FATAL,
 	IB_EXP_EVENT_XRQ_QP_ERR = 32,
+	IB_EXP_EVENT_XRQ_NVMF_BACKEND_CTRL_ERR,
 };
 
 const char *__attribute_const__ ib_event_msg(enum ib_event_type event);
