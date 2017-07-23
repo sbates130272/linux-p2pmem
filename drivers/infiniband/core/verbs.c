@@ -77,6 +77,7 @@ static const char * const ib_events[] = {
 	[IB_EVENT_CLIENT_REREGISTER]	= "client reregister",
 	[IB_EVENT_GID_CHANGE]		= "GID changed",
 	[IB_EXP_EVENT_XRQ_QP_ERR]	= "XRQ QP error",
+	[IB_EXP_EVENT_XRQ_NVMF_BACKEND_CTRL_ERR] = "XRQ NVMF backend ctrl error",
 };
 
 const char *__attribute_const__ ib_event_msg(enum ib_event_type event)
