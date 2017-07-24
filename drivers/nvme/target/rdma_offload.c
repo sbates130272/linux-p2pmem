@@ -398,6 +398,7 @@ nvmet_rdma_create_be_ctrl(struct nvmet_rdma_xrq *xrq,
 		goto out_destroy_be_ctrl;
 	}
 
+	be_ctrl->xrq = xrq;
 	return be_ctrl;
 
 out_destroy_be_ctrl:
