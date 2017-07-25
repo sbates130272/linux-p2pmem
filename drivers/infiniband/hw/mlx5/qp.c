@@ -190,10 +190,20 @@ int mlx5_ib_read_user_wqe(struct mlx5_ib_qp *qp, int send, int wqe_index,
 	return wqe_length;
 }
 
-static void mlx5_ib_qp_event(struct mlx5_core_qp *qp, int type)
+/**
+ * mlx5_ib_qp_event() - Raise an IB event on dedicated qp.
+ *
+ * @qp: low level QP.
+ * @event_info: holds event information such as event type and error type.
+ *
+ * In case that dedicated IB QP assigned an event handler, raise the incoming event.
+ */
+static void mlx5_ib_qp_event(struct mlx5_core_qp *qp, int event_info)
 {
 	struct ib_qp *ibqp = &to_mibqp(qp)->ibqp;
 	struct ib_event event;
+	u8 type = event_info & 0xff;
+	u8 error_type = (event_info >> 8) & 0xff;
 
 	if (type == MLX5_EVENT_TYPE_PATH_MIG) {
 		/* This event is only valid for trans_qps */
@@ -227,6 +237,17 @@ static void mlx5_ib_qp_event(struct mlx5_core_qp *qp, int type)
 			break;
 		case MLX5_EVENT_TYPE_WQ_ACCESS_ERROR:
 			event.event = IB_EVENT_QP_ACCESS_ERR;
+			break;
+		case MLX5_EVENT_TYPE_XRQ_ERROR:
+			switch (error_type) {
+			case MLX5_XRQ_ERROR_TYPE_QP_ERROR:
+				event.event = IB_EXP_EVENT_XRQ_QP_ERR;
+				break;
+			default:
+				pr_warn("mlx5_ib: Unexpected event type %d error type %d on QP %06x\n",
+					type, error_type, qp->qpn);
+				return;
+			}
 			break;
 		default:
 			pr_warn("mlx5_ib: Unexpected event type %d on QP %06x\n", type, qp->qpn);
