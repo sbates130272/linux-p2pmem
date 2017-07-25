@@ -1039,8 +1039,10 @@ void mlx5_eq_cleanup(struct mlx5_core_dev *dev);
 void mlx5_fill_page_array(struct mlx5_buf *buf, __be64 *pas);
 void mlx5_fill_page_frag_array(struct mlx5_frag_buf *frag_buf, __be64 *pas);
 void mlx5_cq_completion(struct mlx5_core_dev *dev, u32 cqn);
-void mlx5_rsc_event(struct mlx5_core_dev *dev, u32 rsn, int event_type);
+void mlx5_rsc_event(struct mlx5_core_dev *dev, u32 rsn, int event_info);
 void mlx5_srq_event(struct mlx5_core_dev *dev, u32 srqn, int event_type);
+void mlx5_xrq_event(struct mlx5_core_dev *dev, u32 srqn, u8 event_type,
+		    u32 qpn_id_handle, u8 error_type);
 struct mlx5_core_srq *mlx5_core_get_srq(struct mlx5_core_dev *dev, u32 srqn);
 void mlx5_cmd_comp_handler(struct mlx5_core_dev *dev, u64 vec, bool forced);
 void mlx5_cq_event(struct mlx5_core_dev *dev, u32 cqn, int event_type);

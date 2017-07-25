@@ -161,6 +161,8 @@ static const char *eqe_type_str(u8 type)
 		return "MLX5_EVENT_TYPE_FPGA_ERROR";
 	case MLX5_EVENT_TYPE_GENERAL_EVENT:
 		return "MLX5_EVENT_TYPE_GENERAL_EVENT";
+	case MLX5_EVENT_TYPE_XRQ_ERROR:
+		return "MLX5_EVENT_TYPE_XRQ_ERROR";
 	default:
 		return "Unrecognized event";
 	}
@@ -441,6 +443,26 @@ static irqreturn_t mlx5_eq_int(int irq, void *eq_ptr)
 			mlx5_srq_event(dev, rsn, eqe->type);
 			break;
 
+		case MLX5_EVENT_TYPE_XRQ_ERROR:
+			{
+				u32 xrqn;
+				u32 qpn_id_handle;
+				u8 error_type;
+
+				error_type = be32_to_cpu(eqe->data.xrq.type_xrqn) >> 24;
+				xrqn = be32_to_cpu(eqe->data.xrq.type_xrqn) &
+				      MLX5_24BIT_MASK;
+				qpn_id_handle = be32_to_cpu(eqe->data.xrq.qpn_id_handle) &
+					MLX5_24BIT_MASK;
+				mlx5_core_dbg(dev,
+					      "XRQ event %s(%d): xrqn 0x%x\n",
+					      eqe_type_str(eqe->type),
+					      eqe->type,
+					      xrqn);
+				mlx5_xrq_event(dev, xrqn, eqe->type, qpn_id_handle, error_type);
+			}
+			break;
+
 		case MLX5_EVENT_TYPE_CMD:
 			mlx5_cmd_comp_handler(dev, be32_to_cpu(eqe->data.cmd.vector), false);
 			break;
@@ -715,6 +737,9 @@ int mlx5_start_eqs(struct mlx5_core_dev *dev)
 
 	if (MLX5_CAP_GEN(dev, fpga))
 		async_event_mask |= (1ull << MLX5_EVENT_TYPE_FPGA_ERROR);
+
+	if (MLX5_CAP_GEN(dev, nvmf_target_offload))
+		async_event_mask |= (1ull << MLX5_EVENT_TYPE_XRQ_ERROR);
 
 	err = mlx5_create_map_eq(dev, &table->cmd_eq, MLX5_EQ_VEC_CMD,
 				 MLX5_NUM_CMD_EQE, 1ull << MLX5_EVENT_TYPE_CMD,
