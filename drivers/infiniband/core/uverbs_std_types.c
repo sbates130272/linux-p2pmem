@@ -138,18 +138,14 @@ static int uverbs_free_cq(struct ib_uobject *uobject,
 			  enum rdma_remove_reason why)
 {
 	struct ib_cq *cq = uobject->object;
-	struct ib_uverbs_event_queue *ev_queue = cq->cq_context;
+	struct ib_uverbs_event_file *ev_file = cq->cq_context;
 	struct ib_ucq_object *ucq =
 		container_of(uobject, struct ib_ucq_object, uobject);
 	int ret;
 
 	ret = ib_destroy_cq(cq);
 	if (!ret || why != RDMA_REMOVE_DESTROY)
-		ib_uverbs_release_ucq(uobject->context->ufile, ev_queue ?
-				      container_of(ev_queue,
-						   struct ib_uverbs_completion_event_file,
-						   ev_queue) : NULL,
-				      ucq);
+		ib_uverbs_release_ucq(uobject->context->ufile, ev_file, ucq);
 	return ret;
 }
 
@@ -189,33 +185,6 @@ static int uverbs_free_pd(struct ib_uobject *uobject,
 	ib_dealloc_pd((struct ib_pd *)uobject->object);
 	return 0;
 }
-
-static int uverbs_hot_unplug_completion_event_file(struct ib_uobject_file *uobj_file,
-						   enum rdma_remove_reason why)
-{
-	struct ib_uverbs_completion_event_file *comp_event_file =
-		container_of(uobj_file, struct ib_uverbs_completion_event_file,
-			     uobj_file);
-	struct ib_uverbs_event_queue *event_queue = &comp_event_file->ev_queue;
-
-	spin_lock_irq(&event_queue->lock);
-	event_queue->is_closed = 1;
-	spin_unlock_irq(&event_queue->lock);
-
-	if (why == RDMA_REMOVE_DRIVER_REMOVE) {
-		wake_up_interruptible(&event_queue->poll_wait);
-		kill_fasync(&event_queue->async_queue, SIGIO, POLL_IN);
-	}
-	return 0;
-};
-
-const struct uverbs_obj_fd_type uverbs_type_attrs_comp_channel = {
-	.type = UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_completion_event_file), 0),
-	.context_closed = uverbs_hot_unplug_completion_event_file,
-	.fops = &uverbs_event_fops,
-	.name = "[infinibandevent]",
-	.flags = O_RDONLY,
-};
 
 const struct uverbs_obj_idr_type uverbs_type_attrs_cq = {
 	.type = UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_ucq_object), 0),

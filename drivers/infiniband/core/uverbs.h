@@ -76,13 +76,12 @@
  * an asynchronous event queue file is created and released when the
  * event file is closed.
  *
- * struct ib_uverbs_event_queue: Base structure for
- * struct ib_uverbs_async_event_file and struct ib_uverbs_completion_event_file.
- * One reference is held by the VFS and released when the file is closed.
- * For asynchronous event files, another reference is held by the corresponding
- * main context file and released when that file is closed.  For completion
- * event files, a reference is taken when a CQ is created that uses the file,
- * and released when the CQ is destroyed.
+ * struct ib_uverbs_event_file: One reference is held by the VFS and
+ * released when the file is closed.  For asynchronous event files,
+ * another reference is held by the corresponding main context file
+ * and released when that file is closed.  For completion event files,
+ * a reference is taken when a CQ is created that uses the file, and
+ * released when the CQ is destroyed.
  */
 
 struct ib_uverbs_device {
@@ -102,24 +101,16 @@ struct ib_uverbs_device {
 	struct list_head			uverbs_events_file_list;
 };
 
-struct ib_uverbs_event_queue {
+struct ib_uverbs_event_file {
+	struct kref				ref;
+	int					is_async;
+	struct ib_uverbs_file		       *uverbs_file;
 	spinlock_t				lock;
 	int					is_closed;
 	wait_queue_head_t			poll_wait;
 	struct fasync_struct		       *async_queue;
 	struct list_head			event_list;
-};
-
-struct ib_uverbs_async_event_file {
-	struct ib_uverbs_event_queue		ev_queue;
-	struct ib_uverbs_file		       *uverbs_file;
-	struct kref				ref;
 	struct list_head			list;
-};
-
-struct ib_uverbs_completion_event_file {
-	struct ib_uobject_file			uobj_file;
-	struct ib_uverbs_event_queue		ev_queue;
 };
 
 struct ib_uverbs_file {
@@ -129,7 +120,7 @@ struct ib_uverbs_file {
 	struct ib_uverbs_device		       *device;
 	struct ib_ucontext		       *ucontext;
 	struct ib_event_handler			event_handler;
-	struct ib_uverbs_async_event_file       *async_file;
+	struct ib_uverbs_event_file	       *async_file;
 	struct list_head			list;
 	int					is_closed;
 
@@ -191,14 +182,14 @@ struct ib_ucq_object {
 	u32			async_events_reported;
 };
 
-extern const struct file_operations uverbs_event_fops;
-void ib_uverbs_init_event_queue(struct ib_uverbs_event_queue *ev_queue);
-struct file *ib_uverbs_alloc_async_event_file(struct ib_uverbs_file *uverbs_file,
-					      struct ib_device *ib_dev);
+struct file *ib_uverbs_alloc_event_file(struct ib_uverbs_file *uverbs_file,
+					struct ib_device *ib_dev,
+					int is_async);
 void ib_uverbs_free_async_event_file(struct ib_uverbs_file *uverbs_file);
+struct ib_uverbs_event_file *ib_uverbs_lookup_comp_file(int fd);
 
 void ib_uverbs_release_ucq(struct ib_uverbs_file *file,
-			   struct ib_uverbs_completion_event_file *ev_file,
+			   struct ib_uverbs_event_file *ev_file,
 			   struct ib_ucq_object *uobj);
 void ib_uverbs_release_uevent(struct ib_uverbs_file *file,
 			      struct ib_uevent_object *uobj);
