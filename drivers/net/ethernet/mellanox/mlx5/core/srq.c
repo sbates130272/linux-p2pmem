@@ -35,6 +35,7 @@
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/cmd.h>
 #include <linux/mlx5/srq.h>
+#include <linux/mlx5/nvmf.h>
 #include <rdma/ib_verbs.h>
 #include "mlx5_core.h"
 #include <linux/mlx5/transobj.h>
@@ -133,19 +134,52 @@ static void set_nvmf_xrq_context(struct mlx5_nvmf_attr *nvmf, void *xrqc)
 }
 
 void mlx5_xrq_event(struct mlx5_core_dev *dev, u32 srqn, u8 event_type,
-		u32 qpn_id_handle, u8 error_type)
+		    u32 qpn_id_handle, u8 error_type)
 {
+	struct mlx5_srq_table *table;
+	struct mlx5_core_srq *srq;
+	struct mlx5_core_nvmf_be_ctrl *ctrl;
 	u32 rsn;
 	int event_info = event_type | (error_type << 8);
+	bool found = false;
 
 	switch (error_type) {
 	case MLX5_XRQ_ERROR_TYPE_QP_ERROR:
 		rsn = qpn_id_handle | (MLX5_EVENT_QUEUE_TYPE_QP << MLX5_USER_INDEX_LEN);
 		mlx5_rsc_event(dev, rsn, event_info);
 		break;
+	case MLX5_XRQ_ERROR_TYPE_BACKEND_CONTROLLER_ERROR:
+		table = &dev->priv.srq_table;
+		spin_lock(&table->lock);
+		srq = radix_tree_lookup(&table->tree, srqn);
+		if (srq)
+			atomic_inc(&srq->refcount);
+		spin_unlock(&table->lock);
+
+		if (!srq) {
+			mlx5_core_warn(dev, "Async event for bogus XRQ 0x%08x\n", srqn);
+			return;
+		}
+
+		spin_lock(&srq->lock);
+		list_for_each_entry(ctrl, &srq->ctrl_list, entry) {
+			if (ctrl->id == qpn_id_handle) {
+				found = true;
+				break;
+			}
+		}
+		spin_unlock(&srq->lock);
+
+		if (found)
+			ctrl->event(ctrl, event_type,
+				    MLX5_XRQ_ERROR_TYPE_BACKEND_CONTROLLER_ERROR);
+
+		if (atomic_dec_and_test(&srq->refcount))
+			complete(&srq->free);
+		break;
 	default:
 		mlx5_core_warn(dev, "XRQ event with unrecognized type: xrqn 0x%x, type %u\n",
-			srqn, error_type);
+			       srqn, error_type);
 	}
 }
 
