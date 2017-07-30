@@ -57,6 +57,7 @@ struct mlx5_ns_attr {
 
 struct mlx5_core_nvmf_be_ctrl {
 	int			id;
+	void (*event)(struct mlx5_core_nvmf_be_ctrl *, int, int);
 	spinlock_t		lock;
 	struct list_head	ns_list;
 	struct list_head	entry;
