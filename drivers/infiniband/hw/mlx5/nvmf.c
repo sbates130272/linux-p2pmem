@@ -97,6 +97,36 @@ static void set_nvmf_backend_ctrl_attrs(struct ib_nvmf_backend_ctrl_init_attr *a
 	in->sq_pas = attr->sq_pas;
 }
 
+static void mlx5_ib_nvmf_backend_ctrl_event(struct mlx5_core_nvmf_be_ctrl *ctrl,
+					    int event_type,
+					    int error_type)
+{
+	struct ib_nvmf_ctrl *ibctrl = &to_mibctrl(ctrl)->ibctrl;
+	struct mlx5_ib_dev *dev = to_mdev(ibctrl->srq->device);
+	struct ib_event event;
+
+	if (event_type != MLX5_EVENT_TYPE_XRQ_ERROR) {
+		/* This is the only valid event type for nvmf backend ctrl */
+		return;
+	}
+
+	if (ibctrl->event_handler) {
+		event.device = ibctrl->srq->device;
+		switch (error_type) {
+		case MLX5_XRQ_ERROR_TYPE_BACKEND_CONTROLLER_ERROR:
+			event.event = IB_EXP_EVENT_XRQ_NVMF_BACKEND_CTRL_ERR;
+			break;
+		default:
+			mlx5_ib_warn(dev,
+				     "Unexpected event error type %d on CTRL %06x\n",
+				     error_type, ibctrl->id);
+			return;
+		}
+
+		ibctrl->event_handler(&event, ibctrl->be_context);
+	}
+}
+
 struct ib_nvmf_ctrl *mlx5_ib_create_nvmf_backend_ctrl(struct ib_srq *srq,
 			struct ib_nvmf_backend_ctrl_init_attr *init_attr)
 {
@@ -124,6 +154,7 @@ struct ib_nvmf_ctrl *mlx5_ib_create_nvmf_backend_ctrl(struct ib_srq *srq,
 		    ctrl->mctrl.id);
 
 	ctrl->ibctrl.id = ctrl->mctrl.id;
+	ctrl->mctrl.event = mlx5_ib_nvmf_backend_ctrl_event;
 	return &ctrl->ibctrl;
 
 err_ctrl:

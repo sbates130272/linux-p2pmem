@@ -971,6 +971,12 @@ struct mlx5_ib_nvmf_ns {
 	struct mlx5_core_nvmf_ns	mns;
 };
 
+static inline struct mlx5_ib_nvmf_be_ctrl *
+to_mibctrl(struct mlx5_core_nvmf_be_ctrl *mctrl)
+{
+	return container_of(mctrl, struct mlx5_ib_nvmf_be_ctrl, mctrl);
+}
+
 static inline struct mlx5_ib_nvmf_be_ctrl *to_mctrl(struct ib_nvmf_ctrl *ibctrl)
 {
 	return container_of(ibctrl, struct mlx5_ib_nvmf_be_ctrl, ibctrl);
