@@ -288,6 +288,7 @@ enum {
 
 enum mlx5_xrq_error_type {
 	MLX5_XRQ_ERROR_TYPE_QP_ERROR			= 0x0,
+	MLX5_XRQ_ERROR_TYPE_BACKEND_CONTROLLER_ERROR	= 0x1,
 };
 
 enum mlx5_event {
