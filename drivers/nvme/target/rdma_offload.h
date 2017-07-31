@@ -36,6 +36,7 @@ struct nvmet_rdma_backend_ctrl {
 	struct list_head	  entry;
 	struct nvme_peer_resource *ofl;
 	struct nvmet_rdma_xrq	  *xrq;
+	struct work_struct	  release_work;
 };
 
 struct nvmet_rdma_offload_ctrl {

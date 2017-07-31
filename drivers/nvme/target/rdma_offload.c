@@ -324,11 +324,30 @@ static void nvmet_rdma_free_be_ctrl(struct nvmet_rdma_backend_ctrl *be_ctrl)
 	kfree(be_ctrl);
 }
 
-static void nvmet_rdma_init_be_ctrl_attr(struct ib_nvmf_backend_ctrl_init_attr *attr,
-					 struct nvme_peer_resource *ofl)
+static void nvmet_rdma_backend_ctrl_event(struct ib_event *event, void *priv)
 {
+	struct nvmet_rdma_backend_ctrl *be_ctrl = priv;
+
+	switch (event->event) {
+	case IB_EXP_EVENT_XRQ_NVMF_BACKEND_CTRL_ERR:
+		schedule_work(&be_ctrl->release_work);
+		break;
+	default:
+		pr_err("received IB Backend ctrl event: %s (%d)\n",
+		       ib_event_msg(event->event), event->event);
+		break;
+	}
+}
+
+static void nvmet_rdma_init_be_ctrl_attr(struct ib_nvmf_backend_ctrl_init_attr *attr,
+					 struct nvmet_rdma_backend_ctrl *be_ctrl)
+{
+	struct nvme_peer_resource *ofl = be_ctrl->ofl;
+
 	memset(attr, 0, sizeof(*attr));
 
+	attr->be_context = be_ctrl;
+	attr->event_handler = nvmet_rdma_backend_ctrl_event;
 	attr->cq_page_offset = 0;
 	attr->sq_page_offset = 0;
 	attr->cq_log_page_size = ilog2(ofl->nvme_cq_size >> 12);
@@ -355,6 +374,21 @@ static void nvmet_rdma_init_ns_attr(struct ib_nvmf_ns_init_attr *attr,
 	attr->backend_ctrl_id = backend_ctrl_id;
 }
 
+
+static void nvmet_release_backend_ctrl_work(struct work_struct *w)
+{
+	struct nvmet_rdma_backend_ctrl *be_ctrl =
+		container_of(w, struct nvmet_rdma_backend_ctrl, release_work);
+	struct nvmet_rdma_xrq *xrq = be_ctrl->xrq;
+
+	mutex_lock(&xrq->be_mutex);
+	if (!list_empty(&be_ctrl->entry))
+		list_del_init(&be_ctrl->entry);
+	mutex_unlock(&xrq->be_mutex);
+
+	nvmet_rdma_free_be_ctrl(be_ctrl);
+}
+
 static struct nvmet_rdma_backend_ctrl *
 nvmet_rdma_create_be_ctrl(struct nvmet_rdma_xrq *xrq,
 			  struct nvmet_ns *ns)
@@ -367,6 +401,9 @@ nvmet_rdma_create_be_ctrl(struct nvmet_rdma_xrq *xrq,
 	be_ctrl = kzalloc(sizeof(*be_ctrl), GFP_KERNEL);
 	if (!be_ctrl)
 		return ERR_PTR(-ENOMEM);
+
+	INIT_WORK(&be_ctrl->release_work,
+		  nvmet_release_backend_ctrl_work);
 
 	be_ctrl->ofl = nvme_peer_get_resource(ns->pdev,
 			NVME_PEER_SQT_DBR      |
@@ -383,7 +420,7 @@ nvmet_rdma_create_be_ctrl(struct nvmet_rdma_xrq *xrq,
 	}
 	be_ctrl->pdev = ns->pdev;
 
-	nvmet_rdma_init_be_ctrl_attr(&init_attr, be_ctrl->ofl);
+	nvmet_rdma_init_be_ctrl_attr(&init_attr, be_ctrl);
 	be_ctrl->ibctrl = ib_create_nvmf_backend_ctrl(xrq->ofl_srq, &init_attr);
 	if (IS_ERR(be_ctrl->ibctrl)) {
 		err = PTR_ERR(be_ctrl->ibctrl);
