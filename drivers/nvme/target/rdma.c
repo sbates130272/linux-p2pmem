@@ -1566,8 +1566,13 @@ static void nvmet_rdma_remove_port(struct nvmet_port *port)
 		mutex_lock(&nvmet_rdma_xrq_mutex);
 		list_for_each_entry_safe(xrq, next, &nvmet_rdma_xrq_list, entry) {
 			if (xrq->port == port) {
-				list_del_init(&xrq->entry);
+				/*
+				 * nvmet_rdma_destroy_xrq lock nvmet_rdma_xrq_mutex too,
+				 * so we need to unlock it to avoid a deadlock.
+				 */
+				mutex_unlock(&nvmet_rdma_xrq_mutex);
 				kref_put(&xrq->ref, nvmet_rdma_destroy_xrq);
+				mutex_lock(&nvmet_rdma_xrq_mutex);
 			}
 		}
 		mutex_unlock(&nvmet_rdma_xrq_mutex);
