@@ -109,6 +109,12 @@ static void nvmet_rdma_destroy_xrq(struct kref *ref)
 	int i;
 
 	pr_info("destroying XRQ %p port %p\n", xrq, xrq->port);
+
+	mutex_lock(&nvmet_rdma_xrq_mutex);
+	if (!list_empty(&xrq->entry))
+		list_del_init(&xrq->entry);
+	mutex_unlock(&nvmet_rdma_xrq_mutex);
+
 	/* TODO: check if need to reduce refcound on pdev */
 	nvmet_rdma_free_cmds(ndev, xrq->ofl_srq_cmds, xrq->ofl_srq_size, false);
 	ib_destroy_srq(xrq->ofl_srq);
