@@ -98,6 +98,18 @@ static void set_nvmf_srq_pas(struct mlx5_nvmf_attr *nvmf, void *start,
 
 static void set_nvmf_xrq_context(struct mlx5_nvmf_attr *nvmf, void *xrqc)
 {
+	u16 nvme_queue_size;
+
+	/*
+	 * According to the PRM, nvme_queue_size is a 16 bit field and
+	 * setting it to 0 means setting size to 2^16 (The maximum queue size
+	 * possible for an NVMe device).
+	 */
+	if (nvmf->nvme_queue_size < 0x10000)
+		nvme_queue_size = nvmf->nvme_queue_size;
+	else
+		nvme_queue_size = 0;
+
 	MLX5_SET(xrqc, xrqc,
 		 nvme_offload_context.nvmf_offload_type,
 		 nvmf->type);
@@ -130,7 +142,7 @@ static void set_nvmf_xrq_context(struct mlx5_nvmf_attr *nvmf, void *xrqc)
 		 nvmf->staging_buffer_page_offset);
 	MLX5_SET(xrqc, xrqc,
 		 nvme_offload_context.nvme_queue_size,
-		 nvmf->nvme_queue_size);
+		 nvme_queue_size);
 }
 
 void mlx5_xrq_event(struct mlx5_core_dev *dev, u32 srqn, u8 event_type,
