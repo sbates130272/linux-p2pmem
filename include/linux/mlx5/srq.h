@@ -59,7 +59,7 @@ struct mlx5_nvmf_attr {
 	u8				staging_buffer_log_page_size;
 	u16				staging_buffer_number_of_pages;
 	u8				staging_buffer_page_offset;
-	u16				nvme_queue_size;
+	u32				nvme_queue_size;
 	u64				*staging_buffer_pas;
 };
 
