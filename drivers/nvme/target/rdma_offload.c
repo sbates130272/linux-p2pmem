@@ -37,7 +37,7 @@ static int nvmet_rdma_fill_srq_nvmf_attrs(struct ib_srq_init_attr *srq_attr,
 	srq_attr->ext.nvmf.data_offset = 0;
 	srq_attr->ext.nvmf.log_max_io_size = ilog2(nvmf_caps->max_io_sz);
 	srq_attr->ext.nvmf.nvme_memory_log_page_size = 0;
-	srq_attr->ext.nvmf.nvme_queue_size = min_t(u16, NVMET_QUEUE_SIZE, nvmf_caps->max_queue_sz);
+	srq_attr->ext.nvmf.nvme_queue_size = min_t(u32, NVMET_QUEUE_SIZE, nvmf_caps->max_queue_sz);
 	srq_attr->ext.nvmf.staging_buffer_number_of_pages = xrq->st->num_pages;
 	srq_attr->ext.nvmf.staging_buffer_log_page_size = ilog2(xrq->st->page_size >> 12); //4k granularity in PRM
 	srq_attr->ext.nvmf.staging_buffer_pas = kzalloc(sizeof(dma_addr_t) * xrq->st->num_pages, GFP_KERNEL);
