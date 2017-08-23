@@ -279,6 +279,18 @@ static void p2pmem_remove(struct p2pmem_dev *p)
 	i_mmap_unlock_write(p->inode->i_mapping);
 }
 
+static struct device *find_parent_pci_dev(struct device *dev)
+{
+	while (dev) {
+		if (dev_is_pci(dev))
+			return dev;
+
+		dev = dev->parent;
+	}
+
+	return NULL;
+}
+
 /**
  * p2pmem_create() - create a new p2pmem device
  * @parent: the parent device to create it under
@@ -383,39 +395,6 @@ void p2pmem_unregister(struct p2pmem_dev *p)
 }
 EXPORT_SYMBOL(p2pmem_unregister);
 
-/**
- * p2pmem_add_resource() - add memory for use as p2pmem to the device
- * @p: the device to add the memory to
- * @res: resource describing the memory
- *
- * The memory will be given ZONE_DEVICE struct pages so that it may
- * be used with any dma request.
- */
-int p2pmem_add_resource(struct p2pmem_dev *p, struct resource *res)
-{
-	int rc;
-	void *addr;
-	int nid = dev_to_node(&p->dev);
-
-	addr = devm_memremap_pages(&p->dev, res, &p->ref, NULL);
-	if (IS_ERR(addr))
-		return PTR_ERR(addr);
-
-	rc = gen_pool_add_virt(p->pool, (unsigned long)addr,
-			       res->start, resource_size(res), nid);
-	if (rc)
-		return rc;
-
-	rc = devm_add_action_or_reset(&p->dev, p2pmem_percpu_kill, &p->ref);
-	if (rc)
-		return rc;
-
-	dev_info(&p->dev, "added %pR", res);
-
-	return 0;
-}
-EXPORT_SYMBOL(p2pmem_add_resource);
-
 #ifdef CONFIG_PCI
 
 struct pci_region {
@@ -475,7 +454,74 @@ err_pci:
 }
 EXPORT_SYMBOL(p2pmem_add_pci_region);
 
+static void p2pmem_print_pci_region(struct p2pmem_dev *p,
+				    struct resource *res)
+{
+	struct pci_dev *pci;
+	struct device *pdev;
+	struct pci_bus_region region;
+
+	/*
+	 * Check the pcibios_resource_to_bus translation of this
+	 * resource on this ARCH. Walk up the device tree from the
+	 * p2pmem device till we find a PCIe device or hit the top of
+	 * the tree.
+	 */
+
+	pdev = find_parent_pci_dev(&p->dev);
+	if (pdev) {
+		pci = to_pci_dev(pdev);
+		pcibios_resource_to_bus(pci->bus, &region, res);
+		dev_info(&p->dev, "bus address (start - end) = %pa - %pa",
+			 &region.start, &region.end);
+	} else {
+		dev_info(&p->dev, "is not connected to a PCI device");
+	}
+}
+
+#else
+
+static void p2pmem_print_pci_region(struct p2pmem_dev *p,
+				    struct resource *res)
+{
+	return 0;
+}
+
 #endif
+
+/**
+ * p2pmem_add_resource() - add memory for use as p2pmem to the device
+ * @p: the device to add the memory to
+ * @res: resource describing the memory
+ *
+ * The memory will be given ZONE_DEVICE struct pages so that it may
+ * be used with any dma request.
+ */
+int p2pmem_add_resource(struct p2pmem_dev *p, struct resource *res)
+{
+	int rc;
+	void *addr;
+	int nid = dev_to_node(&p->dev);
+
+	addr = devm_memremap_pages(&p->dev, res, &p->ref, NULL);
+	if (IS_ERR(addr))
+		return PTR_ERR(addr);
+
+	rc = gen_pool_add_virt(p->pool, (unsigned long)addr,
+			       res->start, resource_size(res), nid);
+	if (rc)
+		return rc;
+
+	rc = devm_add_action_or_reset(&p->dev, p2pmem_percpu_kill, &p->ref);
+	if (rc)
+		return rc;
+
+	dev_info(&p->dev, "added %pR", res);
+	p2pmem_print_pci_region(p, res);
+
+	return 0;
+}
+EXPORT_SYMBOL(p2pmem_add_resource);
 
 /**
  * p2pmem_alloc() - allocate some p2p memory
@@ -504,18 +550,6 @@ void p2pmem_free(struct p2pmem_dev *p, void *addr, size_t size)
 	gen_pool_free(p->pool, (unsigned long)addr, size);
 }
 EXPORT_SYMBOL(p2pmem_free);
-
-static struct device *find_parent_pci_dev(struct device *dev)
-{
-	while (dev) {
-		if (dev_is_pci(dev))
-			return dev;
-
-		dev = dev->parent;
-	}
-
-	return NULL;
-}
 
 /*
  * If a device is behind a switch, we try to find the upstream bridge
