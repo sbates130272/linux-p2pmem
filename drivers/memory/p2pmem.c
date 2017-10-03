@@ -203,6 +203,7 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 	vma->vm_private_data = pv;
 	vma->vm_ops = &p2pmem_vmops;
 	vma->vm_flags |= VM_MIXEDMAP;
+	vma->vm_page_prot = pgprot_device(vma->vm_page_prot);
 
 	return 0;
 }
