@@ -30,6 +30,8 @@
 #include <linux/highmem.h>
 #include <linux/gfp.h>
 #include <linux/scatterlist.h>
+#include <linux/memremap.h>
+#include <linux/p2pmem.h>
 
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -782,6 +784,21 @@ swiotlb_full(struct device *dev, size_t size, enum dma_data_direction dir,
 		panic("DMA: Random memory could be DMA read\n");
 }
 
+static void map_zone_device(struct page *pg, dma_addr_t *dma_addr,
+			    size_t dma_len)
+{
+	struct dev_pagemap *pgmap;
+
+	pgmap = find_dev_pagemap(__pfn_to_phys(page_to_pfn(pg)));
+	if (!pgmap)
+		return;
+
+	if (!pgmap->dev)
+		return;
+
+	p2pmem_map(pgmap->dev, dma_addr, dma_len);
+}
+
 /*
  * Map a single buffer of the indicated size for DMA in streaming mode.  The
  * physical address to use is returned.
@@ -803,8 +820,13 @@ dma_addr_t swiotlb_map_page(struct device *dev, struct page *page,
 	 * we can safely return the device addr and not worry about bounce
 	 * buffering it.
 	 */
-	if (dma_capable(dev, dev_addr, size) && swiotlb_force != SWIOTLB_FORCE)
+	if (dma_capable(dev, dev_addr, size) &&
+	    swiotlb_force != SWIOTLB_FORCE) {
+		if (unlikely(is_zone_device_page(page)))
+			map_zone_device(page, &dev_addr, PAGE_SIZE);
+
 		return dev_addr;
+	}
 
 	trace_swiotlb_bounced(dev, dev_addr, size, swiotlb_force);
 
@@ -959,8 +981,13 @@ swiotlb_map_sg_attrs(struct device *hwdev, struct scatterlist *sgl, int nelems,
 				return 0;
 			}
 			sg->dma_address = phys_to_dma(hwdev, map);
-		} else
+		} else {
+			if (unlikely(is_zone_device_page(sg_page(sg))))
+				map_zone_device(sg_page(sg), &dev_addr,
+						sg->length);
+
 			sg->dma_address = dev_addr;
+		}
 		sg_dma_len(sg) = sg->length;
 	}
 	return nelems;
