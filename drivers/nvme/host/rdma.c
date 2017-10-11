@@ -82,8 +82,8 @@ struct nvme_rdma_request {
 };
 
 enum nvme_rdma_queue_flags {
-	NVME_RDMA_Q_LIVE		= 0,
-	NVME_RDMA_Q_DELETING		= 1,
+	NVME_RDMA_Q_ALLOCATED		= 0,
+	NVME_RDMA_Q_LIVE		= 1,
 };
 
 struct nvme_rdma_queue {
@@ -550,7 +550,7 @@ static int nvme_rdma_alloc_queue(struct nvme_rdma_ctrl *ctrl,
 		goto out_destroy_cm_id;
 	}
 
-	clear_bit(NVME_RDMA_Q_DELETING, &queue->flags);
+	set_bit(NVME_RDMA_Q_ALLOCATED, &queue->flags);
 
 	return 0;
 
@@ -570,7 +570,7 @@ static void nvme_rdma_stop_queue(struct nvme_rdma_queue *queue)
 
 static void nvme_rdma_free_queue(struct nvme_rdma_queue *queue)
 {
-	if (test_and_set_bit(NVME_RDMA_Q_DELETING, &queue->flags))
+	if (!test_and_clear_bit(NVME_RDMA_Q_ALLOCATED, &queue->flags))
 		return;
 
 	if (nvme_rdma_queue_idx(queue) == 0) {
