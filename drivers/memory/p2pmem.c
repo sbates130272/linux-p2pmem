@@ -280,11 +280,11 @@ static void p2pmem_remove(struct p2pmem_dev *p)
 	i_mmap_unlock_write(p->inode->i_mapping);
 }
 
-static struct device *find_parent_pci_dev(struct device *dev)
+struct pci_dev *find_parent_pci_dev(struct device *dev)
 {
 	while (dev) {
 		if (dev_is_pci(dev))
-			return dev;
+			return to_pci_dev(dev);
 
 		dev = dev->parent;
 	}
@@ -302,8 +302,13 @@ static struct device *find_parent_pci_dev(struct device *dev)
 struct p2pmem_dev *p2pmem_create(struct device *parent)
 {
 	struct p2pmem_dev *p;
+	struct pci_dev *pdev;
 	int nid = dev_to_node(parent);
 	int rc;
+
+	pdev = find_parent_pci_dev(parent);
+	if (!pdev)
+		return ERR_PTR(-EINVAL);
 
 	p = kzalloc_node(sizeof(*p), GFP_KERNEL, nid);
 	if (!p)
@@ -313,6 +318,7 @@ struct p2pmem_dev *p2pmem_create(struct device *parent)
 	mutex_init(&p->remove_mutex);
 	INIT_LIST_HEAD(&p->remove_list);
 	p->alive = true;
+	p->pdev = pdev;
 
 	device_initialize(&p->dev);
 	p->dev.class = p2pmem_class;
@@ -458,26 +464,16 @@ EXPORT_SYMBOL(p2pmem_add_pci_region);
 static void p2pmem_print_pci_region(struct p2pmem_dev *p,
 				    struct resource *res)
 {
-	struct pci_dev *pci;
-	struct device *pdev;
 	struct pci_bus_region region;
 
 	/*
 	 * Check the pcibios_resource_to_bus translation of this
-	 * resource on this ARCH. Walk up the device tree from the
-	 * p2pmem device till we find a PCIe device or hit the top of
-	 * the tree.
+	 * resource on this ARCH.
 	 */
 
-	pdev = find_parent_pci_dev(&p->dev);
-	if (pdev) {
-		pci = to_pci_dev(pdev);
-		pcibios_resource_to_bus(pci->bus, &region, res);
-		dev_info(&p->dev, "bus address (start - end) = %pa - %pa",
-			 &region.start, &region.end);
-	} else {
-		dev_info(&p->dev, "is not connected to a PCI device");
-	}
+	pcibios_resource_to_bus(p->pdev->bus, &region, res);
+	dev_info(&p->dev, "bus address (start - end) = %pa - %pa",
+		 &region.start, &region.end);
 }
 
 #else
@@ -559,16 +555,12 @@ EXPORT_SYMBOL(p2pmem_free);
  * for the next level in the hierarchy. Because of this, devices connected
  * to the root port will be rejected.
  */
-static struct pci_dev *get_upstream_switch_port(struct device *dev)
+static struct pci_dev *get_upstream_switch_port(struct device *p2pmem)
 {
-	struct device *dpci;
+	struct p2pmem_dev *p = to_p2pmem(p2pmem);
 	struct pci_dev *pci;
 
-	dpci = find_parent_pci_dev(dev);
-	if (!dpci)
-		return NULL;
-
-	pci = pci_upstream_bridge(to_pci_dev(dpci));
+	pci = pci_upstream_bridge(p->pdev);
 	if (!pci)
 		return NULL;
 
