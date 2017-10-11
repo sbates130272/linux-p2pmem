@@ -664,6 +664,31 @@ out:
 }
 EXPORT_SYMBOL(p2pmem_find_compat);
 
+int p2pmem_map(struct device *dev, dma_addr_t *dma_addr,
+	       size_t dma_len)
+{
+	struct p2pmem_dev *p;
+	struct pci_bus_region region;
+	struct resource res;
+
+	if (dev->class != p2pmem_class)
+		return -EINVAL;
+
+	p = to_p2pmem(dev);
+
+	res.start = *dma_addr;
+	res.end = *dma_addr + dma_len;
+	res.flags = IORESOURCE_MEM;
+	pcibios_resource_to_bus(p->pdev->bus, &region, &res);
+
+	dev_dbg(dev, "p2pmem map: %pad -> %llx", dma_addr, region.start);
+
+	*dma_addr = region.start;
+
+	return 0;
+}
+EXPORT_SYMBOL(p2pmem_map);
+
 /**
  * p2pmem_put() - decrement a p2pmem device reference
  * @p: p2pmem device to return
