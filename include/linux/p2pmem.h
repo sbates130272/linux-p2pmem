@@ -60,6 +60,9 @@ p2pmem_find_compat(struct device **dma_devices,
 
 void p2pmem_put(struct p2pmem_dev *p, void *context);
 
+int p2pmem_map(struct device *dev, dma_addr_t *dma_addr,
+	       size_t dma_len);
+
 #else
 
 static inline void *p2pmem_create(struct device *parent)
@@ -101,6 +104,11 @@ p2pmem_find_compat(struct device **dma_devices,
 }
 
 static inline void p2pmem_put(struct p2pmem_dev *p, void *context)
+{
+}
+
+static void p2pmem_map(struct p2pmem_dev *p, dma_addr_t *dma_addr,
+		       size_t dma_len)
 {
 }
 
