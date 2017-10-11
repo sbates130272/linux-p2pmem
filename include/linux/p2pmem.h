@@ -22,6 +22,7 @@
 
 struct p2pmem_dev {
 	struct device dev;
+	struct pci_dev *pdev;
 	int id;
 	bool alive;
 
