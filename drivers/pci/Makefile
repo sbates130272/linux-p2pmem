@@ -23,6 +23,7 @@ obj-$(CONFIG_PCI_MSI) += msi.o
 
 obj-$(CONFIG_PCI_ATS) += ats.o
 obj-$(CONFIG_PCI_IOV) += iov.o
+obj-$(CONFIG_PCI_P2PDMA) += p2pdma.o
 
 #
 # ACPI Related PCI FW Functions
