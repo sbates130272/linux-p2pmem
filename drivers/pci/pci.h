@@ -323,6 +323,14 @@ static inline int pci_iov_bus_range(struct pci_bus *bus)
 
 #endif /* CONFIG_PCI_IOV */
 
+#ifdef CONFIG_PCI_P2P
+void pci_p2pmem_release(struct pci_dev *pdev);
+#else
+static inline void pci_p2pmem_release(struct pci_dev *pdev)
+{
+}
+#endif
+
 unsigned long pci_cardbus_resource_alignment(struct resource *);
 
 static inline resource_size_t pci_resource_alignment(struct pci_dev *dev,
