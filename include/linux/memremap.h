@@ -37,11 +37,17 @@ struct device;
  * driver can hotplug the device memory using ZONE_DEVICE and with that memory
  * type. Any page of a process can be migrated to such memory. However no one
  * should be allow to pin such memory so that it can always be evicted.
+ *
+ * MEMORY_DEVICE_PCI_P2P:
+ * Device memory residing in a PCI BAR intended for use with Peer-to-Peer
+ * transactions.
+ *
  */
 enum memory_type {
 	MEMORY_DEVICE_HOST = 0,
 	MEMORY_DEVICE_PRIVATE,
 	MEMORY_DEVICE_PUBLIC,
+	MEMORY_DEVICE_PCI_P2P,
 };
 
 /*
@@ -168,6 +174,19 @@ static inline unsigned long dev_pagemap_start_pfn(unsigned long start_pfn)
 	return 0;
 }
 #endif /* CONFIG_ZONE_DEVICE */
+
+#ifdef CONFIG_PCI_P2P
+static inline bool is_pci_p2p_page(const struct page *page)
+{
+	return is_zone_device_page(page) &&
+		page->pgmap->type == MEMORY_DEVICE_PCI_P2P;
+}
+#else
+static inline bool is_pci_p2p_page(const struct page *page)
+{
+	return false;
+}
+#endif
 
 #if defined(CONFIG_DEVICE_PRIVATE) || defined(CONFIG_DEVICE_PUBLIC)
 static inline bool is_device_private_page(const struct page *page)
