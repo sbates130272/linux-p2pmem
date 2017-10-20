@@ -29,6 +29,7 @@ obj-$(CONFIG_HT_IRQ) += htirq.o
 
 obj-$(CONFIG_PCI_ATS) += ats.o
 obj-$(CONFIG_PCI_IOV) += iov.o
+obj-$(CONFIG_PCI_P2P) += p2p.o
 
 #
 # ACPI Related PCI FW Functions
