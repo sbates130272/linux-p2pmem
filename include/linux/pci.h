@@ -32,6 +32,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/resource_ext.h>
+#include <linux/percpu-refcount.h>
 #include <uapi/linux/pci.h>
 
 #include <linux/pci_ids.h>
@@ -279,6 +280,7 @@ struct pcie_link_state;
 struct pci_vpd;
 struct pci_sriov;
 struct pci_ats;
+struct pci_p2p;
 
 /*
  * The pci_dev structure is used to describe PCI devices.
@@ -431,6 +433,9 @@ struct pci_dev {
 #endif
 #ifdef CONFIG_PCI_PASID
 	u16		pasid_features;
+#endif
+#ifdef CONFIG_PCI_P2P
+	struct pci_p2p *p2p;
 #endif
 	phys_addr_t rom; /* Physical address of ROM if it's not from the BAR */
 	size_t romlen; /* Length of ROM if it's not from the BAR */
@@ -1989,6 +1994,76 @@ static inline int pci_sriov_get_totalvfs(struct pci_dev *dev)
 static inline resource_size_t pci_iov_resource_size(struct pci_dev *dev, int resno)
 { return 0; }
 #endif
+
+struct block_device;
+struct scatterlist;
+
+#ifdef CONFIG_PCI_P2P
+int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar, size_t size,
+			    u64 offset);
+int pci_p2pmem_add_client(struct list_head *head, struct device *dev);
+void pci_p2pmem_remove_client(struct list_head *head, struct device *dev);
+void pci_p2pmem_client_list_free(struct list_head *head);
+struct pci_dev *pci_p2pmem_find(struct list_head *clients);
+void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size);
+void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size);
+pci_bus_addr_t pci_p2pmem_virt_to_bus(struct pci_dev *pdev, void *addr);
+int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
+			 unsigned int *nents, u32 length);
+void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
+			 unsigned int nents);
+void pci_p2pmem_publish(struct pci_dev *pdev, bool publish);
+
+#else
+static inline int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar,
+	size_t size, u64 offset)
+{
+	return 0;
+}
+static inline int pci_p2pmem_add_client(struct list_head *head,
+					struct device *dev)
+{
+	return 0;
+}
+static inline void pci_p2pmem_remove_client(struct list_head *head,
+					    struct device *dev)
+{
+}
+static inline void pci_p2pmem_client_list_free(struct list_head *head)
+{
+}
+static inline struct pci_dev *pci_p2pmem_find(struct list_head *clients)
+{
+	return NULL;
+}
+static inline void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size)
+{
+	return NULL;
+}
+static inline void pci_free_p2pmem(struct pci_dev *pdev, void *addr,
+		size_t size)
+{
+}
+static inline pci_bus_addr_t pci_p2pmem_virt_to_bus(struct pci_dev *pdev,
+						    void *addr)
+{
+	return 0;
+}
+static inline int pci_p2pmem_alloc_sgl(struct pci_dev *pdev,
+				       struct scatterlist **sgl,
+				       unsigned int *nents, u32 length)
+{
+	return -ENODEV;
+}
+static inline void pci_p2pmem_free_sgl(struct pci_dev *pdev,
+				       struct scatterlist *sgl,
+				       unsigned int nents)
+{
+}
+static inline void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
+{
+}
+#endif /* CONFIG_PCI_P2P */
 
 #if defined(CONFIG_HOTPLUG_PCI) || defined(CONFIG_HOTPLUG_PCI_MODULE)
 void pci_hp_create_module_link(struct pci_slot *pci_slot);
