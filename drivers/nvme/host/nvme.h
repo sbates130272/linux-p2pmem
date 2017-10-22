@@ -196,6 +196,8 @@ struct nvme_ctrl {
 	u16 maxcmd;
 	int nr_reconnects;
 	struct nvmf_ctrl_options *opts;
+	struct delayed_work reconnect_work;
+	struct work_struct err_work;
 };
 
 struct nvme_subsystem {
