@@ -2020,8 +2020,8 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	/* Address Translation Services */
 	pci_ats_init(dev);
 
-	/* Enable ACS P2P upstream forwarding */
-	pci_enable_acs(dev);
+	/* Configure ACS P2P upstream forwarding */
+	pci_config_acs(dev);
 
 	/* Precision Time Measurement */
 	pci_ptm_init(dev);
