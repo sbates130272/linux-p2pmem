@@ -122,6 +122,9 @@ bool pci_ats_disabled(void)
 	return pcie_ats_disabled;
 }
 
+/* If set, the PCIe ACS capability will be disabled. */
+static bool pci_acs_disable;
+
 /* Disable bridge_d3 for all PCIe ports */
 static bool pci_bridge_d3_disable;
 /* Force bridge_d3 for all PCIe ports */
@@ -1387,7 +1390,7 @@ void pci_restore_state(struct pci_dev *dev)
 	pci_restore_msi_state(dev);
 
 	/* Restore ACS and IOV configuration state */
-	pci_enable_acs(dev);
+	pci_config_acs(dev);
 	pci_restore_iov_state(dev);
 
 	dev->state_saved = false;
@@ -3115,11 +3118,24 @@ static void pci_std_enable_acs(struct pci_dev *dev)
 }
 
 /**
- * pci_enable_acs - enable ACS if hardware support it
+ * pci_config_acs - configure ACS
  * @dev: the PCI device
  */
-void pci_enable_acs(struct pci_dev *dev)
+void pci_config_acs(struct pci_dev *dev)
 {
+	int pos;
+
+	if (pci_acs_disable) {
+		pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);
+		if (!pos)
+			return;
+
+		dev_warn_ratelimited(&dev->dev,
+				     "disabling ACS via pci_acs_disable\n");
+		pci_write_config_word(dev, pos + PCI_ACS_CTRL, 0);
+		return;
+	}
+
 	if (!pci_acs_enable)
 		goto disable_acs_redir;
 
@@ -6063,6 +6079,8 @@ static int __init pci_setup(char *str)
 			} else if (!strncmp(str, "noats", 5)) {
 				pr_info("PCIe: ATS is disabled\n");
 				pcie_ats_disabled = true;
+			} else if (!strncmp(str, "acs_disable", 11)) {
+				pci_acs_disable = true;
 			} else if (!strcmp(str, "noaer")) {
 				pci_no_aer();
 			} else if (!strcmp(str, "earlydump")) {
