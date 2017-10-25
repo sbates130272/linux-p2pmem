@@ -140,10 +140,18 @@ module_param_named(offload_mem_size, nvmet_rdma_offload_mem_size_mb, uint, 0444)
 MODULE_PARM_DESC(offload_mem_size, "Total dedicated memory size (in MiB) for P2P data transfers. The result of (offload_buffer_size * number offload context created) must not"
 		 " exceed this value. Only used if offload_mem_start param is set (default:0)");
 
-static unsigned int nvmet_rdma_offload_buffer_size_mb = 128;
-module_param_named(offload_buffer_size, nvmet_rdma_offload_buffer_size_mb, uint, 0444);
+static int offload_buffer_size_set(const char *val,
+				   const struct kernel_param *kp);
+static const struct kernel_param_ops offload_buffer_size_ops = {
+	.set = offload_buffer_size_set,
+	.get = param_get_int,
+};
+
+static int nvmet_rdma_offload_buffer_size_mb = 128;
+module_param_cb(offload_buffer_size, &offload_buffer_size_ops,
+		&nvmet_rdma_offload_buffer_size_mb, 0644);
 MODULE_PARM_DESC(offload_buffer_size, "Staging buffer size (in MiB) per offload context. For static staging buffer, the result of (offload_buffer_size * number offload context created)"
-		 " must not exceed offload_mem_size and only used if offload_mem_start and offload_mem_size params are set (default:128)");
+		 " must not exceed offload_mem_size and only used if offload_mem_start and offload_mem_size params are set. Should be >= 16 (default:128)");
 
 static DEFINE_IDA(nvmet_rdma_queue_ida);
 static LIST_HEAD(nvmet_rdma_queue_list);
@@ -165,6 +173,18 @@ static void nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue);
 static void nvmet_rdma_free_dev(struct kref *ref);
 
 static struct nvmet_fabrics_ops nvmet_rdma_ops;
+
+static int offload_buffer_size_set(const char *val,
+				   const struct kernel_param *kp)
+{
+	int n = 0, ret;
+
+	ret = kstrtoint(val, 10, &n);
+	if (ret != 0 || n < 16)
+		return -EINVAL;
+
+	return param_set_int(val, kp);
+}
 
 /* XXX: really should move to a generic header sooner or later.. */
 static inline u32 get_unaligned_le24(const u8 *p)

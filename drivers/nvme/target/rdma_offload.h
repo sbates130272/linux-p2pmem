@@ -21,8 +21,7 @@
 #include <rdma/ib_verbs.h>
 #include "nvmet.h"
 
-#define NVMET_MIN_DYNAMIC_STAGING_BUFFER_NUM_PAGES	0x1
-#define NVMET_DYNAMIC_STAGING_BUFFER_PAGE_SIZE_MB	0x1
+#define NVMET_DYNAMIC_STAGING_BUFFER_PAGE_SIZE_MB 1
 
 struct nvmet_rdma_xrq;
 struct nvmet_rdma_device;
