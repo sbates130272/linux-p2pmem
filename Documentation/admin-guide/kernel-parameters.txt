@@ -2907,6 +2907,10 @@
 		earlydump	[X86] dump PCI config space before the kernel
 			        changes anything
 		off		[X86] don't probe for the PCI bus
+		acs_disable     [PCIE] disable access control services. Note
+				this can interfere with IOVA isolation if an IOMMU
+				is enabled but can be necessary when doing PCI
+				peer to peer communication. Use with care.
 		bios		[X86-32] force use of PCI BIOS, don't access
 				the hardware directly. Use this if your machine
 				has a non-standard PCI host bridge.
