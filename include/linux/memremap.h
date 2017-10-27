@@ -125,8 +125,9 @@ typedef void (*dev_page_free_t)(struct page *page, void *data);
 struct dev_pagemap {
 	dev_page_fault_t page_fault;
 	dev_page_free_t page_free;
-	struct vmem_altmap *altmap;
-	const struct resource *res;
+	struct vmem_altmap altmap;
+	bool altmap_valid;
+	struct resource res;
 	struct percpu_ref *ref;
 	struct device *dev;
 	void *data;
@@ -184,7 +185,7 @@ static inline bool is_device_public_page(const struct page *page)
 static inline struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 		struct dev_pagemap *pgmap)
 {
-	const struct resource *res = pgmap ? pgmap->res : NULL;
+	const struct resource *res = pgmap ? &pgmap->res : NULL;
 	resource_size_t phys = PFN_PHYS(pfn);
 
 	/*
