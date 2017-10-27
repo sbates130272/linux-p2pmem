@@ -21,6 +21,7 @@
 struct dax_pmem {
 	struct device *dev;
 	struct percpu_ref ref;
+	struct dev_pagemap pgmap;
 	struct completion cmp;
 };
 
@@ -69,20 +70,23 @@ static int dax_pmem_probe(struct device *dev)
 	struct nd_namespace_common *ndns;
 	struct nd_dax *nd_dax = to_nd_dax(dev);
 	struct nd_pfn *nd_pfn = &nd_dax->nd_pfn;
-	struct vmem_altmap __altmap, *altmap = NULL;
 
 	ndns = nvdimm_namespace_common_probe(dev);
 	if (IS_ERR(ndns))
 		return PTR_ERR(ndns);
 	nsio = to_nd_namespace_io(&ndns->dev);
 
+	dax_pmem = devm_kzalloc(dev, sizeof(*dax_pmem), GFP_KERNEL);
+	if (!dax_pmem)
+		return -ENOMEM;
+
 	/* parse the 'pfn' info block via ->rw_bytes */
 	rc = devm_nsio_enable(dev, nsio);
 	if (rc)
 		return rc;
-	altmap = nvdimm_setup_pfn(nd_pfn, &res, &__altmap);
-	if (IS_ERR(altmap))
-		return PTR_ERR(altmap);
+	rc = nvdimm_setup_pfn(nd_pfn, &res, &dax_pmem->pgmap.altmap);
+	if (rc)
+		return rc;
 	devm_nsio_disable(dev, nsio);
 
 	pfn_sb = nd_pfn->pfn_sb;
@@ -93,10 +97,6 @@ static int dax_pmem_probe(struct device *dev)
 		dev_warn(dev, "could not reserve region %pR\n", &nsio->res);
 		return -EBUSY;
 	}
-
-	dax_pmem = devm_kzalloc(dev, sizeof(*dax_pmem), GFP_KERNEL);
-	if (!dax_pmem)
-		return -ENOMEM;
 
 	dax_pmem->dev = dev;
 	init_completion(&dax_pmem->cmp);
@@ -110,7 +110,9 @@ static int dax_pmem_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	addr = devm_memremap_pages(dev, &res, &dax_pmem->ref, altmap);
+	memcpy(&dax_pmem->pgmap.res, &res, sizeof(dax_pmem->pgmap.res));
+	dax_pmem->pgmap.ref = &dax_pmem->ref;
+	addr = devm_memremap_pages(dev, &dax_pmem->pgmap);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 

@@ -297,33 +297,33 @@ static int pmem_attach_disk(struct device *dev,
 {
 	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
 	struct nd_region *nd_region = to_nd_region(dev->parent);
-	struct vmem_altmap __altmap, *altmap = NULL;
 	int nid = dev_to_node(dev), fua, wbc;
 	struct resource *res = &nsio->res;
 	struct nd_pfn *nd_pfn = NULL;
 	struct dax_device *dax_dev;
 	struct nd_pfn_sb *pfn_sb;
 	struct pmem_device *pmem;
-	struct resource pfn_res;
 	struct request_queue *q;
 	struct device *gendev;
 	struct gendisk *disk;
 	void *addr;
-
-	/* while nsio_rw_bytes is active, parse a pfn info block if present */
-	if (is_nd_pfn(dev)) {
-		nd_pfn = to_nd_pfn(dev);
-		altmap = nvdimm_setup_pfn(nd_pfn, &pfn_res, &__altmap);
-		if (IS_ERR(altmap))
-			return PTR_ERR(altmap);
-	}
-
-	/* we're attaching a block device, disable raw namespace access */
-	devm_nsio_disable(dev, nsio);
+	int rc;
 
 	pmem = devm_kzalloc(dev, sizeof(*pmem), GFP_KERNEL);
 	if (!pmem)
 		return -ENOMEM;
+
+	/* while nsio_rw_bytes is active, parse a pfn info block if present */
+	if (is_nd_pfn(dev)) {
+		nd_pfn = to_nd_pfn(dev);
+		rc = nvdimm_setup_pfn(nd_pfn, &pmem->pgmap.res,
+				      &pmem->pgmap.altmap);
+		if (rc)
+			return rc;
+	}
+
+	/* we're attaching a block device, disable raw namespace access */
+	devm_nsio_disable(dev, nsio);
 
 	dev_set_drvdata(dev, pmem);
 	pmem->phys_addr = res->start;
@@ -349,18 +349,20 @@ static int pmem_attach_disk(struct device *dev,
 		return -ENOMEM;
 
 	pmem->pfn_flags = PFN_DEV;
+	pmem->pgmap.ref = &q->q_usage_counter;
 	if (is_nd_pfn(dev)) {
-		addr = devm_memremap_pages(dev, &pfn_res, &q->q_usage_counter,
-				altmap);
+		addr = devm_memremap_pages(dev, &pmem->pgmap);
 		pfn_sb = nd_pfn->pfn_sb;
 		pmem->data_offset = le64_to_cpu(pfn_sb->dataoff);
-		pmem->pfn_pad = resource_size(res) - resource_size(&pfn_res);
+		pmem->pfn_pad = resource_size(res) -
+			resource_size(&pmem->pgmap.res);
 		pmem->pfn_flags |= PFN_MAP;
-		res = &pfn_res; /* for badblocks populate */
+		res = &pmem->pgmap.res; /* for badblocks populate */
 		res->start += pmem->data_offset;
 	} else if (pmem_should_map_pages(dev)) {
-		addr = devm_memremap_pages(dev, &nsio->res,
-				&q->q_usage_counter, NULL);
+		memcpy(&pmem->pgmap.res, &nsio->res, sizeof(pmem->pgmap.res));
+		pmem->pgmap.altmap.used = false;
+		addr = devm_memremap_pages(dev, &pmem->pgmap);
 		pmem->pfn_flags |= PFN_MAP;
 	} else
 		addr = devm_memremap(dev, pmem->phys_addr,

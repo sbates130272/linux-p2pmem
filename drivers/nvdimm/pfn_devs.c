@@ -533,8 +533,8 @@ static unsigned long init_altmap_reserve(resource_size_t base)
 	return reserve;
 }
 
-static struct vmem_altmap *__nvdimm_setup_pfn(struct nd_pfn *nd_pfn,
-		struct resource *res, struct vmem_altmap *altmap)
+static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct resource *res,
+			      struct vmem_altmap *altmap)
 {
 	struct nd_pfn_sb *pfn_sb = nd_pfn->pfn_sb;
 	u64 offset = le64_to_cpu(pfn_sb->dataoff);
@@ -554,9 +554,9 @@ static struct vmem_altmap *__nvdimm_setup_pfn(struct nd_pfn *nd_pfn,
 
 	if (nd_pfn->mode == PFN_MODE_RAM) {
 		if (offset < SZ_8K)
-			return ERR_PTR(-EINVAL);
+			return -EINVAL;
 		nd_pfn->npfns = le64_to_cpu(pfn_sb->npfns);
-		altmap = NULL;
+		altmap->used = 0;
 	} else if (nd_pfn->mode == PFN_MODE_PMEM) {
 		nd_pfn->npfns = PFN_SECTION_ALIGN_UP((resource_size(res)
 					- offset) / PAGE_SIZE);
@@ -568,10 +568,11 @@ static struct vmem_altmap *__nvdimm_setup_pfn(struct nd_pfn *nd_pfn,
 		memcpy(altmap, &__altmap, sizeof(*altmap));
 		altmap->free = PHYS_PFN(offset - SZ_8K);
 		altmap->alloc = 0;
+		altmap->used = 1;
 	} else
-		return ERR_PTR(-ENXIO);
+		return -ENXIO;
 
-	return altmap;
+	return 0;
 }
 
 static int nd_pfn_init(struct nd_pfn *nd_pfn)
@@ -690,17 +691,17 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
  * Determine the effective resource range and vmem_altmap from an nd_pfn
  * instance.
  */
-struct vmem_altmap *nvdimm_setup_pfn(struct nd_pfn *nd_pfn,
-		struct resource *res, struct vmem_altmap *altmap)
+int nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct resource *res,
+		     struct vmem_altmap *altmap)
 {
 	int rc;
 
 	if (!nd_pfn->uuid || !nd_pfn->ndns)
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 
 	rc = nd_pfn_init(nd_pfn);
 	if (rc)
-		return ERR_PTR(rc);
+		return rc;
 
 	/* we need a valid pfn_sb before we can init a vmem_altmap */
 	return __nvdimm_setup_pfn(nd_pfn, res, altmap);
