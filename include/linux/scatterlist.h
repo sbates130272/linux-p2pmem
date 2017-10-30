@@ -58,7 +58,9 @@ struct sg_table {
  *
  */
 
-#define SG_MAGIC	0x87654321
+#define SG_MAGIC	0x87654320
+#define SG_P2P_MAGIC	0x87654321
+#define SG_MAGIC_MASK	0xFFFFFFFE
 
 /*
  * We overload the LSB of the page pointer to indicate whether it's
@@ -90,7 +92,10 @@ static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 	 */
 	BUG_ON((unsigned long) page & 0x03);
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
+	if (is_pci_p2p_page(page))
+		BUG_ON(sg->sg_magic != SG_P2P_MAGIC);
+	else
+		BUG_ON(sg->sg_magic != SG_MAGIC);
 	BUG_ON(sg_is_chain(sg));
 #endif
 	sg->page_link = page_link | (unsigned long) page;
@@ -121,7 +126,7 @@ static inline void sg_set_page(struct scatterlist *sg, struct page *page,
 static inline struct page *sg_page(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
+	BUG_ON((sg->sg_magic & SG_MAGIC_MASK) != SG_MAGIC);
 	BUG_ON(sg_is_chain(sg));
 #endif
 	return (struct page *)((sg)->page_link & ~0x3);
@@ -187,7 +192,7 @@ static inline void sg_chain(struct scatterlist *prv, unsigned int prv_nents,
 static inline void sg_mark_end(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
+	BUG_ON((sg->sg_magic & SG_MAGIC_MASK) != SG_MAGIC);
 #endif
 	/*
 	 * Set termination bit, clear potential chain bit
@@ -207,7 +212,7 @@ static inline void sg_mark_end(struct scatterlist *sg)
 static inline void sg_unmark_end(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
+	BUG_ON((sg->sg_magic & SG_MAGIC_MASK) != SG_MAGIC);
 #endif
 	sg->page_link &= ~0x02;
 }
@@ -247,6 +252,13 @@ int sg_nents_for_len(struct scatterlist *sg, u64 len);
 struct scatterlist *sg_next(struct scatterlist *);
 struct scatterlist *sg_last(struct scatterlist *s, unsigned int);
 void sg_init_table(struct scatterlist *, unsigned int);
+
+#ifdef CONFIG_PCI_P2P
+void sg_init_p2p_table(struct scatterlist *, unsigned int);
+#else
+#define sg_init_p2p_table(sg, nents) sg_init_table(sg, nents)
+#endif
+
 void sg_init_one(struct scatterlist *, const void *, unsigned int);
 int sg_split(struct scatterlist *in, const int in_mapped_nents,
 	     const off_t skip, const int nb_splits,
