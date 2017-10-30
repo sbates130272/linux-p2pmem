@@ -25,7 +25,7 @@
 struct scatterlist *sg_next(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
+	BUG_ON((sg->sg_magic & SG_MAGIC_MASK) != SG_MAGIC);
 #endif
 	if (sg_is_last(sg))
 		return NULL;
@@ -112,12 +112,26 @@ struct scatterlist *sg_last(struct scatterlist *sgl, unsigned int nents)
 		ret = sg;
 
 #ifdef CONFIG_DEBUG_SG
-	BUG_ON(sgl[0].sg_magic != SG_MAGIC);
+	BUG_ON((sgl[0].sg_magic & SG_MAGIC_MASK) != SG_MAGIC);
 	BUG_ON(!sg_is_last(ret));
 #endif
 	return ret;
 }
 EXPORT_SYMBOL(sg_last);
+
+static void __init_table(struct scatterlist *sgl, unsigned int nents,
+			 unsigned long magic)
+{
+	memset(sgl, 0, sizeof(*sgl) * nents);
+#ifdef CONFIG_DEBUG_SG
+	{
+		unsigned int i;
+		for (i = 0; i < nents; i++)
+			sgl[i].sg_magic = magic;
+	}
+#endif
+	sg_mark_end(&sgl[nents - 1]);
+}
 
 /**
  * sg_init_table - Initialize SG table
@@ -131,17 +145,27 @@ EXPORT_SYMBOL(sg_last);
  **/
 void sg_init_table(struct scatterlist *sgl, unsigned int nents)
 {
-	memset(sgl, 0, sizeof(*sgl) * nents);
-#ifdef CONFIG_DEBUG_SG
-	{
-		unsigned int i;
-		for (i = 0; i < nents; i++)
-			sgl[i].sg_magic = SG_MAGIC;
-	}
-#endif
-	sg_mark_end(&sgl[nents - 1]);
+	__init_table(sgl, nents, SG_MAGIC);
 }
 EXPORT_SYMBOL(sg_init_table);
+
+#ifdef CONFIG_PCI_P2P
+/**
+ * sg_init_p2p_table - Initialize an SG table flagged for p2p use
+ * @sgl:	   The SG table
+ * @nents:	   Number of entries in table
+ *
+ * Notes:
+ *   If this is part of a chained sg table, sg_mark_end() should be
+ *   used only on the last table part.
+ *
+ **/
+void sg_init_p2p_table(struct scatterlist *sgl, unsigned int nents)
+{
+	__init_table(sgl, nents, SG_P2P_MAGIC);
+}
+EXPORT_SYMBOL(sg_init_p2p_table);
+#endif
 
 /**
  * sg_init_one - Initialize a single entry sg list

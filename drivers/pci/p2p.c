@@ -371,7 +371,7 @@ int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
 	if (!sg)
 		return -ENOMEM;
 
-	sg_init_table(sg, 1);
+	sg_init_p2p_table(sg, 1);
 
 	addr = pci_alloc_p2pmem(pdev, length);
 	if (!addr)
