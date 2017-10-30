@@ -652,7 +652,11 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 			DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	blk_status_t ret = BLK_STS_IOERR;
 
-	sg_init_table(iod->sg, blk_rq_nr_phys_segments(req));
+	if (REQ_IS_PCI_P2P(req))
+		sg_init_p2p_table(iod->sg, blk_rq_nr_phys_segments(req));
+	else
+		sg_init_table(iod->sg, blk_rq_nr_phys_segments(req));
+
 	iod->nents = blk_rq_map_sg(q, req, iod->sg);
 	if (!iod->nents)
 		goto out;
@@ -1907,7 +1911,8 @@ static int nvme_dev_add(struct nvme_dev *dev)
 		dev->tagset.queue_depth =
 				min_t(int, dev->q_depth, BLK_MQ_MAX_DEPTH) - 1;
 		dev->tagset.cmd_size = nvme_cmd_size(dev);
-		dev->tagset.flags = BLK_MQ_F_SHOULD_MERGE;
+		dev->tagset.flags = BLK_MQ_F_SHOULD_MERGE |
+			BLK_MQ_F_PCI_P2P_SUPPORTED;
 		dev->tagset.driver_data = dev;
 
 		if (blk_mq_alloc_tag_set(&dev->tagset))
