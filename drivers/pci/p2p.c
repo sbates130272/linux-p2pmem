@@ -21,6 +21,16 @@
 #include <linux/memremap.h>
 #include <linux/blk-mq.h>
 
+struct pci_p2pmem_pagemap {
+	struct dev_pagemap pgmap;
+	pci_bus_addr_t bus_offset;
+};
+
+struct pci_p2pmem_pagemap *to_pci_p2pmem_pagemap(struct dev_pagemap *pgmap)
+{
+	return container_of(pgmap, struct pci_p2pmem_pagemap, pgmap);
+}
+
 static ssize_t size_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
@@ -146,7 +156,7 @@ out:
 int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset)
 {
-	struct dev_pagemap *pgmap;
+	struct pci_p2pmem_pagemap *p2pmap;
 	void *addr;
 	int error;
 
@@ -165,22 +175,25 @@ int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			return error;
 	}
 
-	pgmap = devm_kzalloc(&pdev->dev, sizeof(*pgmap), GFP_KERNEL);
-	if (!pgmap)
+	p2pmap = devm_kzalloc(&pdev->dev, sizeof(*p2pmap), GFP_KERNEL);
+	if (!p2pmap)
 		return -ENOMEM;
 
-	pgmap->res.start = pci_resource_start(pdev, bar) + offset;
-	pgmap->res.end = pgmap->res.start + size;
-	pgmap->ref = &pdev->p2p_devmap_ref;
-	pgmap->type = MEMORY_DEVICE_PCI_P2P;
+	p2pmap->pgmap.res.start = pci_resource_start(pdev, bar) + offset;
+	p2pmap->pgmap.res.end = p2pmap->pgmap.res.start + size;
+	p2pmap->pgmap.ref = &pdev->p2p_devmap_ref;
+	p2pmap->pgmap.type = MEMORY_DEVICE_PCI_P2P;
+	p2pmap->bus_offset = pci_bus_address(pdev, bar) -
+		pci_resource_start(pdev, bar);
 
-	addr = devm_memremap_pages(&pdev->dev, pgmap);
+	addr = devm_memremap_pages(&pdev->dev, &p2pmap->pgmap);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 
 	error = gen_pool_add_virt(pdev->p2p_pool, (uintptr_t)addr,
 			pci_bus_address(pdev, bar) + offset,
-			resource_size(&pgmap->res), dev_to_node(&pdev->dev));
+			resource_size(&p2pmap->pgmap.res),
+			dev_to_node(&pdev->dev));
 	if (error)
 		return error;
 
@@ -613,3 +626,44 @@ void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 	pdev->p2p_published = publish;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
+
+/*
+ * pci_p2pmem_map_sg - map a pci p2p sg for dma
+ * @sg:		scatter list to map
+ * @nents:	elements in the scatter list
+ *
+ * Returns the number of sgls mapped
+ */
+int pci_p2pmem_map_sg(struct scatterlist *sg, int nents)
+{
+	struct pci_p2pmem_pagemap *p2pmap;
+	struct scatterlist *s;
+	phys_addr_t paddr;
+	int i;
+
+	for_each_sg(sg, s, nents, i) {
+		p2pmap = to_pci_p2pmem_pagemap(sg_page(s)->pgmap);
+		paddr = sg_phys(s);
+
+		s->dma_address = paddr - p2pmap->bus_offset;
+		sg_dma_len(s) = s->length;
+	}
+
+	return nents;
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_map_sg);
+
+/**
+ * pci_p2pmem_unmap_sg - unmap a pci p2p sg for dma
+ * @sg:		scatter list to map
+ * @nents:	elements in the scatter list
+ */
+void pci_p2pmem_unmap_sg(struct scatterlist *sg, int nents)
+{
+	struct scatterlist *s;
+	int i;
+
+	for_each_sg(sg, s, nents, i)
+		dma_mark_clean(phys_to_virt(sg_phys(s)), sg_dma_len(s));
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_unmap_sg);
