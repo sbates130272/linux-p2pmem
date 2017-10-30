@@ -12,6 +12,7 @@
 #include <linux/kmemcheck.h>
 #include <linux/bug.h>
 #include <linux/mem_encrypt.h>
+#include <linux/memremap.h>
 
 /**
  * List of possible attributes associated with a DMA mapping. The semantics
@@ -254,6 +255,18 @@ static inline void dma_unmap_single_attrs(struct device *dev, dma_addr_t addr,
 	debug_dma_unmap_page(dev, addr, size, dir, true);
 }
 
+#ifdef CONFIG_PCI_P2P
+int pci_p2pmem_map_sg(struct scatterlist *sg, int nents);
+void pci_p2pmem_unmap_sg(struct scatterlist *sg, int nents);
+#else
+static inline int pci_p2pmem_map_sg(struct scatterlist *sg, int nents)
+{
+	return 0;
+}
+
+static void pci_p2pmem_unmap_sg(struct scatterlist *sg, int nents) {}
+#endif
+
 /*
  * dma_maps_sg_attrs returns 0 on error and > 0 on success.
  * It should never return a value < 0.
@@ -265,6 +278,13 @@ static inline int dma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	int i, ents;
 	struct scatterlist *s;
+
+	/*
+	 * We assume that if the first page in sg is a zone_device p2p page,
+	 * then all pages in that sg are the same.
+	 */
+	if (unlikely(is_pci_p2p_page(sg_page(sg))))
+		return pci_p2pmem_map_sg(sg, nents);
 
 	for_each_sg(sg, s, nents, i)
 		kmemcheck_mark_initialized(sg_virt(s), s->length);
@@ -282,6 +302,11 @@ static inline void dma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 
+	if (unlikely(is_pci_p2p_page(sg_page(sg)))) {
+		pci_p2pmem_unmap_sg(sg, nents);
+		return;
+	}
+
 	BUG_ON(!valid_dma_direction(dir));
 	debug_dma_unmap_sg(dev, sg, nents, dir);
 	if (ops->unmap_sg)
@@ -296,6 +321,13 @@ static inline dma_addr_t dma_map_page_attrs(struct device *dev,
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	dma_addr_t addr;
+
+	/*
+	 * Correctly supporting the unmap_page interface with P2P memory is
+	 * impossible because we can't easily tell if a dma_addr_t is P2P or
+	 * not.
+	 */
+	BUG_ON(is_pci_p2p_page(page));
 
 	kmemcheck_mark_initialized(page_address(page) + offset, size);
 	BUG_ON(!valid_dma_direction(dir));
