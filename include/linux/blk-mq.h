@@ -174,6 +174,13 @@ enum {
 	BLK_MQ_F_SHOULD_MERGE	= 1 << 0,
 	BLK_MQ_F_TAG_SHARED	= 1 << 1,
 	BLK_MQ_F_SG_MERGE	= 1 << 2,
+
+#ifdef CONFIG_PCI_P2P
+	BLK_MQ_F_PCI_P2P_SUPPORTED  = 1 << 3,
+#else
+	BLK_MQ_F_PCI_P2P_SUPPORTED  = 0,
+#endif
+
 	BLK_MQ_F_BLOCKING	= 1 << 5,
 	BLK_MQ_F_NO_SCHED	= 1 << 6,
 	BLK_MQ_F_ALLOC_POLICY_START_BIT = 8,
@@ -306,5 +313,31 @@ static inline void *blk_mq_rq_to_pdu(struct request *rq)
 #define hctx_for_each_ctx(hctx, ctx, i)					\
 	for ((i) = 0; (i) < (hctx)->nr_ctx &&				\
 	     ({ ctx = (hctx)->ctxs[(i)]; 1; }); (i)++)
+
+#ifdef CONFIG_PCI_P2P
+/*
+ * Driver can handle PCI P2P requests if it's blk-mq based and all the MQ
+ * hw contexts indicate support with the BLK_MQ_F_PCI_P2P_SUPPORTED flag.
+ */
+static inline bool queue_supports_pci_p2p(struct request_queue *q)
+{
+	struct blk_mq_hw_ctx *hctx;
+	int i;
+
+	if (!q->mq_ops)
+		return false;
+
+	queue_for_each_hw_ctx(q, hctx, i)
+		if (!(hctx->flags & BLK_MQ_F_PCI_P2P_SUPPORTED))
+			return false;
+
+	return true;
+}
+#else
+static inline bool queue_supports_pci_p2p(struct request_queue *q)
+{
+	return false;
+}
+#endif
 
 #endif
