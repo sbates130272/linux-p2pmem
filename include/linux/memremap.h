@@ -126,6 +126,7 @@ struct dev_pagemap {
 	struct device *dev;
 	void *data;
 	enum memory_type type;
+	u64 pci_p2p_bus_offset;
 };
 
 #ifdef CONFIG_ZONE_DEVICE
