@@ -230,6 +230,11 @@ enum req_flag_bits {
 	__REQ_NOUNMAP,		/* do not free blocks when zeroing */
 
 	__REQ_NOWAIT,           /* Don't wait if request will block */
+
+#ifdef CONFIG_PCI_P2P
+	__REQ_PCI_P2P,		/* request is to/from P2P memory */
+#endif
+
 	__REQ_NR_BITS,		/* stops here */
 };
 
@@ -255,6 +260,22 @@ enum req_flag_bits {
 
 #define REQ_NOMERGE_FLAGS \
 	(REQ_NOMERGE | REQ_PREFLUSH | REQ_FUA)
+
+#ifdef CONFIG_PCI_P2P
+#define REQ_PCI_P2P		(1ULL << __REQ_PCI_P2P)
+
+/*
+ * Currently SGLs do not support mixed P2P and regular memory so
+ * requests with P2P memory must not be merged.
+ */
+#define REQ_PCI_P2P_FLAGS	(REQ_PCI_P2P | REQ_NOMERGE_FLAGS)
+#define REQ_IS_PCI_P2P(req)	((req)->cmd_flags & REQ_PCI_P2P)
+
+#else
+#define REQ_PCI_P2P		0
+#define REQ_IS_PCI_P2P(req)	0
+#define REQ_PCI_P2P_FLAGS	0
+#endif
 
 #define bio_op(bio) \
 	((bio)->bi_opf & REQ_OP_MASK)
