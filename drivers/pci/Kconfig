@@ -135,6 +135,10 @@ config PCI_P2P
 	  it's hard to tell which support it with good performance, so
 	  at this time you will need a PCIe switch.
 
+	  Note: Selecting this will disable ACS which forces P2P transactions
+	  through the root complex. If you care about the isolation provided
+	  by ACS you should not enable this option.
+
 	  If unsure, say N.
 
 config PCI_LABEL

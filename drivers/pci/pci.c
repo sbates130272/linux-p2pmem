@@ -2841,6 +2841,14 @@ void pci_config_acs(struct pci_dev *dev)
 		pci_write_config_word(dev, pos + PCI_ACS_CTRL, 0);
 	}
 
+	/**
+	 * When doing P2P transfers we really don't want to use ACS
+	 * seeing it causes all transactions to hit the RC which may
+	 * not support P2P or at best will not perform well.
+	 */
+	if (IS_ENABLED(CONFIG_PCI_P2P))
+		return;
+
 	if (!pci_acs_enable)
 		return;
 
