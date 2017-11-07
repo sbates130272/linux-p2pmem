@@ -91,9 +91,9 @@ struct nvme_dev {
 	struct work_struct remove_work;
 	struct mutex shutdown_lock;
 	bool subsystem;
-	void __iomem *cmb;
-	pci_bus_addr_t cmb_bus_addr;
 	u64 cmb_size;
+	bool cmb;
+	bool cmb_use_sqes;
 	u32 cmbsz;
 	u32 cmbloc;
 	struct nvme_ctrl ctrl;
@@ -148,7 +148,7 @@ struct nvme_queue {
 	struct nvme_dev *dev;
 	spinlock_t q_lock;
 	struct nvme_command *sq_cmds;
-	struct nvme_command __iomem *sq_cmds_io;
+	bool sq_cmds_is_io;
 	volatile struct nvme_completion *cqes;
 	struct blk_mq_tags **tags;
 	dma_addr_t sq_dma_addr;
@@ -429,10 +429,7 @@ static void __nvme_submit_cmd(struct nvme_queue *nvmeq,
 {
 	u16 tail = nvmeq->sq_tail;
 
-	if (nvmeq->sq_cmds_io)
-		memcpy_toio(&nvmeq->sq_cmds_io[tail], cmd, sizeof(*cmd));
-	else
-		memcpy(&nvmeq->sq_cmds[tail], cmd, sizeof(*cmd));
+	memcpy(&nvmeq->sq_cmds[tail], cmd, sizeof(*cmd));
 
 	if (++tail == nvmeq->q_depth)
 		tail = 0;
@@ -1289,9 +1286,21 @@ static void nvme_free_queue(struct nvme_queue *nvmeq)
 {
 	dma_free_coherent(nvmeq->q_dmadev, CQ_SIZE(nvmeq->q_depth),
 				(void *)nvmeq->cqes, nvmeq->cq_dma_addr);
-	if (nvmeq->sq_cmds)
-		dma_free_coherent(nvmeq->q_dmadev, SQ_SIZE(nvmeq->q_depth),
-					nvmeq->sq_cmds, nvmeq->sq_dma_addr);
+
+	if (nvmeq->sq_cmds) {
+		if (nvmeq->sq_cmds_is_io)
+			pci_free_p2pmem(to_pci_dev(nvmeq->q_dmadev),
+					nvmeq->sq_cmds,
+					SQ_SIZE(nvmeq->q_depth));
+		else
+			dma_free_coherent(nvmeq->q_dmadev,
+					  SQ_SIZE(nvmeq->q_depth),
+					  nvmeq->sq_cmds,
+					  nvmeq->sq_dma_addr);
+	}
+
+	nvmeq->sq_cmds = NULL;
+
 	kfree(nvmeq);
 }
 
@@ -1379,17 +1388,23 @@ static int nvme_cmb_qdepth(struct nvme_dev *dev, int nr_io_queues,
 static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 				int qid, int depth)
 {
-	if (qid && dev->cmb && use_cmb_sqes && NVME_CMB_SQS(dev->cmbsz)) {
-		unsigned offset = (qid - 1) * roundup(SQ_SIZE(depth),
-						      dev->ctrl.page_size);
-		nvmeq->sq_dma_addr = dev->cmb_bus_addr + offset;
-		nvmeq->sq_cmds_io = dev->cmb + offset;
-	} else {
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+
+	if (qid && dev->cmb_use_sqes) {
+		nvmeq->sq_cmds = pci_alloc_p2pmem(pdev, SQ_SIZE(depth));
+		nvmeq->sq_dma_addr = pci_p2pmem_virt_to_bus(pdev,
+							    nvmeq->sq_cmds);
+		nvmeq->sq_cmds_is_io = true;
+	}
+
+	if (!nvmeq->sq_cmds) {
 		nvmeq->sq_cmds = dma_alloc_coherent(dev->dev, SQ_SIZE(depth),
 					&nvmeq->sq_dma_addr, GFP_KERNEL);
-		if (!nvmeq->sq_cmds)
-			return -ENOMEM;
+		nvmeq->sq_cmds_is_io = false;
 	}
+
+	if (!nvmeq->sq_cmds)
+		return -ENOMEM;
 
 	return 0;
 }
@@ -1673,21 +1688,18 @@ static ssize_t nvme_cmb_show(struct device *dev,
 }
 static DEVICE_ATTR(cmb, S_IRUGO, nvme_cmb_show, NULL);
 
-static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
+static bool nvme_map_cmb(struct nvme_dev *dev)
 {
 	u64 szu, size, offset;
 	resource_size_t bar_size;
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
-	void __iomem *cmb;
 	int bar;
+	int ret;
 
 	dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
 	if (!(NVME_CMB_SZ(dev->cmbsz)))
-		return NULL;
+		return false;
 	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
-
-	if (!use_cmb_sqes)
-		return NULL;
 
 	szu = (u64)1 << (12 + 4 * NVME_CMB_SZU(dev->cmbsz));
 	size = szu * NVME_CMB_SZ(dev->cmbsz);
@@ -1696,7 +1708,7 @@ static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
 	bar_size = pci_resource_len(pdev, bar);
 
 	if (offset > bar_size)
-		return NULL;
+		return false;
 
 	/*
 	 * Controllers may support a CMB size larger than their BAR,
@@ -1706,23 +1718,25 @@ static void __iomem *nvme_map_cmb(struct nvme_dev *dev)
 	if (size > bar_size - offset)
 		size = bar_size - offset;
 
-	cmb = ioremap_wc(pci_resource_start(pdev, bar) + offset, size);
-	if (!cmb)
-		return NULL;
+	ret = pci_p2pmem_add_resource(pdev, bar, size, offset);
+	if (ret)
+		return false;
 
-	dev->cmb_bus_addr = pci_bus_address(pdev, bar) + offset;
 	dev->cmb_size = size;
-	return cmb;
+	dev->cmb_use_sqes = use_cmb_sqes && NVME_CMB_SQS(dev->cmbsz);
+
+	pci_p2pmem_publish(pdev, NVME_CMB_WDS(dev->cmbsz) &&
+			   NVME_CMB_RDS(dev->cmbsz));
+
+	return true;
 }
 
 static inline void nvme_release_cmb(struct nvme_dev *dev)
 {
 	if (dev->cmb) {
-		iounmap(dev->cmb);
-		dev->cmb = NULL;
 		sysfs_remove_file_from_group(&dev->ctrl.device->kobj,
 					     &dev_attr_cmb.attr, NULL);
-		dev->cmbsz = 0;
+		dev->cmb = false;
 	}
 }
 
@@ -1917,13 +1931,13 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	if (nr_io_queues == 0)
 		return 0;
 
-	if (dev->cmb && NVME_CMB_SQS(dev->cmbsz)) {
+	if (dev->cmb_use_sqes) {
 		result = nvme_cmb_qdepth(dev, nr_io_queues,
 				sizeof(struct nvme_command));
 		if (result > 0)
 			dev->q_depth = result;
 		else
-			nvme_release_cmb(dev);
+			dev->cmb_use_sqes = false;
 	}
 
 	do {
