@@ -124,14 +124,24 @@ enum {
 
 #define NVME_CMB_BIR(cmbloc)	((cmbloc) & 0x7)
 #define NVME_CMB_OFST(cmbloc)	(((cmbloc) >> 12) & 0xfffff)
-#define NVME_CMB_SZ(cmbsz)	(((cmbsz) >> 12) & 0xfffff)
-#define NVME_CMB_SZU(cmbsz)	(((cmbsz) >> 8) & 0xf)
 
-#define NVME_CMB_WDS(cmbsz)	((cmbsz) & 0x10)
-#define NVME_CMB_RDS(cmbsz)	((cmbsz) & 0x8)
-#define NVME_CMB_LISTS(cmbsz)	((cmbsz) & 0x4)
-#define NVME_CMB_CQS(cmbsz)	((cmbsz) & 0x2)
-#define NVME_CMB_SQS(cmbsz)	((cmbsz) & 0x1)
+#define NVME_CMB_SZ_SHIFT	12
+#define NVME_CMB_SZU_SHIFT	8
+
+#define NVME_CMB_SZ(cmbsz)	(((cmbsz) >> NVME_CMB_SZ_SHIFT) & 0xfffff)
+#define NVME_CMB_SZU(cmbsz)	(((cmbsz) >> NVME_CMB_SZU_SHIFT) & 0xf)
+
+#define NVME_CMB_WDS_FLAG	0x10
+#define NVME_CMB_RDS_FLAG	0x8
+#define NVME_CMB_LISTS_FLAG	0x4
+#define NVME_CMB_CQS_FLAG	0x2
+#define NVME_CMB_SQS_FLAG	0x1
+
+#define NVME_CMB_WDS(cmbsz)	((cmbsz) & NVME_CMB_WDS_FLAG)
+#define NVME_CMB_RDS(cmbsz)	((cmbsz) & NVME_CMB_RDS_FLAG)
+#define NVME_CMB_LISTS(cmbsz)	((cmbsz) & NVME_CMB_LISTS_FLAG)
+#define NVME_CMB_CQS(cmbsz)	((cmbsz) & NVME_CMB_CQS_FLAG)
+#define NVME_CMB_SQS(cmbsz)	((cmbsz) & NVME_CMB_SQS_FLAG)
 
 /*
  * Submission and Completion Queue Entry Sizes for the NVM command set.

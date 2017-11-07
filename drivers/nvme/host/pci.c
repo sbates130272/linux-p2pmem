@@ -1696,10 +1696,22 @@ static bool nvme_map_cmb(struct nvme_dev *dev)
 	int bar;
 	int ret;
 
-	dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
-	if (!(NVME_CMB_SZ(dev->cmbsz)))
-		return false;
-	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
+	if (dev->ctrl.quirks & NVME_QUIRK_PSEUDO_CMB_BAR4) {
+		size = pci_resource_len(pdev, 4) / SZ_16M;
+		szu = (ilog2(SZ_16M) - 12) / 4;
+
+		dev->cmbsz = (NVME_CMB_WDS_FLAG |
+			      NVME_CMB_RDS_FLAG |
+			      (szu << NVME_CMB_SZU_SHIFT) |
+			      (size << NVME_CMB_SZ_SHIFT));
+
+		dev->cmbloc = 4;
+	} else {
+		dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
+		if (!(NVME_CMB_SZ(dev->cmbsz)))
+			return false;
+		dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
+	}
 
 	szu = (u64)1 << (12 + 4 * NVME_CMB_SZU(dev->cmbsz));
 	size = szu * NVME_CMB_SZ(dev->cmbsz);
@@ -2155,7 +2167,8 @@ static int nvme_pci_enable(struct nvme_dev *dev)
 	 * sysfs_add_file_to_group.
 	 */
 
-	if (readl(dev->bar + NVME_REG_VS) >= NVME_VS(1, 2, 0)) {
+	if ((dev->ctrl.quirks & NVME_QUIRK_PSEUDO_CMB_BAR4) ||
+	    readl(dev->bar + NVME_REG_VS) >= NVME_VS(1, 2, 0)) {
 		dev->cmb = nvme_map_cmb(dev);
 		if (dev->cmb) {
 			if (sysfs_add_file_to_group(&dev->ctrl.device->kobj,
@@ -2710,6 +2723,10 @@ static const struct pci_device_id nvme_id_table[] = {
 		.driver_data = NVME_QUIRK_LIGHTNVM, },
 	{ PCI_DEVICE(0x1d1d, 0x2807),	/* CNEX WL */
 		.driver_data = NVME_QUIRK_LIGHTNVM, },
+	{ PCI_DEVICE(0x11f8, 0xf117),	/* Microsemi NVRAM adaptor */
+		.driver_data = NVME_QUIRK_PSEUDO_CMB_BAR4, },
+	{ PCI_DEVICE(0x1db1, 0x0002),	/* Everspin nvNitro adaptor */
+		.driver_data = NVME_QUIRK_PSEUDO_CMB_BAR4,  },
 	{ PCI_DEVICE_CLASS(PCI_CLASS_STORAGE_EXPRESS, 0xffffff) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2001) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2003) },
