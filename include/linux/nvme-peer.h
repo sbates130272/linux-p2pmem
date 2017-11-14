@@ -48,14 +48,15 @@ struct nvme_peer_resource {
 	 * Allows notifying the master peer to free his resources when slave peer
 	 * initiates destruction.
 	 */
-	void (* stop_master_peer)(struct pci_dev *pdev);
+	void (* stop_master_peer)(void *priv);
+	void *dd_data;
 };
 
 
 struct nvme_peer_resource *nvme_peer_get_resource(struct pci_dev *pdev,
 	enum nvme_peer_resource_mask mask,
-	void (* stop_master_peer)(struct pci_dev *pdev));
-void nvme_peer_put_resource(struct nvme_peer_resource *resource);
+	void (* stop_master_peer)(void *priv), void *dd_data);
+void nvme_peer_put_resource(struct nvme_peer_resource *resource, bool restart);
 bool nvme_pdev_is_bdev(struct pci_dev *pdev, struct block_device *bdev);
 
 #endif /* _LINUX_NVME_PEER_H */
