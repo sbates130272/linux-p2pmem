@@ -205,7 +205,7 @@ struct nvme_iod {
 
 static int nvme_peer_init_resource(struct nvme_queue *nvmeq,
 				   enum nvme_peer_resource_mask mask,
-				   void (* stop_master_peer)(struct pci_dev *pdev))
+				   void (* stop_master_peer)(void *priv), void *dd_data)
 {
 	struct nvme_dev *dev = nvmeq->dev;
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
@@ -237,44 +237,52 @@ static int nvme_peer_init_resource(struct nvme_queue *nvmeq,
 
 	nvmeq->resource.flags = NVME_QUEUE_PHYS_CONTIG;
 	nvmeq->resource.stop_master_peer = stop_master_peer;
+	nvmeq->resource.dd_data = dd_data;
 
 	return ret;
 }
 
-void nvme_peer_put_resource(struct nvme_peer_resource *resource)
+void nvme_peer_put_resource(struct nvme_peer_resource *resource, bool restart)
 {
 	struct nvme_queue *nvmeq = container_of(resource, struct nvme_queue,
 						resource);
 	mutex_lock(&resource->lock);
 	resource->in_use = false;
 	resource->stop_master_peer = NULL;
-
-	/* Restart the queue for future usage */
-	nvme_suspend_queue(nvmeq);
-	adapter_delete_sq(nvmeq->dev, nvmeq->qid);
-	adapter_delete_cq(nvmeq->dev, nvmeq->qid);
-
-	nvme_create_queue(nvmeq, nvmeq->qid);
-
+	resource->dd_data = NULL;
 	mutex_unlock(&resource->lock);
+
+	// TODO: create/destroy on demand
+	/* Restart the queue for future usage */
+	if (restart) {
+		nvme_suspend_queue(nvmeq);
+		adapter_delete_sq(nvmeq->dev, nvmeq->qid);
+		adapter_delete_cq(nvmeq->dev, nvmeq->qid);
+		nvme_create_queue(nvmeq, nvmeq->qid);
+	}
 }
 EXPORT_SYMBOL_GPL(nvme_peer_put_resource);
 
 struct nvme_peer_resource *nvme_peer_get_resource(struct pci_dev *pdev,
 	enum nvme_peer_resource_mask mask,
-	void (* stop_master_peer)(struct pci_dev *pdev))
+	void (* stop_master_peer)(void *priv), void *dd_data)
 {
 	struct nvme_dev *dev = pci_get_drvdata(pdev);
 	struct nvme_queue *nvmeq;
 	unsigned i;
 	int ret;
 
+	if (!dev)
+		return NULL;
+
 	for (i = 0; i < dev->online_queues; i++) {
 		nvmeq = dev->queues[i];
 		if (nvmeq->p2p) {
 			mutex_lock(&nvmeq->resource.lock);
 			if (!nvmeq->resource.in_use) {
-				ret = nvme_peer_init_resource(nvmeq, mask, stop_master_peer);
+				ret = nvme_peer_init_resource(nvmeq, mask,
+							      stop_master_peer,
+							      dd_data);
 				if (!ret) {
 					nvmeq->resource.in_use = true;
 					mutex_unlock(&nvmeq->resource.lock);
@@ -1438,6 +1446,15 @@ static int nvme_suspend_queue(struct nvme_queue *nvmeq)
 	}
 	if (!nvmeq->p2p)
 		vector = nvmeq->cq_vector;
+	else {
+		mutex_lock(&nvmeq->resource.lock);
+		if (nvmeq->resource.in_use && nvmeq->resource.stop_master_peer) {
+			mutex_unlock(&nvmeq->resource.lock);
+			nvmeq->resource.stop_master_peer(nvmeq->resource.dd_data);
+		} else
+			mutex_unlock(&nvmeq->resource.lock);
+	}
+
 	nvmeq->dev->online_queues--;
 	nvmeq->cq_vector = -1;
 	spin_unlock_irq(&nvmeq->q_lock);
