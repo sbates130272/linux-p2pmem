@@ -451,7 +451,7 @@ int pci_p2pmem_map_sg(struct scatterlist *sg, int nents)
 EXPORT_SYMBOL_GPL(pci_p2pmem_map_sg);
 
 /**
- * pci_p2pmem_map_sg - unmap a pci p2p sg for dma
+ * pci_p2pmem_unmap_sg - unmap a pci p2p sg for dma
  * @sg:		scatter list to map
  * @nents:	elements in the scatter list
  */
