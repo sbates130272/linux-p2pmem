@@ -266,6 +266,7 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
 	struct nvmet_ctrl *ctrl;
+	struct device *dev;
 	int ret = 0;
 
 	mutex_lock(&subsys->lock);
@@ -289,6 +290,15 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 				0, GFP_KERNEL);
 	if (ret)
 		goto out_blkdev_put;
+
+	dev = disk_to_dev(ns->bdev->bd_disk);
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
+		if (ctrl->p2p_dev) {
+			ret = pci_p2pmem_add_client(&ctrl->p2p_clients, dev);
+			if (ret)
+				goto out_remove_clients;
+		}
+	}
 
 	if (ns->nsid > subsys->max_nsid)
 		subsys->max_nsid = ns->nsid;
@@ -319,6 +329,10 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 out_unlock:
 	mutex_unlock(&subsys->lock);
 	return ret;
+out_remove_clients:
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
+		if (ctrl->p2p_dev)
+			pci_p2pmem_remove_client(&ctrl->p2p_clients, dev);
 out_blkdev_put:
 	blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
 	ns->bdev = NULL;
@@ -329,6 +343,7 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
 	struct nvmet_ctrl *ctrl;
+	struct device *dev;
 
 	mutex_lock(&subsys->lock);
 	if (!ns->enabled)
@@ -352,8 +367,12 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 	percpu_ref_exit(&ns->ref);
 
 	mutex_lock(&subsys->lock);
-	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
+	dev = disk_to_dev(ns->bdev->bd_disk);
+	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
+		if (ctrl->p2p_dev)
+			pci_p2pmem_remove_client(&ctrl->p2p_clients, dev);
 		nvmet_add_async_event(ctrl, NVME_AER_TYPE_NOTICE, 0, 0);
+	}
 
 	if (ns->bdev)
 		blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
@@ -741,43 +760,61 @@ bool nvmet_host_allowed(struct nvmet_req *req, struct nvmet_subsys *subsys,
  * If allow_p2pmem is set, we will try to use P2P memory for the SGL lists for
  * Ι/O commands. This requires the PCI p2p device to be compatible with the
  * backing device for every namespace on this controller.
- *
- * XXX(hch): needs to be rechecked when adding a namespace.
  */
 static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_port *port)
 {
-	struct device **devices;
 	struct nvmet_ns *ns;
-	int i = 0;
+	int ret;
 
 	if (!port->allow_p2pmem)
 		return;
 
-	devices = kcalloc(ctrl->subsys->max_nsid + 1, sizeof(*devices),
-			  GFP_KERNEL);
-	if (!devices)
-		return;
+	INIT_LIST_HEAD(&ctrl->p2p_clients);
 
-	rcu_read_lock();
+	mutex_lock(&ctrl->subsys->lock);
+
 	list_for_each_entry_rcu(ns, &ctrl->subsys->namespaces, dev_link) {
 		if (!queue_supports_pci_p2p(ns->bdev->bd_queue)) {
 			pr_info("p2pmem not supported by %s\n",
 				ns->device_path);
 			goto free_devices;
 		}
-		devices[i++] = disk_to_dev(ns->bdev->bd_disk);
+
+		ret = pci_p2pmem_add_client(&ctrl->p2p_clients,
+					    disk_to_dev(ns->bdev->bd_disk));
+		if (!ret) {
+			pr_err("failed adding p2pmem client %s: %d\n",
+			       ns->device_path, ret);
+			goto free_devices;
+		}
 	}
-	rcu_read_unlock();
 
-	ctrl->p2p_dev = pci_p2pmem_find(devices);
+	ctrl->p2p_dev = pci_p2pmem_find(&ctrl->p2p_clients);
 
-	if (ctrl->p2p_dev)
+	if (ctrl->p2p_dev) {
 		pr_info("using p2pmem on %s\n", pci_name(ctrl->p2p_dev));
-	else
+	} else {
 		pr_info("no supported p2pmem devices found\n");
+		goto free_devices;
+	}
+
+	return;
 
 free_devices:
-	kfree(devices);
+	pci_p2pmem_client_list_free(&ctrl->p2p_clients);
+	mutex_unlock(&ctrl->subsys->lock);
+}
+
+static bool nvmet_release_p2pmem(struct nvmet_ctrl *ctrl)
+{
+	if (!ctrl->p2p_dev)
+		return false;
+
+	pci_p2pmem_client_list_free(&ctrl->p2p_clients);
+	pci_dev_put(ctrl->p2p_dev);
+	ctrl->p2p_dev = NULL;
+
+	return true;
 }
 
 u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
@@ -909,7 +946,7 @@ static void nvmet_ctrl_free(struct kref *ref)
 	flush_work(&ctrl->async_event_work);
 	cancel_work_sync(&ctrl->fatal_err_work);
 
-	pci_dev_put(ctrl->p2p_dev);
+	nvmet_release_p2pmem(ctrl);
 	ida_simple_remove(&cntlid_ida, ctrl->cntlid);
 	nvmet_subsys_put(subsys);
 

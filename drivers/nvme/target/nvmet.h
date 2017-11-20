@@ -133,6 +133,7 @@ struct nvmet_ctrl {
 
 	struct nvmet_fabrics_ops *ops;
 	struct pci_dev		*p2p_dev;
+	struct list_head	p2p_clients;
 
 	char			subsysnqn[NVMF_NQN_FIELD_LEN];
 	char			hostnqn[NVMF_NQN_FIELD_LEN];
