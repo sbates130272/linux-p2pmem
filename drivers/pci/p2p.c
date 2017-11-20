@@ -244,24 +244,22 @@ static struct pci_dev *get_upstream_switch_port(struct pci_dev *pdev)
 }
 
 static bool __upstream_bridges_match(struct pci_dev *upstream,
-				     struct device *dev)
+				     struct pci_dev *client)
 {
 	struct pci_dev *dma_up;
-	struct pci_dev *parent;
 	bool ret = true;
 
-	parent = find_parent_pci_dev(dev);
-	dma_up = get_upstream_switch_port(parent);
-	pci_dev_put(parent);
+	dma_up = get_upstream_switch_port(client);
 
 	if (!dma_up) {
-		dev_dbg(dev, "not a pci device behind a switch\n");
+		dev_dbg(&client->dev, "not a pci device behind a switch\n");
 		ret = false;
 		goto out;
 	}
 
 	if (upstream != dma_up) {
-		dev_dbg(dev, "does not reside on the same upstream bridge\n");
+		dev_dbg(&client->dev,
+			"does not reside on the same upstream bridge\n");
 		ret = false;
 		goto out;
 	}
@@ -271,7 +269,8 @@ out:
 	return ret;
 }
 
-static bool upstream_bridges_match(struct pci_dev *pdev, struct device *dev)
+static bool upstream_bridges_match(struct pci_dev *pdev,
+				   struct pci_dev *client)
 {
 	struct pci_dev *upstream;
 	bool ret;
@@ -282,7 +281,7 @@ static bool upstream_bridges_match(struct pci_dev *pdev, struct device *dev)
 		return false;
 	}
 
-	ret = __upstream_bridges_match(upstream, dev);
+	ret = __upstream_bridges_match(upstream, client);
 
 	pci_dev_put(upstream);
 
@@ -291,7 +290,7 @@ static bool upstream_bridges_match(struct pci_dev *pdev, struct device *dev)
 
 struct pci_p2pmem_client {
 	struct list_head list;
-	struct device *dev;
+	struct pci_dev *client;
 	struct pci_dev *p2pmem;
 };
 
@@ -316,26 +315,52 @@ int pci_p2pmem_add_client(struct list_head *head, struct device *dev)
 {
 	struct pci_p2pmem_client *item, *new_item;
 	struct pci_dev *p2pmem = NULL;
+	struct pci_dev *client;
+	int ret;
+
+	client = find_parent_pci_dev(dev);
+	if (!client) {
+		dev_dbg(&p2pmem->dev, "%s is not a pci device\n",
+			dev_name(dev));
+		return -ENODEV;
+	}
 
 	item = list_first_entry_or_null(head, struct pci_p2pmem_client, list);
 	if (item && item->p2pmem) {
 		p2pmem = item->p2pmem;
-		if (!upstream_bridges_match(p2pmem, dev))
-			return -EXDEV;
+
+		if (!upstream_bridges_match(p2pmem, client)) {
+			ret = -EXDEV;
+			goto put_client;
+		}
 	}
 
 	new_item = kzalloc(sizeof(*new_item), GFP_KERNEL);
-	if (!new_item)
-		return -ENOMEM;
+	if (!new_item) {
+		ret = -ENOMEM;
+		goto put_client;
+	}
 
-	new_item->dev = get_device(dev);
+	new_item->client = client;
 	new_item->p2pmem = pci_dev_get(p2pmem);
 
 	list_add_tail(&new_item->list, head);
 
 	return 0;
+
+put_client:
+	pci_dev_put(client);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_add_client);
+
+static void pci_p2pmem_client_free(struct pci_p2pmem_client *item)
+{
+	list_del(&item->list);
+	pci_dev_put(item->client);
+	pci_dev_put(item->p2pmem);
+	kfree(item);
+}
 
 /**
  * pci_p2pmem_remove_client - remove and free a new p2pmem client
@@ -350,16 +375,20 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_add_client);
 void pci_p2pmem_remove_client(struct list_head *head, struct device *dev)
 {
 	struct pci_p2pmem_client *pos, *tmp;
+	struct pci_dev *pdev;
+
+	pdev = find_parent_pci_dev(dev);
+	if (!pdev)
+		return;
 
 	list_for_each_entry_safe(pos, tmp, head, list) {
-		if (pos->dev != dev)
+		if (pos->client != pdev)
 			continue;
 
-		list_del(&pos->list);
-		put_device(pos->dev);
-		pci_dev_put(pos->p2pmem);
-		kfree(pos);
+		pci_p2pmem_client_free(pos);
 	}
+
+	pci_dev_put(pdev);
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_remove_client);
 
@@ -376,12 +405,8 @@ void pci_p2pmem_client_list_free(struct list_head *head)
 {
 	struct pci_p2pmem_client *pos, *tmp;
 
-	list_for_each_entry_safe(pos, tmp, head, list) {
-		list_del(&pos->list);
-		put_device(pos->dev);
-		pci_dev_put(pos->p2pmem);
-		kfree(pos);
-	}
+	list_for_each_entry_safe(pos, tmp, head, list)
+		pci_p2pmem_client_free(pos);
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_client_list_free);
 
@@ -399,7 +424,7 @@ static bool upstream_bridges_match_list(struct pci_dev *pdev,
 	}
 
 	list_for_each_entry(pos, head, list) {
-		ret = __upstream_bridges_match(upstream, pos->dev);
+		ret = __upstream_bridges_match(upstream, pos->client);
 		if (!ret)
 			break;
 	}
