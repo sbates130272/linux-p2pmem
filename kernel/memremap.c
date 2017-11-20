@@ -260,7 +260,7 @@ static unsigned long pfn_first(struct dev_pagemap *pgmap)
 	unsigned long pfn;
 
 	pfn = res->start >> PAGE_SHIFT;
-	if (altmap->used)
+	if (pgmap->altmap_valid)
 		pfn += vmem_altmap_offset(altmap);
 	return pfn;
 }
@@ -322,7 +322,7 @@ struct dev_pagemap *find_dev_pagemap(resource_size_t phys)
  * 1/ At a minimum @res, @ref and @type members of @pgmap must be initialized
  *    by the caller before passing it to this function
  *
- * 2/ @altmap may optionally be initialized, in which case altmap.used must be
+ * 2/ @altmap may optionally be initialized, in which case altmap_valid must be
  *    set to true
  *
  * 3/ @ref must be 'live' on entry and 'dead' before devm_memunmap_pages() time
@@ -476,7 +476,7 @@ struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
 	if (!pgmap)
 		return NULL;
 
-	return pgmap->altmap.used ? &pgmap->altmap : NULL;
+	return pgmap->altmap_valid ? &pgmap->altmap : NULL;
 }
 #endif /* CONFIG_ZONE_DEVICE */
 

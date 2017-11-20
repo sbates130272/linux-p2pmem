@@ -373,13 +373,12 @@ unsigned int pmem_sector_size(struct nd_namespace_common *ndns);
 void nvdimm_badblocks_populate(struct nd_region *nd_region,
 		struct badblocks *bb, const struct resource *res);
 #if IS_ENABLED(CONFIG_ND_CLAIM)
-int nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct resource *res,
-		     struct vmem_altmap *altmap);
+int nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap);
 int devm_nsio_enable(struct device *dev, struct nd_namespace_io *nsio);
 void devm_nsio_disable(struct device *dev, struct nd_namespace_io *nsio);
 #else
-static inline int nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct resource *res,
-				   struct vmem_altmap *altmap)
+static inline int nvdimm_setup_pfn(struct nd_pfn *nd_pfn,
+				   struct dev_pagemap *pgmap)
 {
 	return -ENXIO;
 }

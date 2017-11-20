@@ -19,7 +19,6 @@ struct device;
  * @alloc: track pages consumed, private to vmemmap_populate()
  */
 struct vmem_altmap {
-	bool used;
 	const unsigned long base_pfn;
 	const unsigned long reserve;
 	unsigned long free;
@@ -133,6 +132,7 @@ struct dev_pagemap {
 	dev_page_fault_t page_fault;
 	dev_page_free_t page_free;
 	struct vmem_altmap altmap;
+	bool altmap_valid;
 	struct resource res;
 	struct percpu_ref *ref;
 	struct device *dev;

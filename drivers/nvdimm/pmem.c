@@ -316,8 +316,7 @@ static int pmem_attach_disk(struct device *dev,
 	/* while nsio_rw_bytes is active, parse a pfn info block if present */
 	if (is_nd_pfn(dev)) {
 		nd_pfn = to_nd_pfn(dev);
-		rc = nvdimm_setup_pfn(nd_pfn, &pmem->pgmap.res,
-				      &pmem->pgmap.altmap);
+		rc = nvdimm_setup_pfn(nd_pfn, &pmem->pgmap);
 		if (rc)
 			return rc;
 	}
@@ -361,7 +360,7 @@ static int pmem_attach_disk(struct device *dev,
 		res->start += pmem->data_offset;
 	} else if (pmem_should_map_pages(dev)) {
 		memcpy(&pmem->pgmap.res, &nsio->res, sizeof(pmem->pgmap.res));
-		pmem->pgmap.altmap.used = false;
+		pmem->pgmap.altmap_valid = false;
 		addr = devm_memremap_pages(dev, &pmem->pgmap);
 		pmem->pfn_flags |= PFN_MAP;
 	} else
