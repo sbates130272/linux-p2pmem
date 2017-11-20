@@ -410,7 +410,7 @@ void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
 EXPORT_SYMBOL_GPL(pci_p2pmem_free_sgl);
 
 /**
- * pci_p2pmem_publish - publsih the p2p memory for use by other devices
+ * pci_p2pmem_publish - publish the p2p memory for use by other devices
  *	with pci_p2pmem_find
  * @pdev:	the device with p2p memory to publish
  * @publish:	set to true to publish the memory, false to unpublish it
