@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/genalloc.h>
 #include <linux/memremap.h>
+#include <linux/blk-mq.h>
 
 struct pci_p2pmem_pagemap {
 	struct dev_pagemap pgmap;
@@ -320,8 +321,7 @@ int pci_p2pmem_add_client(struct list_head *head, struct device *dev)
 
 	client = find_parent_pci_dev(dev);
 	if (!client) {
-		dev_dbg(&p2pmem->dev, "%s is not a pci device\n",
-			dev_name(dev));
+		pr_warn("%s is not a pci device\n", dev_name(dev));
 		return -ENODEV;
 	}
 
@@ -367,8 +367,8 @@ static void pci_p2pmem_client_free(struct pci_p2pmem_client *item)
  * @head: list head of p2pmem clients
  * @dev: device to remove from the list
  *
- * This removes @dev to a list of clients used by a p2pmem device.
- * The caller is expected to have lock which protects @head as necessary
+ * This removes @dev from a list of clients used by a p2pmem device.
+ * The caller is expected to have a lock which protects @head as necessary
  * so that none of the pci_p2pmem functions can be called concurrently
  * on that list.
  */
@@ -393,11 +393,60 @@ void pci_p2pmem_remove_client(struct list_head *head, struct device *dev)
 EXPORT_SYMBOL_GPL(pci_p2pmem_remove_client);
 
 /**
+ * pci_p2pmem_add_client_bdev - allocate a new element in a client device list
+ *	with a block device
+ * @head: list head of p2pmem clients
+ * @bdev: block device to add to the list
+ *
+ * This adds @bdev to a list of clients used by a p2pmem device.
+ * This list should be passed to p2pmem_find(). Once p2pmem_find() has
+ * been called successfully, the list will be bound to a specific p2pmem
+ * device and new clients can only be added to the list if they are
+ * supported by that p2pmem device.
+ *
+ * The caller is expected to have a lock which protects @head as necessary
+ * so that none of the pci_p2pmem functions can be called concurrently
+ * on that list.
+ *
+ * Returns 0 if the client was successfully added.
+ */
+int pci_p2pmem_add_client_bdev(struct list_head *head,
+			       struct block_device *bdev)
+{
+	if (!queue_supports_pci_p2p(bdev->bd_queue)) {
+		char buf[BDEVNAME_SIZE];
+
+		pr_warn("p2p is not supported by %s\n", bdevname(bdev, buf));
+		return -EINVAL;
+	}
+
+	return pci_p2pmem_add_client(head, disk_to_dev(bdev->bd_disk));
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_add_client_bdev);
+
+/**
+ * pci_p2pmem_remove_client_bdev - remove and free a new p2pmem client
+ * @head: list head of p2pmem clients
+ * @bdev: block device to remove from the list
+ *
+ * This removes @bdev from a list of clients used by a p2pmem device.
+ * The caller is expected to have a lock which protects @head as necessary
+ * so that none of the pci_p2pmem functions can be called concurrently
+ * on that list.
+ */
+void pci_p2pmem_remove_client_bdev(struct list_head *head,
+				   struct block_device *bdev)
+{
+	pci_p2pmem_remove_client(head, disk_to_dev(bdev->bd_disk));
+}
+EXPORT_SYMBOL(pci_p2pmem_remove_client_bdev);
+
+/**
  * pci_p2pmem_client_list_free - free an entire list of p2pmem clients
  * @head: list head of p2pmem clients
  *
  * This removes all devices in a list of clients used by a p2pmem device.
- * The caller is expected to have lock which protects @head as necessary
+ * The caller is expected to have a lock which protects @head as necessary
  * so that none of the pci_p2pmem functions can be called concurrently
  * on that list.
  */

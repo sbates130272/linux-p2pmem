@@ -2007,6 +2007,10 @@ int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset);
 int pci_p2pmem_add_client(struct list_head *head, struct device *dev);
 void pci_p2pmem_remove_client(struct list_head *head, struct device *dev);
+int pci_p2pmem_add_client_bdev(struct list_head *head,
+			       struct block_device *bdev);
+void pci_p2pmem_remove_client_bdev(struct list_head *head,
+				   struct block_device *bdev);
 void pci_p2pmem_client_list_free(struct list_head *head);
 struct pci_dev *pci_p2pmem_find(struct list_head *clients);
 void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size);
@@ -2031,6 +2035,15 @@ static inline int pci_p2pmem_add_client(struct list_head *head,
 }
 static inline void pci_p2pmem_remove_client(struct list_head *head,
 					    struct device *dev)
+{
+}
+static inline int pci_p2pmem_add_client_bdev(struct list_head *head,
+					     struct block_device *bdev)
+{
+	return 0;
+}
+static inline void pci_p2pmem_remove_client_bdev(struct list_head *head,
+						 struct block_device *bdev)
 {
 }
 static inline void pci_p2pmem_client_list_free(struct list_head *head)
