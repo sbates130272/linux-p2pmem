@@ -131,7 +131,7 @@ config PCI_P2P
 	  Enableѕ drivers to do PCI peer to peer transactions to and from
 	  bars that are exposed to other devices in the same domain.
 
-          Many PCIe root complexes do not support P2P transactions and
+	  Many PCIe root complexes do not support P2P transactions and
 	  it's hard to tell which support it with good performance, so
 	  at this time you will need a PCIe switch.
 
