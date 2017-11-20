@@ -2005,7 +2005,10 @@ static inline resource_size_t pci_iov_resource_size(struct pci_dev *dev, int res
 #ifdef CONFIG_PCI_P2P
 int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset);
-struct pci_dev *pci_p2pmem_find(struct device **devices);
+int pci_p2pmem_add_client(struct list_head *head, struct device *dev);
+void pci_p2pmem_remove_client(struct list_head *head, struct device *dev);
+void pci_p2pmem_client_list_free(struct list_head *head);
+struct pci_dev *pci_p2pmem_find(struct list_head *clients);
 void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size);
 void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size);
 pci_bus_addr_t pci_p2pmem_virt_to_bus(struct pci_dev *pdev, void *addr);
@@ -2014,13 +2017,26 @@ int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
 void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
 			 unsigned int nents);
 void pci_p2pmem_publish(struct pci_dev *pdev, bool publish);
+
 #else
 static inline int pci_p2pmem_add_resource(struct pci_dev *pdev, int bar,
 	size_t size, u64 offset)
 {
 	return 0;
 }
-static inline struct pci_dev *pci_p2pmem_find(struct device **devices)
+static inline int pci_p2pmem_add_client(struct list_head *head,
+					struct device *dev)
+{
+	return 0;
+}
+static inline void pci_p2pmem_remove_client(struct list_head *head,
+					    struct device *dev)
+{
+}
+static inline void pci_p2pmem_client_list_free(struct list_head *head)
+{
+}
+static inline struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 {
 	return NULL;
 }

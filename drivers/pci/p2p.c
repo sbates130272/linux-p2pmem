@@ -243,45 +243,168 @@ static struct pci_dev *get_upstream_switch_port(struct pci_dev *pdev)
 	return up2;
 }
 
-static int upstream_bridges_match(struct pci_dev *pdev, struct device **devs)
+static bool __upstream_bridges_match(struct pci_dev *upstream,
+				     struct device *dev)
 {
-	struct pci_dev *p2p_up;
 	struct pci_dev *dma_up;
 	struct pci_dev *parent;
 	bool ret = true;
 
-	p2p_up = get_upstream_switch_port(pdev);
-	if (!p2p_up) {
+	parent = find_parent_pci_dev(dev);
+	dma_up = get_upstream_switch_port(parent);
+	pci_dev_put(parent);
+
+	if (!dma_up) {
+		dev_dbg(dev, "not a pci device behind a switch\n");
+		ret = false;
+		goto out;
+	}
+
+	if (upstream != dma_up) {
+		dev_dbg(dev, "does not reside on the same upstream bridge\n");
+		ret = false;
+		goto out;
+	}
+
+out:
+	pci_dev_put(dma_up);
+	return ret;
+}
+
+static bool upstream_bridges_match(struct pci_dev *pdev, struct device *dev)
+{
+	struct pci_dev *upstream;
+	bool ret;
+
+	upstream = get_upstream_switch_port(pdev);
+	if (!upstream) {
 		dev_warn(&pdev->dev, "not behind a pci switch\n");
 		return false;
 	}
 
-	for ( ; *devs; devs++) {
-		parent = find_parent_pci_dev(*devs);
-		dma_up = get_upstream_switch_port(parent);
-		pci_dev_put(parent);
+	ret = __upstream_bridges_match(upstream, dev);
 
-		if (!dma_up) {
-			dev_dbg(*devs, "not a pci device behind a switch\n");
-			pci_dev_put(dma_up);
-			ret = false;
-			goto out;
-		}
+	pci_dev_put(upstream);
 
-		if (p2p_up != dma_up) {
-			dev_dbg(&pdev->dev,
-				"%s does not reside on the same upstream bridge\n",
-				dev_name(*devs));
-			pci_dev_put(dma_up);
-			ret = false;
-			goto out;
-		}
+	return ret;
+}
 
-		pci_dev_put(dma_up);
+struct pci_p2pmem_client {
+	struct list_head list;
+	struct device *dev;
+	struct pci_dev *p2pmem;
+};
+
+/**
+ * pci_p2pmem_add_client - allocate a new element in a client device list
+ * @head: list head of p2pmem clients
+ * @dev: device to add to the list
+ *
+ * This adds @dev to a list of clients used by a p2pmem device.
+ * This list should be passed to p2pmem_find(). Once p2pmem_find() has
+ * been called successfully, the list will be bound to a specific p2pmem
+ * device and new clients can only be added to the list if they are
+ * supported by that p2pmem device.
+ *
+ * The caller is expected to have a lock which protects @head as necessary
+ * so that none of the pci_p2pmem functions can be called concurrently
+ * on that list.
+ *
+ * Returns 0 if the client was successfully added.
+ */
+int pci_p2pmem_add_client(struct list_head *head, struct device *dev)
+{
+	struct pci_p2pmem_client *item, *new_item;
+	struct pci_dev *p2pmem = NULL;
+
+	item = list_first_entry_or_null(head, struct pci_p2pmem_client, list);
+	if (item && item->p2pmem) {
+		p2pmem = item->p2pmem;
+		if (!upstream_bridges_match(p2pmem, dev))
+			return -EXDEV;
 	}
 
-out:
-	pci_dev_put(p2p_up);
+	new_item = kzalloc(sizeof(*new_item), GFP_KERNEL);
+	if (!new_item)
+		return -ENOMEM;
+
+	new_item->dev = get_device(dev);
+	new_item->p2pmem = pci_dev_get(p2pmem);
+
+	list_add_tail(&new_item->list, head);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_add_client);
+
+/**
+ * pci_p2pmem_remove_client - remove and free a new p2pmem client
+ * @head: list head of p2pmem clients
+ * @dev: device to remove from the list
+ *
+ * This removes @dev to a list of clients used by a p2pmem device.
+ * The caller is expected to have lock which protects @head as necessary
+ * so that none of the pci_p2pmem functions can be called concurrently
+ * on that list.
+ */
+void pci_p2pmem_remove_client(struct list_head *head, struct device *dev)
+{
+	struct pci_p2pmem_client *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, head, list) {
+		if (pos->dev != dev)
+			continue;
+
+		list_del(&pos->list);
+		put_device(pos->dev);
+		pci_dev_put(pos->p2pmem);
+		kfree(pos);
+	}
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_remove_client);
+
+/**
+ * pci_p2pmem_client_list_free - free an entire list of p2pmem clients
+ * @head: list head of p2pmem clients
+ *
+ * This removes all devices in a list of clients used by a p2pmem device.
+ * The caller is expected to have lock which protects @head as necessary
+ * so that none of the pci_p2pmem functions can be called concurrently
+ * on that list.
+ */
+void pci_p2pmem_client_list_free(struct list_head *head)
+{
+	struct pci_p2pmem_client *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, head, list) {
+		list_del(&pos->list);
+		put_device(pos->dev);
+		pci_dev_put(pos->p2pmem);
+		kfree(pos);
+	}
+}
+EXPORT_SYMBOL_GPL(pci_p2pmem_client_list_free);
+
+static bool upstream_bridges_match_list(struct pci_dev *pdev,
+					struct list_head *head)
+{
+	struct pci_p2pmem_client *pos;
+	struct pci_dev *upstream;
+	bool ret;
+
+	upstream = get_upstream_switch_port(pdev);
+	if (!upstream) {
+		dev_warn(&pdev->dev, "not behind a pci switch\n");
+		return false;
+	}
+
+	list_for_each_entry(pos, head, list) {
+		ret = __upstream_bridges_match(upstream, pos->dev);
+		if (!ret)
+			break;
+	}
+
+	pci_dev_put(upstream);
 	return ret;
 }
 
@@ -296,16 +419,22 @@ out:
  * Returns a pointer to the PCI device with a reference taken (use pci_dev_put
  * to return the reference) or NULL if no compatible device is found.
  */
-struct pci_dev *pci_p2pmem_find(struct device **devices)
+struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 {
 	struct pci_dev *pdev = NULL;
+	struct pci_p2pmem_client *pos;
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
 		if (!pdev->p2p_published)
 			continue;
 
-		if (upstream_bridges_match(pdev, devices))
-			return pdev;
+		if (!upstream_bridges_match_list(pdev, clients))
+			continue;
+
+		list_for_each_entry(pos, clients, list)
+			pos->p2pmem = pdev;
+
+		return pdev;
 	}
 
 	return NULL;
