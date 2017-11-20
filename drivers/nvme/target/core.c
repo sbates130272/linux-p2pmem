@@ -16,7 +16,6 @@
 #include <linux/random.h>
 #include <linux/rculist.h>
 #include <linux/pci.h>
-#include <linux/blk-mq.h>
 
 #include "nvmet.h"
 
@@ -266,7 +265,6 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
 	struct nvmet_ctrl *ctrl;
-	struct device *dev;
 	int ret = 0;
 
 	mutex_lock(&subsys->lock);
@@ -291,10 +289,10 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	if (ret)
 		goto out_blkdev_put;
 
-	dev = disk_to_dev(ns->bdev->bd_disk);
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
 		if (ctrl->p2p_dev) {
-			ret = pci_p2pmem_add_client(&ctrl->p2p_clients, dev);
+			ret = pci_p2pmem_add_client_bdev(&ctrl->p2p_clients,
+							 ns->bdev);
 			if (ret)
 				goto out_remove_clients;
 		}
@@ -332,7 +330,8 @@ out_unlock:
 out_remove_clients:
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
 		if (ctrl->p2p_dev)
-			pci_p2pmem_remove_client(&ctrl->p2p_clients, dev);
+			pci_p2pmem_remove_client_bdev(&ctrl->p2p_clients,
+						      ns->bdev);
 out_blkdev_put:
 	blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
 	ns->bdev = NULL;
@@ -343,7 +342,6 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 {
 	struct nvmet_subsys *subsys = ns->subsys;
 	struct nvmet_ctrl *ctrl;
-	struct device *dev;
 
 	mutex_lock(&subsys->lock);
 	if (!ns->enabled)
@@ -367,10 +365,10 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 	percpu_ref_exit(&ns->ref);
 
 	mutex_lock(&subsys->lock);
-	dev = disk_to_dev(ns->bdev->bd_disk);
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
 		if (ctrl->p2p_dev)
-			pci_p2pmem_remove_client(&ctrl->p2p_clients, dev);
+			pci_p2pmem_remove_client_bdev(&ctrl->p2p_clients,
+						      ns->bdev);
 		nvmet_add_async_event(ctrl, NVME_AER_TYPE_NOTICE, 0, 0);
 	}
 
@@ -774,14 +772,7 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_port *port)
 	mutex_lock(&ctrl->subsys->lock);
 
 	list_for_each_entry_rcu(ns, &ctrl->subsys->namespaces, dev_link) {
-		if (!queue_supports_pci_p2p(ns->bdev->bd_queue)) {
-			pr_info("p2pmem not supported by %s\n",
-				ns->device_path);
-			goto free_devices;
-		}
-
-		ret = pci_p2pmem_add_client(&ctrl->p2p_clients,
-					    disk_to_dev(ns->bdev->bd_disk));
+		ret = pci_p2pmem_add_client_bdev(&ctrl->p2p_clients, ns->bdev);
 		if (!ret) {
 			pr_err("failed adding p2pmem client %s: %d\n",
 			       ns->device_path, ret);
