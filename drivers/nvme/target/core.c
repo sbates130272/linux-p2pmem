@@ -759,21 +759,28 @@ bool nvmet_host_allowed(struct nvmet_req *req, struct nvmet_subsys *subsys,
  * Ι/O commands. This requires the PCI p2p device to be compatible with the
  * backing device for every namespace on this controller.
  */
-static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_port *port)
+static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 {
 	struct nvmet_ns *ns;
 	int ret;
 
-	if (!port->allow_p2pmem)
+	if (!req->port->allow_p2pmem || !req->p2p_client)
 		return;
 
 	INIT_LIST_HEAD(&ctrl->p2p_clients);
 
 	mutex_lock(&ctrl->subsys->lock);
 
+	ret = pci_p2pmem_add_client(&ctrl->p2p_clients, req->p2p_client);
+	if (ret) {
+		pr_err("failed adding p2pmem client %s: %d\n",
+		       dev_name(req->p2p_client), ret);
+		goto free_devices;
+	}
+
 	list_for_each_entry_rcu(ns, &ctrl->subsys->namespaces, dev_link) {
 		ret = pci_p2pmem_add_client_bdev(&ctrl->p2p_clients, ns->bdev);
-		if (!ret) {
+		if (ret) {
 			pr_err("failed adding p2pmem client %s: %d\n",
 			       ns->device_path, ret);
 			goto free_devices;
@@ -902,7 +909,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 		ctrl->kato = DIV_ROUND_UP(kato, 1000);
 	}
 	nvmet_start_keep_alive_timer(ctrl);
-	nvmet_setup_p2pmem(ctrl, req->port);
+	nvmet_setup_p2pmem(ctrl, req);
 
 	mutex_lock(&subsys->lock);
 	list_add_tail(&ctrl->subsys_entry, &subsys->ctrls);
