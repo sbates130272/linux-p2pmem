@@ -464,6 +464,7 @@ void pci_p2pmem_remove_client(struct list_head *head, struct device *dev)
 {
 	struct pci_p2pmem_client *pos, *tmp;
 	struct pci_dev *pdev;
+	struct pci_dev *p2pmem = NULL;
 
 	pdev = find_parent_pci_dev(dev);
 	if (!pdev)
@@ -473,9 +474,14 @@ void pci_p2pmem_remove_client(struct list_head *head, struct device *dev)
 		if (pos->client != pdev)
 			continue;
 
+		p2pmem = pci_dev_get(pos->p2pmem);
 		pci_p2pmem_client_free(pos);
 	}
 
+	if (p2pmem && list_empty(head))
+		pci_p2pmem_reset_acs(p2pmem);
+
+	pci_dev_put(p2pmem);
 	pci_dev_put(pdev);
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_remove_client);
@@ -541,6 +547,10 @@ EXPORT_SYMBOL(pci_p2pmem_remove_client_bdev);
 void pci_p2pmem_client_list_free(struct list_head *head)
 {
 	struct pci_p2pmem_client *pos, *tmp;
+
+	pos = list_first_entry_or_null(head, struct pci_p2pmem_client, list);
+	if (pos && pos->p2pmem)
+		pci_p2pmem_reset_acs(pos->p2pmem);
 
 	list_for_each_entry_safe(pos, tmp, head, list)
 		pci_p2pmem_client_free(pos);
