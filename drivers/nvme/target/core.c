@@ -796,6 +796,7 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 		goto free_devices;
 	}
 
+	mutex_unlock(&ctrl->subsys->lock);
 	return;
 
 free_devices:
