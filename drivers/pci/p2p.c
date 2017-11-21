@@ -249,9 +249,10 @@ static int pci_p2pmem_disable_acs(struct pci_dev *pdev)
 
 	pci_read_config_word(downstream, pos + PCI_ACS_CTRL, &ctrl);
 
-	dev_info(&pdev->dev, "disabling p2p acs flags: %x", ctrl);
-
 	downstream->p2p_old_acs_flags = ctrl & PCI_P2P_ACS_FLAGS;
+
+	if (downstream->p2p_old_acs_flags)
+		dev_info(&pdev->dev, "disabling p2p acs flags: %x", ctrl);
 
 	ctrl &= ~PCI_P2P_ACS_FLAGS;
 
@@ -291,7 +292,8 @@ static int pci_p2pmem_reset_acs(struct pci_dev *pdev)
 	ctrl &= ~PCI_P2P_ACS_FLAGS;
 	ctrl |= downstream->p2p_old_acs_flags;
 
-	dev_info(&pdev->dev, "reseting p2p acs flags: %x", ctrl);
+	if (downstream->p2p_old_acs_flags)
+		dev_info(&pdev->dev, "resetting p2p acs flags: %x", ctrl);
 
 	pci_write_config_word(downstream, pos + PCI_ACS_CTRL, ctrl);
 
