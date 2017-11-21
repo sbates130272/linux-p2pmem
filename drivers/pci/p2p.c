@@ -402,7 +402,8 @@ int pci_p2pmem_add_client(struct list_head *head, struct device *dev)
 
 	client = find_parent_pci_dev(dev);
 	if (!client) {
-		pr_warn("%s is not a pci device\n", dev_name(dev));
+		dev_warn(dev,
+			 "cannot be used for p2p as it is not a pci device\n");
 		return -ENODEV;
 	}
 
@@ -510,7 +511,8 @@ int pci_p2pmem_add_client_bdev(struct list_head *head,
 	if (!queue_supports_pci_p2p(bdev->bd_queue)) {
 		char buf[BDEVNAME_SIZE];
 
-		pr_warn("p2p is not supported by %s\n", bdevname(bdev, buf));
+		dev_warn(disk_to_dev(bdev->bd_disk),
+			 "p2p is not supported by this queue\n");
 		return -EINVAL;
 	}
 
