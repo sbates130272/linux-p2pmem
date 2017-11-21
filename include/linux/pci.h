@@ -443,6 +443,8 @@ struct pci_dev {
 	struct completion p2p_devmap_ref_done;
 	struct gen_pool *p2p_pool;
 	bool p2p_published;
+	unsigned int p2p_acs_requests;
+	u16 p2p_old_acs_flags;
 #endif
 	phys_addr_t rom; /* Physical address of ROM if it's not from the BAR */
 	size_t romlen; /* Length of ROM if it's not from the BAR */
