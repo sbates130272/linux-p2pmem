@@ -460,6 +460,34 @@ our $logFunctions = qr{(?x:
 	seq_vprintf|seq_printf|seq_puts
 )};
 
+
+our $logNewLineFirstArg = qr{(?x:
+	printk(?:_ratelimited|_once|_deferred_once|_deferred|)|
+	pr_(?:printk|emerg|alert|crit|err|warning|warn|notice|info|debug|dbg|vdbg|devel|cont|WARN)(?:_ratelimited|_once|)
+)};
+
+our $logNewLineSecondArg = qr{(?x:
+	dev_(?:printk|emerg|alert|crit|err|warning|warn|notice|info|debug|dbg|vdbg|devel|WARN)(?:_ratelimited|_once|)
+)};
+
+our $logNewLineFunctions = qr{(?x:
+    $logNewLineFirstArg |
+    $logNewLineSecondArg
+)};
+
+sub get_log_fmt {
+	my ($line, $rawline) = @_;
+
+	if ($line =~ m/\b$logNewLineFirstArg\(([^,)]+)[,)]/g) {
+		return substr($rawline, $-[1], $+[1] - $-[1]);
+	} elsif($line =~ m/\b$logNewLineSecondArg\([^,]+,([^,)]+)[,)]/g) {
+		return substr($rawline, $-[1], $+[1] - $-[1]);
+	} else {
+		return "";
+	}
+}
+
+
 our $signature_tags = qr{(?xi:
 	Signed-off-by:|
 	Acked-by:|
@@ -2224,6 +2252,13 @@ sub process {
 
 	my $camelcase_file_seeded = 0;
 
+	my $in_log_function = 0;
+	my $log_func_changed = 0;
+	my $log_func_line = "";
+	my $log_func_rawline = "";
+	my $log_last_linenr = -1;
+	my %log_func_continued = ();
+
 	sanitise_line_reset();
 	my $line;
 	foreach my $rawline (@rawlines) {
@@ -2287,6 +2322,15 @@ sub process {
 			# simplify matching -- only bother with positive lines.
 			$line = sanitise_line($rawline);
 		}
+
+		if ($log_last_linenr > 0 && $line =~ /(KERN_CONT|pr_cont)/) {
+			$log_func_continued{$log_last_linenr} = ();
+		}
+
+		if ($line =~ /\b$logNewLineFunctions\(/) {
+			$log_last_linenr = $linenr;
+		}
+
 		push(@lines, $line);
 
 		if ($realcnt > 1) {
@@ -2321,6 +2365,7 @@ sub process {
 		    $line =~ /^\@\@ -\d+(?:,\d+)? \+(\d+)(,(\d+))? \@\@(.*)/) {
 			my $context = $4;
 			$is_patch = 1;
+			$in_log_function = 0;
 			$first_line = $linenr + 1;
 			$realline=$1-1;
 			if (defined $2) {
@@ -3504,6 +3549,43 @@ sub process {
 			print "$linenr >  $curr_vars\n";
 		}
 		$prev_values = substr($curr_values, -1);
+
+# check for logging functions with lines that don't end in a '\n"'
+		if ($line =~ /\b$logNewLineFunctions\(/ &&
+		    !exists $log_func_continued{$linenr}) {
+			$in_log_function = 1;
+			$log_func_changed = 0;
+			$log_func_rawline = "";
+			$log_func_line = "";
+		}
+		if ($in_log_function) {
+			if ($line =~ /^\+/)  {
+				$log_func_changed = 1;
+			}
+
+			$log_func_rawline .= $rawline;
+			$log_func_line .= $line;
+			my $fmt_string = get_log_fmt($log_func_line,
+						     $log_func_rawline);
+
+			if ($fmt_string && !$log_func_changed) {
+				$in_log_function = 0;
+			} elsif ($fmt_string =~ /\\n"$/) {
+				$in_log_function = 0;
+			} elsif ($fmt_string =~ /%pV"$/) {
+				$in_log_function = 0;
+			} elsif ($fmt_string =~ /%s"$/) {
+				CHK("LOGGING_MISSING_NEWLINE",
+				    "Log message may not end in new line (\\n)\n" . $herecurr);
+				$in_log_function = 0;
+			} elsif ($fmt_string =~ /"$/) {
+				WARN("LOGGING_MISSING_NEWLINE",
+				     "Log messages should end in a new line (\\n)\n" . $herecurr);
+				$in_log_function = 0;
+			} elsif ($line =~ /;$/) {
+				$in_log_function = 0;
+			}
+		}
 
 #ignore lines not being added
 		next if ($line =~ /^[^\+]/);
