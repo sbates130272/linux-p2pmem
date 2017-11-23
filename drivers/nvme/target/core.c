@@ -170,7 +170,8 @@ static bool nvmet_peer_to_peer_capable(struct nvmet_port *port)
 	if (ops->peer_to_peer_capable &&
 	    ops->install_offload_queue &&
 	    ops->create_offload_ctrl &&
-	    ops->destroy_offload_ctrl)
+	    ops->destroy_offload_ctrl &&
+	    ops->peer_to_peer_mdts)
 		return ops->peer_to_peer_capable(port);
 
 	return false;
