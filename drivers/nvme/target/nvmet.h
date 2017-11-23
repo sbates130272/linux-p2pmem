@@ -225,6 +225,7 @@ struct nvmet_fabrics_ops {
 	int (*install_offload_queue)(struct nvmet_ctrl *ctrl, u16 qid);
 	int (*create_offload_ctrl)(struct nvmet_ctrl *ctrl);
 	void (*destroy_offload_ctrl)(struct nvmet_ctrl *ctrl);
+	u8 (*peer_to_peer_mdts)(struct nvmet_port *port);
 };
 
 #define NVMET_MAX_INLINE_BIOVEC	8
