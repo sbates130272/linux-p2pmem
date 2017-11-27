@@ -84,16 +84,12 @@ static int get_nvmf_pas_size(struct mlx5_nvmf_attr *nvmf)
 	return nvmf->staging_buffer_number_of_pages * sizeof(u64);
 }
 
-static void set_nvmf_srq_pas(struct mlx5_nvmf_attr *nvmf, void *start,
-			     int align)
+static void set_nvmf_srq_pas(struct mlx5_nvmf_attr *nvmf, __be64 *pas)
 {
 	int i;
-	dma_addr_t dma_addr_be;
 
-	for (i = 0; i < nvmf->staging_buffer_number_of_pages; i++) {
-		dma_addr_be = cpu_to_be64(nvmf->staging_buffer_pas[i]);
-		memcpy(start + i * align, &dma_addr_be, sizeof(u64));
-	}
+	for (i = 0; i < nvmf->staging_buffer_number_of_pages; i++)
+		pas[i] = cpu_to_be64(nvmf->staging_buffer_pas[i]);
 }
 
 static void set_nvmf_xrq_context(struct mlx5_nvmf_attr *nvmf, void *xrqc)
@@ -596,8 +592,7 @@ static int create_xrq_cmd(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 	} else if (in->type == IB_EXP_SRQT_NVMF) {
 		MLX5_SET(xrqc, xrqc, offload, MLX5_XRQC_OFFLOAD_NVMF);
 		set_nvmf_srq_pas(&in->nvmf,
-				 rq_pas_addr + roundup(rq_pas_size, MLX5_PAS_ALIGN),
-				 sizeof(u64));
+				 rq_pas_addr + roundup(rq_pas_size, MLX5_PAS_ALIGN));
 		set_nvmf_xrq_context(&in->nvmf, xrqc);
 	}
 
