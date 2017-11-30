@@ -2108,9 +2108,13 @@ struct ib_nvmf_ctrl {
 	struct ib_srq	*srq;
 	u32		id;
 	atomic_t	usecnt; /* count all attached namespaces */
+	void		(*event_handler)(struct ib_event *, void *);
+	void		*be_context;
 };
 
 struct ib_nvmf_backend_ctrl_init_attr {
+	void		(*event_handler)(struct ib_event *, void *);
+	void		*be_context;
 	u32		cq_page_offset;
 	u32		sq_page_offset;
 	u8		cq_log_page_size;
