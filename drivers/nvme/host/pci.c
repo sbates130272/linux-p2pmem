@@ -93,6 +93,7 @@ struct nvme_dev {
 	int q_depth;
 	u32 db_stride;
 	void __iomem *bar;
+	phys_addr_t bar_phys_addr;
 	unsigned long bar_mapped_size;
 	struct work_struct remove_work;
 	struct mutex shutdown_lock;
@@ -1600,7 +1601,7 @@ static int nvme_remap_bar(struct nvme_dev *dev, unsigned long size)
 		return -ENOMEM;
 	if (dev->bar)
 		iounmap(dev->bar);
-	dev->bar = ioremap(pci_resource_start(pdev, 0), size);
+	dev->bar = ioremap(dev->bar_phys_addr, size);
 	if (!dev->bar) {
 		dev->bar_mapped_size = 0;
 		return -ENOMEM;
@@ -2489,6 +2490,7 @@ static int nvme_dev_map(struct nvme_dev *dev)
 	if (pci_request_mem_regions(pdev, "nvme"))
 		return -ENODEV;
 
+	dev->bar_phys_addr = pci_resource_start(pdev, 0);
 	if (nvme_remap_bar(dev, NVME_REG_DBS + 4096))
 		goto release;
 
