@@ -2311,7 +2311,9 @@ struct ib_nvmf_ctrl *ib_create_nvmf_backend_ctrl(struct ib_srq *srq,
 	ctrl = srq->device->create_nvmf_backend_ctrl(srq, init_attr);
 	if (!IS_ERR(ctrl)) {
 		atomic_set(&ctrl->usecnt, 0);
-		ctrl->srq   = srq;
+		ctrl->srq = srq;
+		ctrl->event_handler = init_attr->event_handler;
+		ctrl->be_context = init_attr->be_context;
 		atomic_inc(&srq->usecnt);
 	}
 
