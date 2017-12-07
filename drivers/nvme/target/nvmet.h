@@ -143,6 +143,8 @@ struct nvmet_ctrl {
 	char			hostnqn[NVMF_NQN_FIELD_LEN];
 
 	unsigned int		sqe_inline_size;
+
+	void			*offload_ctrl;
 };
 
 struct nvmet_subsys {
@@ -228,6 +230,8 @@ struct nvmet_fabrics_ops {
 	int (*install_offload_queue)(struct nvmet_ctrl *ctrl, u16 qid);
 	int (*create_offload_ctrl)(struct nvmet_ctrl *ctrl);
 	void (*destroy_offload_ctrl)(struct nvmet_ctrl *ctrl);
+	int (*enable_offload_ns)(struct nvmet_ctrl *ctrl);
+	void (*disable_offload_ns)(struct nvmet_ctrl *ctrl);
 	unsigned int (*peer_to_peer_sqe_inline_size)(struct nvmet_ctrl *ctrl);
 	u8 (*peer_to_peer_mdts)(struct nvmet_port *port);
 };
