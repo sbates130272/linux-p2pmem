@@ -41,7 +41,6 @@ struct nvmet_rdma_backend_ctrl {
 };
 
 struct nvmet_rdma_offload_ctrl {
-	struct nvmet_ctrl	*ctrl;
 	struct nvmet_rdma_xrq	*xrq;
 	struct list_head	entry;
 };
@@ -86,6 +85,8 @@ static int nvmet_rdma_install_offload_queue(struct nvmet_ctrl *ctrl,
 					    u16 qid);
 static int nvmet_rdma_create_offload_ctrl(struct nvmet_ctrl *ctrl);
 static void nvmet_rdma_destroy_offload_ctrl(struct nvmet_ctrl *ctrl);
+static int nvmet_rdma_enable_offload_ns(struct nvmet_ctrl *ctrl);
+static void nvmet_rdma_disable_offload_ns(struct nvmet_ctrl *ctrl);
 static bool nvmet_rdma_peer_to_peer_capable(struct nvmet_port *port);
 static u8 nvmet_rdma_peer_to_peer_mdts(struct nvmet_port *port);
 static unsigned int nvmet_rdma_peer_to_peer_sqe_inline_size(struct nvmet_ctrl *ctrl);
