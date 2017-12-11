@@ -297,30 +297,6 @@ struct nvme_peer_resource *nvme_peer_get_resource(struct pci_dev *pdev,
 }
 EXPORT_SYMBOL_GPL(nvme_peer_get_resource);
 
-bool nvme_pdev_is_bdev(struct pci_dev *pdev, struct block_device *bdev)
-{
-	struct nvme_dev *dev = pci_get_drvdata(pdev);
-	struct nvme_ctrl *ctrl = &dev->ctrl;
-	struct nvme_ns *ns = NULL, *ctrl_ns;
-
-	if (bdev && bdev->bd_disk)
-		ns = bdev->bd_disk->private_data;
-
-	if (ns) {
-		mutex_lock(&ctrl->namespaces_mutex);
-		list_for_each_entry(ctrl_ns, &ctrl->namespaces, list) {
-			if (ns == ctrl_ns) {
-				mutex_unlock(&ctrl->namespaces_mutex);
-				return true;
-			}
-		}
-		mutex_unlock(&ctrl->namespaces_mutex);
-	}
-
-	return false;
-}
-EXPORT_SYMBOL_GPL(nvme_pdev_is_bdev);
-
 /*
  * Check we didin't inadvertently grow the command struct
  */
@@ -2593,6 +2569,23 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.free_ctrl		= nvme_pci_free_ctrl,
 	.submit_async_event	= nvme_pci_submit_async_event,
 };
+
+struct pci_dev *nvme_find_pdev_from_bdev(struct block_device *bdev)
+{
+	struct nvme_ns *ns = NULL;
+	struct pci_dev *pdev = NULL;
+
+	if (bdev->bd_disk && bdev->bd_disk->fops &&
+	    bdev->bd_disk->fops->owner &&
+	    !strcmp(bdev->bd_disk->fops->owner->name, "nvme_core"))
+		ns = bdev->bd_disk->private_data;
+
+	if (ns && ns->ctrl && ns->ctrl->ops == &nvme_pci_ctrl_ops)
+		pdev = to_pci_dev(to_nvme_dev(ns->ctrl)->dev);
+
+	return pdev;
+}
+EXPORT_SYMBOL_GPL(nvme_find_pdev_from_bdev);
 
 static int nvme_dev_map(struct nvme_dev *dev)
 {

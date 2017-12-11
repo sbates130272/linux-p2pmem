@@ -60,8 +60,6 @@ struct nvmet_ns {
 	struct config_group	group;
 
 	struct completion	disable_done;
-
-	bool			offloadble;
 };
 
 static inline struct nvmet_ns *to_nvmet_ns(struct config_item *item)
@@ -173,6 +171,7 @@ struct nvmet_subsys {
 	struct config_group	allowed_hosts_group;
 
 	bool			offloadble;
+	unsigned int		num_ports;
 };
 
 static inline struct nvmet_subsys *to_subsys(struct config_item *item)

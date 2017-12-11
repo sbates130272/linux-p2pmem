@@ -327,23 +327,20 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	ns->size = i_size_read(ns->bdev->bd_inode);
 	ns->blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
 
-	if (ns->pdev) {
-		 if (!ns->pdev->driver ||
-		     strcmp(ns->pdev->driver->name, "nvme") ||
-		     !nvme_pdev_is_bdev(ns->pdev, ns->bdev)) {
-				pr_err("P2P pdev doesn't match to the ns bdev\n");
-				ret = -EINVAL;
-				goto out_dev_put;
-			}
-			ns->offloadble = true;
-	} else {
-		ns->offloadble = false;
+	if (subsys->offloadble) {
+		ns->pdev = nvme_find_pdev_from_bdev(ns->bdev);
+		if (!ns->pdev) {
+			pr_err("Couldn't find nvme pci device from device %s\n",
+			       ns->device_path);
+			goto out_bdev_put;
+		}
+		pci_dev_get(ns->pdev);
 	}
 
 	ret = percpu_ref_init(&ns->ref, nvmet_destroy_namespace,
 				0, GFP_KERNEL);
 	if (ret)
-		goto out_dev_put;
+		goto out_pdev_put;
 
 	/*
 	 * The namespaces list needs to be sorted to simplify the implementation
@@ -351,7 +348,6 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 	 */
 	if (list_empty(&subsys->namespaces)) {
 		list_add_tail_rcu(&ns->dev_link, &subsys->namespaces);
-		subsys->offloadble = ns->offloadble;
 	} else {
 		struct nvmet_ns *old;
 
@@ -360,16 +356,8 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 			if (ns->nsid < old->nsid)
 				break;
 		}
-		if (subsys->offloadble == ns->offloadble) {
-			/*
-			 * Subsystem must have the same offloadble polarity as
-			 * all it's namespaces.
-			 */
-			list_add_tail_rcu(&ns->dev_link, &old->dev_link);
-		} else {
-			ret = -EINVAL;
-			goto out_kill_ref;
-		}
+
+		list_add_tail_rcu(&ns->dev_link, &old->dev_link);
 	}
 
 	if (ns->pdev) {
@@ -394,17 +382,16 @@ out_unlock:
 	return ret;
 out_remove_list:
 	list_del_rcu(&ns->dev_link);
-out_kill_ref:
 	percpu_ref_kill(&ns->ref);
 	synchronize_rcu();
 	wait_for_completion(&ns->disable_done);
 	percpu_ref_exit(&ns->ref);
-out_dev_put:
+out_pdev_put:
 	if (ns->pdev) {
 		pci_dev_put(ns->pdev);
 		ns->pdev = NULL;
-		ns->offloadble = false;
 	}
+out_bdev_put:
 	blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
 	ns->bdev = NULL;
 	goto out_unlock;
@@ -448,8 +435,10 @@ void nvmet_ns_disable(struct nvmet_ns *ns)
 
 	if (ns->bdev)
 		blkdev_put(ns->bdev, FMODE_WRITE|FMODE_READ);
-	if (ns->pdev)
+	if (ns->pdev) {
 		pci_dev_put(ns->pdev);
+		ns->pdev = NULL;
+	}
 out_unlock:
 	mutex_unlock(&subsys->lock);
 }
