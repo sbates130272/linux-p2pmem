@@ -407,99 +407,11 @@ static ssize_t nvmet_ns_enable_store(struct config_item *item,
 
 CONFIGFS_ATTR(nvmet_ns_, enable);
 
-static ssize_t nvmet_ns_pci_device_path_show(struct config_item *item, char *page)
-{
-	struct pci_dev *pdev = to_nvmet_ns(item)->pdev;
-
-	return sprintf(page, "%s\n", pdev ? dev_name(&pdev->dev) : "N/A");
-}
-
-static ssize_t nvmet_ns_pci_device_path_store(struct config_item *item,
-		const char *page, size_t count)
-{
-	struct nvmet_ns *ns = to_nvmet_ns(item);
-	struct nvmet_subsys *subsys = ns->subsys;
-	struct pci_dev *pdev;
-	char *token, *buf, *orig_buf;
-	int domain, slot, function;
-	unsigned int bus;
-	int ret = 0;
-
-	mutex_lock(&subsys->lock);
-	if (ns->enabled) {
-		ret = -EBUSY;
-		goto out_unlock;
-	}
-
-	if (ns->pdev) {
-		pci_dev_put(ns->pdev);
-		ns->pdev = NULL;
-	}
-
-	if (!strcmp(page, "clear"))
-		goto out;
-
-	buf = kstrndup(page, count, GFP_KERNEL);
-	if (!buf) {
-		ret = -ENOMEM;
-		goto out_unlock;
-	}
-
-	orig_buf = buf;
-	if ((token = strsep(&buf, ":")) != NULL) {
-		ret = kstrtoint(token, 16, &domain);
-		if (ret) {
-			pr_err("please supply domain ID for PCI p2p establishment\n");
-			goto free_buf;
-		}
-	}
-	if ((token = strsep(&buf, ":")) != NULL) {
-		ret = kstrtouint(token, 16, &bus);
-		if (ret) {
-			pr_err("please supply bus ID for PCI p2p establishment\n");
-			goto free_buf;
-		}
-	}
-	if ((token = strsep(&buf, ".")) != NULL) {
-		ret = kstrtoint(token, 16, &slot);
-		if (ret) {
-			pr_err("please supply slot ID for PCI p2p establishment\n");
-			goto free_buf;
-		}
-	}
-	ret = kstrtoint(buf, 16, &function);
-	if (ret) {
-		pr_err("please supply function ID for PCI p2p establishment\n");
-		goto free_buf;
-	}
-	kfree(orig_buf);
-
-	pdev = pci_get_domain_bus_and_slot(domain, bus,
-					   PCI_DEVFN(slot, function));
-	if (pdev)
-		ns->pdev = pdev;
-	else
-		ret = -EAGAIN;
-
-out:
-	mutex_unlock(&subsys->lock);
-	return ret ? ret : count;
-
-free_buf:
-	kfree(orig_buf);
-out_unlock:
-	mutex_unlock(&subsys->lock);
-	return ret;
-}
-
-CONFIGFS_ATTR(nvmet_ns_, pci_device_path);
-
 static struct configfs_attribute *nvmet_ns_attrs[] = {
 	&nvmet_ns_attr_device_path,
 	&nvmet_ns_attr_device_nguid,
 	&nvmet_ns_attr_device_uuid,
 	&nvmet_ns_attr_enable,
-	&nvmet_ns_attr_pci_device_path,
 	NULL,
 };
 
@@ -602,6 +514,7 @@ static int nvmet_port_subsys_allow_link(struct config_item *parent,
 	}
 
 	list_add_tail(&link->entry, &port->subsystems);
+	subsys->num_ports++;
 	nvmet_genctr++;
 	up_write(&nvmet_config_sem);
 	return 0;
@@ -632,6 +545,7 @@ found:
 	nvmet_genctr++;
 	if (list_empty(&port->subsystems))
 		nvmet_disable_port(port);
+	p->subsys->num_ports--;
 	up_write(&nvmet_config_sem);
 	kfree(p);
 }
@@ -808,10 +722,59 @@ static ssize_t nvmet_subsys_attr_serial_store(struct config_item *item,
 }
 CONFIGFS_ATTR(nvmet_subsys_, attr_serial);
 
+static ssize_t nvmet_subsys_attr_offload_show(struct config_item *item,
+		char *page)
+{
+	return snprintf(page, PAGE_SIZE, "%d\n",
+		to_subsys(item)->offloadble);
+}
+
+static ssize_t nvmet_subsys_attr_offload_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_subsys *subsys = to_subsys(item);
+	bool offload;
+	int ret = 0;
+
+	if (strtobool(page, &offload))
+		return -EINVAL;
+
+	down_write(&nvmet_config_sem);
+	mutex_lock(&subsys->lock);
+	if (subsys->offloadble == offload)
+		goto out_unlock;
+
+	if (!list_empty(&subsys->namespaces)) {
+		pr_err("Can't update offload polarity with enabled namespace!\n");
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	if (!list_empty(&subsys->ctrls)) {
+		pr_err("Can't update offload polarity with active controller!\n");
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	if (subsys->num_ports) {
+		pr_err("Can't update offload polarity with active port!\n");
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	subsys->offloadble = offload;
+out_unlock:
+	mutex_unlock(&subsys->lock);
+	up_write(&nvmet_config_sem);
+	return ret ? ret : count;
+}
+CONFIGFS_ATTR(nvmet_subsys_, attr_offload);
+
 static struct configfs_attribute *nvmet_subsys_attrs[] = {
 	&nvmet_subsys_attr_attr_allow_any_host,
 	&nvmet_subsys_attr_attr_version,
 	&nvmet_subsys_attr_attr_serial,
+	&nvmet_subsys_attr_attr_offload,
 	NULL,
 };
 
