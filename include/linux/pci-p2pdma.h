@@ -36,6 +36,10 @@ int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
 void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
 		unsigned int nents);
 void pci_p2pmem_publish(struct pci_dev *pdev, bool publish);
+int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
+		      enum dma_data_direction dir);
+void pci_p2pdma_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
+			 enum dma_data_direction dir);
 #else /* CONFIG_PCI_P2PDMA */
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)
@@ -81,6 +85,15 @@ static inline void pci_p2pmem_free_sgl(struct pci_dev *pdev,
 {
 }
 static inline void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
+{
+}
+static inline int pci_p2pdma_map_sg(struct device *dev,
+	struct scatterlist *sg, int nents, enum dma_data_direction dir)
+{
+	return 0;
+}
+static inline void pci_p2pdma_unmap_sg(struct device *dev,
+	struct scatterlist *sg, int nents, enum dma_data_direction dir)
 {
 }
 #endif /* CONFIG_PCI_P2PDMA */
