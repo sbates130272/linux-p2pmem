@@ -214,11 +214,11 @@ static int nvme_peer_init_resource(struct nvme_queue *nvmeq,
 
 	if (mask & NVME_PEER_SQT_DBR)
 		/* Calculation from NVMe 1.2.1 SPEC */
-		nvmeq->resource.sqt_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid)) * (4 << NVME_CAP_STRIDE(lo_hi_readq(dev->bar + NVME_REG_CAP)))));
+		nvmeq->resource.sqt_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid)) * (4 << NVME_CAP_STRIDE(dev->ctrl.cap))));
 
 	if (mask & NVME_PEER_CQH_DBR)
 		/* Calculation from NVMe 1.2.1 SPEC */
-		nvmeq->resource.cqh_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid) + 1) * (4 << NVME_CAP_STRIDE(lo_hi_readq(dev->bar + NVME_REG_CAP)))));
+		nvmeq->resource.cqh_dbr_addr = dev->bar_phys_addr + (0x1000 + ((2 * (qid) + 1) * (4 << NVME_CAP_STRIDE(dev->ctrl.cap))));
 
 	if (mask & NVME_PEER_SQ_PAS)
 		nvmeq->resource.sq_dma_addr = nvmeq->sq_dma_addr;
