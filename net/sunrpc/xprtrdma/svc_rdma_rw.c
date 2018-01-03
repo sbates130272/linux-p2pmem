@@ -140,7 +140,7 @@ static void svc_rdma_cc_release(struct svc_rdma_chunk_ctxt *cc,
 
 		rdma_rw_ctx_destroy(&ctxt->rw_ctx, rdma->sc_qp,
 				    rdma->sc_port_num, ctxt->rw_sg_table.sgl,
-				    ctxt->rw_nents, dir);
+				    ctxt->rw_nents, dir, 0);
 		svc_rdma_put_rw_ctxt(rdma, ctxt);
 	}
 	svc_xprt_put(&rdma->sc_xprt);
@@ -433,7 +433,7 @@ svc_rdma_build_writes(struct svc_rdma_write_info *info,
 		ret = rdma_rw_ctx_init(&ctxt->rw_ctx, rdma->sc_qp,
 				       rdma->sc_port_num, ctxt->rw_sg_table.sgl,
 				       ctxt->rw_nents, 0, seg_offset,
-				       seg_handle, DMA_TO_DEVICE);
+				       seg_handle, DMA_TO_DEVICE, 0);
 		if (ret < 0)
 			goto out_initerr;
 
@@ -639,7 +639,7 @@ static int svc_rdma_build_read_segment(struct svc_rdma_read_info *info,
 	ret = rdma_rw_ctx_init(&ctxt->rw_ctx, cc->cc_rdma->sc_qp,
 			       cc->cc_rdma->sc_port_num,
 			       ctxt->rw_sg_table.sgl, ctxt->rw_nents,
-			       0, offset, rkey, DMA_FROM_DEVICE);
+			       0, offset, rkey, DMA_FROM_DEVICE, 0);
 	if (ret < 0)
 		goto out_initerr;
 
