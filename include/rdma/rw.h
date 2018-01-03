@@ -59,12 +59,15 @@ struct rdma_rw_ctx {
 	};
 };
 
+#define RDMA_RW_CTX_FLAG_PCI_P2PDMA  (1 << 0)
+
 int rdma_rw_ctx_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
 		struct scatterlist *sg, u32 sg_cnt, u32 sg_offset,
-		u64 remote_addr, u32 rkey, enum dma_data_direction dir);
+		u64 remote_addr, u32 rkey, enum dma_data_direction dir,
+		unsigned int flags);
 void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
 		struct scatterlist *sg, u32 sg_cnt,
-		enum dma_data_direction dir);
+		enum dma_data_direction dir, unsigned int flags);
 
 int rdma_rw_ctx_signature_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
 		u8 port_num, struct scatterlist *sg, u32 sg_cnt,
