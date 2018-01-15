@@ -240,27 +240,42 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 }
 
 /*
- * If a device is behind a switch, we try to find the upstream bridge
- * port of the switch. This requires two calls to pci_upstream_bridge():
- * one for the upstream port on the switch, one on the upstream port
- * for the next level in the hierarchy. Because of this, devices connected
- * to the root port will be rejected.
+ * pci_p2pdma_disable_acs - disable ACS flags for all PCI bridges
+ * @pdev: device to disable ACS flags for
+ *
+ * The ACS flags for P2P Request Redirect and P2P Completion Redirect need
+ * to be disabled on any PCI bridge in order for the TLPS to not be forwarded
+ * up to the RC which is not what we want for P2P.
+ *
+ * This function is called when the devices are first enumerated and
+ * will result in all devices behind any bridge to be in the same IOMMU
+ * group. At this time, there is no way to "hotplug" IOMMU groups so we rely
+ * on this largish hammer. If you need the devices to be in separate groups
+ * don't enable CONFIG_PCI_P2PDMA.
+ *
+ * Returns 1 if the ACS bits for this device was cleared, otherwise 0.
  */
-static struct pci_dev *get_upstream_bridge_port(struct pci_dev *pdev)
+int pci_p2pdma_disable_acs(struct pci_dev *pdev)
 {
-	struct pci_dev *up1, *up2;
+	int pos;
+	u16 ctrl;
 
-	if (!pdev)
-		return NULL;
+	if (!pci_is_bridge(pdev))
+		return 0;
 
-	up1 = pci_dev_get(pci_upstream_bridge(pdev));
-	if (!up1)
-		return NULL;
+	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ACS);
+	if (!pos)
+		return 0;
 
-	up2 = pci_dev_get(pci_upstream_bridge(up1));
-	pci_dev_put(up1);
+	pci_info(pdev, "disabling ACS flags for peer-to-peer DMA\n");
 
-	return up2;
+	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
+
+	ctrl &= ~(PCI_ACS_RR | PCI_ACS_CR);
+
+	pci_write_config_word(pdev, pos + PCI_ACS_CTRL, ctrl);
+
+	return 1;
 }
 
 /*
