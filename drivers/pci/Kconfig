@@ -138,6 +138,15 @@ config PCI_P2PDMA
 	  it's hard to tell which support it at all, so at this time you
 	  will need a PCIe switch.
 
+	  Enabling this option will also disable ACS on all ports behind
+	  any PCIe switch. This effectively puts all devices behind any
+	  switch into the same IOMMU group. Which implies that individual
+	  devices behind any switch will not be able to be assigned to
+	  separate VMs because there is no isolation between them.
+	  Additionally, any malicious PCIe devices will be able to DMA
+	  to memory exposed by other EPs in the same domain as TLPs will
+	  not be checked by the IOMMU.
+
 	  If unsure, say N.
 
 config PCI_LABEL
