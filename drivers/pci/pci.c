@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_pci.h>
 #include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 #include <linux/pm.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -2825,6 +2826,9 @@ static void pci_std_enable_acs(struct pci_dev *dev)
  */
 void pci_enable_acs(struct pci_dev *dev)
 {
+	if (pci_p2pdma_disable_acs(dev))
+		return;
+
 	if (!pci_acs_enable)
 		return;
 

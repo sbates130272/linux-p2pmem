@@ -137,6 +137,10 @@ config PCI_P2PDMA
 	  it's hard to tell which support it with good performance, so
 	  at this time you will need a PCIe switch.
 
+	  Enabling this option will also disable ACS on all ports behind
+	  any PCIe switch. This effictively puts all devices behind any
+	  switch into the same IOMMU group.
+
 	  If unsure, say N.
 
 config PCI_LABEL
