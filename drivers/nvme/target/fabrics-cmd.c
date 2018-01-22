@@ -219,7 +219,10 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	}
 
 	if (req->port->offload) {
-		/* create offloaded ctrl for P2P I/O when receiving first I/O connect */
+		/*
+		 * create offloaded ctrl for P2P I/O when receiving first I/O connect
+		 * and destroy it when freeing the controller
+		 */
 		if (qid == 1) {
 			status = ctrl->ops->create_offload_ctrl(ctrl);
 			if (status) {
@@ -230,7 +233,7 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 		status = ctrl->ops->install_offload_queue(ctrl, qid);
 		if (status) {
 			status = NVME_SC_INTERNAL | NVME_SC_DNR;
-			goto out_offload_destroy;
+			goto out_ctrl_put;
 		}
 	}
 
@@ -238,7 +241,7 @@ static void nvmet_execute_io_connect(struct nvmet_req *req)
 	if (status) {
 		/* pass back cntlid that had the issue of installing queue */
 		req->rsp->result.u16 = cpu_to_le16(ctrl->cntlid);
-		goto out_offload_destroy;
+		goto out_ctrl_put;
 	}
 
 	pr_info("adding queue %d to ctrl %d.\n", qid, ctrl->cntlid);
@@ -249,9 +252,6 @@ complete:
 	nvmet_req_complete(req, status);
 	return;
 
-out_offload_destroy:
-	if (qid == 1 && req->port->offload)
-		ctrl->ops->destroy_offload_ctrl(ctrl);
 out_ctrl_put:
 	nvmet_ctrl_put(ctrl);
 	goto out;
