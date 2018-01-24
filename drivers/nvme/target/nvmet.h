@@ -326,6 +326,9 @@ u32 nvmet_get_log_page_len(struct nvme_command *cmd);
 #define NVMET_MAX_CMD		NVMET_QUEUE_SIZE
 #define NVMET_KAS		10
 #define NVMET_DISC_KATO		120
+#define NVMET_ID_CTRL_SQES	((0x6 << 4) | 0x6)
+#define NVMET_ID_CTRL_CQES	((0x4 << 4) | 0x4)
+#define NVMET_ID_CTRL_ACL	3
 
 int __init nvmet_init_configfs(void);
 void __exit nvmet_exit_configfs(void);
