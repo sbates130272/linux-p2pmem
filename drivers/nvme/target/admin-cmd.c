@@ -210,7 +210,7 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	 * comands.  But we don't do anything useful for abort either, so
 	 * no point in allowing more abort commands than the spec requires.
 	 */
-	id->acl = 3;
+	id->acl = NVMET_ID_CTRL_ACL;
 
 	id->aerl = NVMET_ASYNC_EVENTS - 1;
 
@@ -223,8 +223,8 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	/* We support keep-alive timeout in granularity of seconds */
 	id->kas = cpu_to_le16(NVMET_KAS);
 
-	id->sqes = (0x6 << 4) | 0x6;
-	id->cqes = (0x4 << 4) | 0x4;
+	id->sqes = NVMET_ID_CTRL_SQES;
+	id->cqes = NVMET_ID_CTRL_CQES;
 
 	/* no enforcement soft-limit for maxcmd - pick arbitrary high value */
 	id->maxcmd = cpu_to_le16(NVMET_MAX_CMD);
