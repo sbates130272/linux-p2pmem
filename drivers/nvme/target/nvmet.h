@@ -160,6 +160,10 @@ struct nvmet_subsys {
 
 	struct config_group	namespaces_group;
 	struct config_group	allowed_hosts_group;
+
+	bool			pt_ctrl_enable;
+	char			*pt_ctrl_path;
+	struct nvme_ctrl	*pt_ctrl;
 };
 
 static inline struct nvmet_subsys *to_subsys(struct config_item *item)
