@@ -236,6 +236,8 @@ struct nvmet_req {
 
 	void (*execute)(struct nvmet_req *req);
 	struct nvmet_fabrics_ops *ops;
+
+	struct nvme_ns		*pt_ns;
 };
 
 static inline void nvmet_set_status(struct nvmet_req *req, u16 status)
@@ -265,6 +267,7 @@ struct nvmet_async_event {
 };
 
 u16 nvmet_parse_connect_cmd(struct nvmet_req *req);
+u16 nvmet_parse_passthru_cmd(struct nvmet_req *req);
 u16 nvmet_parse_io_cmd(struct nvmet_req *req);
 u16 nvmet_parse_admin_cmd(struct nvmet_req *req);
 u16 nvmet_parse_discovery_cmd(struct nvmet_req *req);
@@ -274,6 +277,9 @@ bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 		struct nvmet_sq *sq, struct nvmet_fabrics_ops *ops);
 void nvmet_req_uninit(struct nvmet_req *req);
 void nvmet_req_execute(struct nvmet_req *req);
+
+int nvmet_pt_ctrl_enable(struct nvmet_subsys *subsys);
+void nvmet_pt_ctrl_disable(struct nvmet_subsys *subsys);
 void nvmet_req_complete(struct nvmet_req *req, u16 status);
 
 void nvmet_cq_setup(struct nvmet_ctrl *ctrl, struct nvmet_cq *cq, u16 qid,
@@ -305,6 +311,9 @@ void nvmet_ns_disable(struct nvmet_ns *ns);
 struct nvmet_ns *nvmet_ns_alloc(struct nvmet_subsys *subsys, u32 nsid);
 void nvmet_ns_free(struct nvmet_ns *ns);
 
+
+void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
+		u8 event_info, u8 log_page);
 int nvmet_register_transport(struct nvmet_fabrics_ops *ops);
 void nvmet_unregister_transport(struct nvmet_fabrics_ops *ops);
 
@@ -320,6 +329,8 @@ u16 nvmet_copy_from_sgl(struct nvmet_req *req, off_t off, void *buf,
 		size_t len);
 
 u32 nvmet_get_log_page_len(struct nvme_command *cmd);
+
+bool nvmet_is_passthru_cmd_supported(struct nvmet_req *req);
 
 #define NVMET_QUEUE_SIZE	1024
 #define NVMET_NR_QUEUES		128
