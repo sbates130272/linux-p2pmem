@@ -16,6 +16,7 @@
 #include <linux/random.h>
 #include <linux/rculist.h>
 
+#include "../host/nvme.h"
 #include "nvmet.h"
 
 static struct nvmet_fabrics_ops *nvmet_transports[NVMF_TRTYPE_MAX];
@@ -117,7 +118,7 @@ static void nvmet_async_event_work(struct work_struct *work)
 	}
 }
 
-static void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
+void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
 		u8 event_info, u8 log_page)
 {
 	struct nvmet_async_event *aen;
@@ -398,6 +399,32 @@ struct nvmet_ns *nvmet_ns_alloc(struct nvmet_subsys *subsys, u32 nsid)
 	return ns;
 }
 
+int nvmet_pt_ctrl_enable(struct nvmet_subsys *subsys)
+{
+	if (!subsys)
+		return -ENODEV;
+
+	if (nvme_get_ctrl_by_name(subsys->pt_ctrl_path, &subsys->pt_ctrl)) {
+		pr_err("unable to find passthru ctrl' %s'\n",
+				subsys->pt_ctrl_path);
+		return -ENODEV;
+	}
+	subsys->pt_ctrl_enable = true;
+
+	return 0;
+}
+
+void nvmet_pt_ctrl_disable(struct nvmet_subsys *subsys)
+{
+	if (!subsys || !subsys->pt_ctrl)
+		return;
+
+	subsys->pt_ctrl_enable = false;
+	nvme_put_ctrl_by_name(subsys->pt_ctrl);
+	subsys->pt_ctrl = NULL;
+}
+
+
 static void __nvmet_req_complete(struct nvmet_req *req, u16 status)
 {
 	u32 old_sqhd, new_sqhd;
@@ -499,6 +526,19 @@ int nvmet_sq_init(struct nvmet_sq *sq)
 }
 EXPORT_SYMBOL_GPL(nvmet_sq_init);
 
+static bool nvmet_ctrl_passthru_allow(struct nvmet_req *req)
+{
+	struct nvmet_subsys *subsys = req->sq->ctrl->subsys;
+
+	if (subsys->pt_ctrl_enable == false)
+		return false;
+
+	if (nvmet_is_passthru_cmd_supported(req) == false)
+		return false;
+
+	return true;
+}
+
 bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 		struct nvmet_sq *sq, struct nvmet_fabrics_ops *ops)
 {
@@ -529,12 +569,14 @@ bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 	if (unlikely(!req->sq->ctrl))
 		/* will return an error for any Non-connect command: */
 		status = nvmet_parse_connect_cmd(req);
+	else if (unlikely(req->sq->ctrl->subsys->type == NVME_NQN_DISC))
+		status = nvmet_parse_discovery_cmd(req);
+	else if (nvmet_ctrl_passthru_allow(req))
+		status = nvmet_parse_passthru_cmd(req);
 	else if (likely(req->sq->qid != 0))
 		status = nvmet_parse_io_cmd(req);
 	else if (req->cmd->common.opcode == nvme_fabrics_command)
 		status = nvmet_parse_fabrics_cmd(req);
-	else if (req->sq->ctrl->subsys->type == NVME_NQN_DISC)
-		status = nvmet_parse_discovery_cmd(req);
 	else
 		status = nvmet_parse_admin_cmd(req);
 
@@ -562,6 +604,13 @@ EXPORT_SYMBOL_GPL(nvmet_req_uninit);
 
 void nvmet_req_execute(struct nvmet_req *req)
 {
+	if (req->sq->ctrl) {
+		if (req->sq->ctrl->subsys->pt_ctrl) {
+			req->execute(req);
+			return;
+		}
+	}
+
 	if (unlikely(req->data_len != req->transfer_len))
 		nvmet_req_complete(req, NVME_SC_SGL_INVALID_DATA | NVME_SC_DNR);
 	else
@@ -999,6 +1048,7 @@ static void nvmet_subsys_free(struct kref *ref)
 
 	WARN_ON_ONCE(!list_empty(&subsys->namespaces));
 
+	kfree(subsys->pt_ctrl_path);
 	kfree(subsys->subsysnqn);
 	kfree(subsys);
 }
