@@ -2607,18 +2607,17 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 
 struct pci_dev *nvme_find_pdev_from_bdev(struct block_device *bdev)
 {
-	struct nvme_ns *ns = NULL;
-	struct pci_dev *pdev = NULL;
+	struct nvme_ns *ns;
 
-	if (bdev->bd_disk && bdev->bd_disk->fops &&
-	    bdev->bd_disk->fops->owner &&
-	    !strcmp(bdev->bd_disk->fops->owner->name, "nvme_core"))
-		ns = bdev->bd_disk->private_data;
+	if (!disk_is_nvme(bdev->bd_disk))
+		return NULL;
 
-	if (ns && ns->ctrl && ns->ctrl->ops == &nvme_pci_ctrl_ops)
-		pdev = to_pci_dev(to_nvme_dev(ns->ctrl)->dev);
+	ns = bdev->bd_disk->private_data;
 
-	return pdev;
+	if (ns->ctrl->ops != &nvme_pci_ctrl_ops)
+		return NULL;
+
+	return to_pci_dev(to_nvme_dev(ns->ctrl)->dev);
 }
 EXPORT_SYMBOL_GPL(nvme_find_pdev_from_bdev);
 

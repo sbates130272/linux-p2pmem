@@ -3495,6 +3495,11 @@ int nvme_reinit_tagset(struct nvme_ctrl *ctrl, struct blk_mq_tag_set *set)
 }
 EXPORT_SYMBOL_GPL(nvme_reinit_tagset);
 
+bool disk_is_nvme(struct gendisk *disk)
+{
+	return disk_to_dev(disk)->parent->class == nvme_class;
+}
+
 int __init nvme_core_init(void)
 {
 	int result;
