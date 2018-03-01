@@ -138,13 +138,13 @@ out:
 
 /**
  * pci_p2pdma_add_resource - add memory for use as p2p memory
- * @pci: the device to add the memory to
+ * @pdev: the device to add the memory to
  * @bar: PCI BAR to add
  * @size: size of the memory to add, may be zero to use the whole BAR
  * @offset: offset into the PCI BAR
  *
  * The memory will be given ZONE_DEVICE struct pages so that it may
- * be used with any dma request.
+ * be used with any DMA request.
  */
 int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset)
