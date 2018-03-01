@@ -2,8 +2,10 @@
 /*
  * PCI Peer 2 Peer DMA support.
  *
+ * Copyright (c) 2016-2018, Logan Gunthorpe
  * Copyright (c) 2016-2017, Microsemi Corporation
- * Copyright (c) 2017, Christoph Hellwig.
+ * Copyright (c) 2017, Christoph Hellwig
+ * Copyright (c) 2018, Eideticom Inc.
  *
  */
 
