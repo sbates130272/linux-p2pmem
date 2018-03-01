@@ -280,7 +280,7 @@ int pci_p2pdma_disable_acs(struct pci_dev *pdev)
 	if (!pos)
 		return 0;
 
-	dev_info(&pdev->dev, "disabling ACS flags for peer-to-peer DMA\n");
+	pci_info(pdev, "disabling ACS flags for peer-to-peer DMA\n");
 
 	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
 
