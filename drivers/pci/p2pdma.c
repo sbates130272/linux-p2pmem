@@ -227,7 +227,7 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 
 /*
  * If a device is behind a switch, we try to find the upstream bridge
- * port of the switch. This requires two calls to pci_upstream_bridge:
+ * port of the switch. This requires two calls to pci_upstream_bridge():
  * one for the upstream port on the switch, one on the upstream port
  * for the next level in the hierarchy. Because of this, devices connected
  * to the root port will be rejected.
