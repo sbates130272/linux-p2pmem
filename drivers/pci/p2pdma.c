@@ -198,7 +198,7 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	if (error)
 		return error;
 
-	dev_info(&pdev->dev, "added peer-to-peer DMA memory %pR\n",
+	pci_info(pdev, "added peer-to-peer DMA memory %pR\n",
 		 &pgmap->res);
 
 	return 0;
@@ -325,7 +325,7 @@ static bool upstream_bridges_match(struct pci_dev *pdev,
 
 	upstream = get_upstream_bridge_port(pdev);
 	if (!upstream) {
-		dev_warn(&pdev->dev, "not behind a PCI bridge\n");
+		pci_warn(pdev, "not behind a PCI bridge\n");
 		return false;
 	}
 
@@ -474,7 +474,7 @@ static bool upstream_bridges_match_list(struct pci_dev *pdev,
 
 	upstream = get_upstream_bridge_port(pdev);
 	if (!upstream) {
-		dev_warn(&pdev->dev, "not behind a PCI bridge\n");
+		pci_warn(pdev, "not behind a PCI bridge\n");
 		return false;
 	}
 
