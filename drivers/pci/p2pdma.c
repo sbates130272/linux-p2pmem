@@ -341,7 +341,7 @@ static bool upstream_bridges_match(struct pci_dev *pdev,
 struct pci_p2pdma_client {
 	struct list_head list;
 	struct pci_dev *client;
-	struct pci_dev *p2pdma;
+	struct pci_dev *provider;
 };
 
 /**
@@ -364,7 +364,7 @@ struct pci_p2pdma_client {
 int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 {
 	struct pci_p2pdma_client *item, *new_item;
-	struct pci_dev *p2pdma = NULL;
+	struct pci_dev *provider = NULL;
 	struct pci_dev *client;
 	int ret;
 
@@ -383,10 +383,10 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 	}
 
 	item = list_first_entry_or_null(head, struct pci_p2pdma_client, list);
-	if (item && item->p2pdma) {
-		p2pdma = item->p2pdma;
+	if (item && item->provider) {
+		provider = item->provider;
 
-		if (!upstream_bridges_match(p2pdma, client)) {
+		if (!upstream_bridges_match(provider, client)) {
 			ret = -EXDEV;
 			goto put_client;
 		}
@@ -399,7 +399,7 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 	}
 
 	new_item->client = client;
-	new_item->p2pdma = pci_dev_get(p2pdma);
+	new_item->provider = pci_dev_get(provider);
 
 	list_add_tail(&new_item->list, head);
 
@@ -415,7 +415,7 @@ static void pci_p2pdma_client_free(struct pci_p2pdma_client *item)
 {
 	list_del(&item->list);
 	pci_dev_put(item->client);
-	pci_dev_put(item->p2pdma);
+	pci_dev_put(item->provider);
 	kfree(item);
 }
 
@@ -515,7 +515,7 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 			continue;
 
 		list_for_each_entry(pos, clients, list)
-			pos->p2pdma = pdev;
+			pos->provider = pdev;
 
 		return pdev;
 	}
