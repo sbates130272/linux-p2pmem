@@ -195,7 +195,7 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 
-	error = gen_pool_add_virt(pdev->p2pdma->pool, (uintptr_t)addr,
+	error = gen_pool_add_virt(pdev->p2pdma->pool, (unsigned long)addr,
 			pci_bus_address(pdev, bar) + offset,
 			resource_size(&pgmap->res), dev_to_node(&pdev->dev));
 	if (error)
@@ -547,7 +547,7 @@ void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size)
 	if (unlikely(!percpu_ref_tryget_live(&pdev->p2pdma->devmap_ref)))
 		return NULL;
 
-	ret = (void *)(uintptr_t)gen_pool_alloc(pdev->p2pdma->pool, size);
+	ret = (void *)gen_pool_alloc(pdev->p2pdma->pool, size);
 
 	if (unlikely(!ret))
 		percpu_ref_put(&pdev->p2pdma->devmap_ref);
