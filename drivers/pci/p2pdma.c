@@ -131,10 +131,13 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 	pdev->p2pdma = p2p;
 
 	error = sysfs_create_group(&pdev->dev.kobj, &p2pmem_group);
+	if (error)
+		goto out_pool_destroy;
 
 	return 0;
 
 out_pool_destroy:
+	pdev->p2pdma = NULL;
 	gen_pool_destroy(p2p->pool);
 out:
 	devm_kfree(&pdev->dev, p2p);
