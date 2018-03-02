@@ -526,8 +526,8 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_find);
 
 /**
  * pci_alloc_p2p_mem - allocate peer-to-peer DMA memory
- * @pdev:	the device to allocate memory from
- * @size:	number of bytes to allocate
+ * @pdev: the device to allocate memory from
+ * @size: number of bytes to allocate
  *
  * Returns the allocated memory or NULL on error.
  */
@@ -552,9 +552,9 @@ EXPORT_SYMBOL_GPL(pci_alloc_p2pmem);
 
 /**
  * pci_free_p2pmem - allocate peer-to-peer DMA memory
- * @pdev:	the device the memory was allocated from
- * @addr:	address of the memory that was allocated
- * @size:	number of bytes that was allocated
+ * @pdev: the device the memory was allocated from
+ * @addr: address of the memory that was allocated
+ * @size: number of bytes that was allocated
  */
 void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size)
 {
@@ -566,8 +566,8 @@ EXPORT_SYMBOL_GPL(pci_free_p2pmem);
 /**
  * pci_virt_to_bus - return the PCI bus address for a given virtual
  *	address obtained with pci_alloc_p2pmem()
- * @pdev:	the device the memory was allocated from
- * @addr:	address of the memory that was allocated
+ * @pdev: the device the memory was allocated from
+ * @addr: address of the memory that was allocated
  */
 pci_bus_addr_t pci_p2pmem_virt_to_bus(struct pci_dev *pdev, void *addr)
 {
@@ -587,10 +587,10 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_virt_to_bus);
 
 /**
  * pci_p2pmem_alloc_sgl - allocate peer-to-peer DMA memory in a scatterlist
- * @pdev:	the device to allocate memory from
- * @sgl:	the allocated scatterlist
- * @nents:      the number of SG entries in the list
- * @length:     number of bytes to allocate
+ * @pdev: the device to allocate memory from
+ * @sgl: the allocated scatterlist
+ * @nents: the number of SG entries in the list
+ * @length: number of bytes to allocate
  *
  * Returns 0 on success
  */
@@ -623,9 +623,9 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_alloc_sgl);
 
 /**
  * pci_p2pmem_free_sgl - free a scatterlist allocated by pci_p2pmem_alloc_sgl()
- * @pdev:	the device to allocate memory from
- * @sgl:	the allocated scatterlist
- * @nents:      the number of SG entries in the list
+ * @pdev: the device to allocate memory from
+ * @sgl: the allocated scatterlist
+ * @nents: the number of SG entries in the list
  */
 void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
 			 unsigned int nents)
@@ -645,8 +645,8 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_free_sgl);
 /**
  * pci_p2pmem_publish - publish the peer-to-peer DMA memory for use by
  *	other devices with pci_p2pmem_find()
- * @pdev:	the device with peer-to-peer DMA memory to publish
- * @publish:	set to true to publish the memory, false to unpublish it
+ * @pdev: the device with peer-to-peer DMA memory to publish
+ * @publish: set to true to publish the memory, false to unpublish it
  */
 void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 {
