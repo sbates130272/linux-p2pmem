@@ -518,7 +518,7 @@ static void nvmet_rdma_read_data_done(struct ib_cq *cq, struct ib_wc *wc)
 	atomic_add(rsp->n_rdma, &queue->sq_wr_avail);
 	rdma_rw_ctx_destroy(&rsp->rw, queue->cm_id->qp,
 			queue->cm_id->port_num, rsp->req.sg,
-			rsp->req.sg_cnt, nvmet_data_dir(&rsp->req), 0);
+			rsp->req.sg_cnt, nvmet_data_dir(&rsp->req));
 	rsp->n_rdma = 0;
 
 	if (unlikely(wc->status != IB_WC_SUCCESS)) {

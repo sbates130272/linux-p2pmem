@@ -1498,7 +1498,7 @@ isert_rdma_rw_ctx_destroy(struct isert_cmd *cmd, struct isert_conn *conn)
 	} else {
 		rdma_rw_ctx_destroy(&cmd->rw, conn->qp, conn->cm_id->port_num,
 				se_cmd->t_data_sg, se_cmd->t_data_nents,
-				dir, 0);
+				dir);
 	}
 
 	cmd->rw.nr_ops = 0;
@@ -2153,7 +2153,7 @@ isert_rdma_rw_ctx_post(struct isert_cmd *cmd, struct isert_conn *conn,
 	} else {
 		ret = rdma_rw_ctx_init(&cmd->rw, conn->qp, port_num,
 				se_cmd->t_data_sg, se_cmd->t_data_nents,
-				offset, addr, rkey, dir, 0);
+				offset, addr, rkey, dir);
 	}
 
 	if (ret < 0) {

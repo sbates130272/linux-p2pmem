@@ -900,7 +900,7 @@ static int srpt_alloc_rw_ctxs(struct srpt_send_ioctx *ioctx,
 
 		ret = rdma_rw_ctx_init(&ctx->rw, ch->qp, ch->sport->port,
 				ctx->sg, ctx->nents, 0, remote_addr, rkey,
-				dir, 0);
+				dir);
 		if (ret < 0) {
 			target_free_sgl(ctx->sg, ctx->nents);
 			goto unwind;
@@ -929,7 +929,7 @@ unwind:
 		struct srpt_rw_ctx *ctx = &ioctx->rw_ctxs[i];
 
 		rdma_rw_ctx_destroy(&ctx->rw, ch->qp, ch->sport->port,
-				ctx->sg, ctx->nents, dir, 0);
+				ctx->sg, ctx->nents, dir);
 		target_free_sgl(ctx->sg, ctx->nents);
 	}
 	if (ioctx->rw_ctxs != &ioctx->s_rw_ctx)
@@ -947,7 +947,7 @@ static void srpt_free_rw_ctxs(struct srpt_rdma_ch *ch,
 		struct srpt_rw_ctx *ctx = &ioctx->rw_ctxs[i];
 
 		rdma_rw_ctx_destroy(&ctx->rw, ch->qp, ch->sport->port,
-				ctx->sg, ctx->nents, dir, 0);
+				ctx->sg, ctx->nents, dir);
 		target_free_sgl(ctx->sg, ctx->nents);
 	}
 
