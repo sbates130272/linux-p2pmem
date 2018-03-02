@@ -659,10 +659,10 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
 
 /*
  * pci_p2pdma_map_sg - map a PCI peer-to-peer sg for DMA
- * @dev:        device doing the DMA request
- * @sg:		scatter list to map
- * @nents:	elements in the scatterlist
- * @dir:        DMA direction
+ * @dev: device doing the DMA request
+ * @sg: scatter list to map
+ * @nents: elements in the scatterlist
+ * @dir: DMA direction
  *
  * Returns the number of SG entries mapped
  */
@@ -695,10 +695,10 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_map_sg);
 
 /**
  * pci_p2pdma_unmap_sg - unmap a PCI peer-to-peer sg for DMA
- * @dev:        device doing the DMA request
- * @sg:		scatter list to map
- * @nents:	elements in the scatterlist
- * @dir:        DMA direction
+ * @dev: device doing the DMA request
+ * @sg: scatter list to map
+ * @nents: elements in the scatterlist
+ * @dir: DMA direction
  */
 void pci_p2pdma_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
 			 enum dma_data_direction dir)
