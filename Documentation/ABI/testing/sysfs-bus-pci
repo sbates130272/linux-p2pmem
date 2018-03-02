@@ -337,7 +337,7 @@ Date:		November 2017
 Contact:	Logan Gunthorpe <logang@deltatee.com>
 Description:
 		If the device has any Peer-to-Peer memory registered, this
-	        file contains the total ammount of memory that the device
+	        file contains the total amount of memory that the device
 		provides (in decimal).
 
 What:		/sys/bus/pci/devices/.../p2pmem/published
