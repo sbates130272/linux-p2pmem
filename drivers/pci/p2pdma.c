@@ -92,6 +92,9 @@ static void pci_p2pdma_release(void *data)
 {
 	struct pci_dev *pdev = data;
 
+	if (!pdev->p2pdma)
+		return;
+
 	wait_for_completion(&pdev->p2pdma->devmap_ref_done);
 	percpu_ref_exit(&pdev->p2pdma->devmap_ref);
 
