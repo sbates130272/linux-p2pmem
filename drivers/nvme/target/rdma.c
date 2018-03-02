@@ -429,8 +429,7 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 	if (rsp->n_rdma) {
 		rdma_rw_ctx_destroy(&rsp->rw, queue->cm_id->qp,
 			queue->cm_id->port_num, rsp->req.sg,
-			rsp->req.sg_cnt, nvmet_data_dir(&rsp->req),
-			rsp->p2p_dev ? RDMA_RW_CTX_FLAG_PCI_P2PDMA : 0);
+			rsp->req.sg_cnt, nvmet_data_dir(&rsp->req));
 	}
 
 	if (rsp->req.sg != &rsp->cmd->inline_sg) {
@@ -601,8 +600,7 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 
 	ret = rdma_rw_ctx_init(&rsp->rw, cm_id->qp, cm_id->port_num,
 			rsp->req.sg, rsp->req.sg_cnt, 0, addr, key,
-			nvmet_data_dir(&rsp->req),
-			rsp->p2p_dev ? RDMA_RW_CTX_FLAG_PCI_P2PDMA : 0);
+			nvmet_data_dir(&rsp->req));
 	if (ret < 0)
 		return NVME_SC_INTERNAL;
 	rsp->req.transfer_len += len;
