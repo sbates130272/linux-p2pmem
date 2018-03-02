@@ -125,9 +125,9 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 	if (error)
 		goto out_pool_destroy;
 
-	error = sysfs_create_group(&pdev->dev.kobj, &p2pmem_group);
-
 	pdev->p2pdma = p2p;
+
+	error = sysfs_create_group(&pdev->dev.kobj, &p2pmem_group);
 
 	return 0;
 
