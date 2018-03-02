@@ -2827,8 +2827,10 @@ static void pci_std_enable_acs(struct pci_dev *dev)
  */
 void pci_enable_acs(struct pci_dev *dev)
 {
+#ifdef CONFIG_PCI_P2PDMA
 	if (pci_p2pdma_disable_acs(dev))
 		return;
+#endif
 
 	if (!pci_acs_enable)
 		return;
