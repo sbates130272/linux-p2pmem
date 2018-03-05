@@ -21,7 +21,7 @@ struct pci_p2pdma {
 	struct percpu_ref devmap_ref;
 	struct completion devmap_ref_done;
 	struct gen_pool *pool;
-	bool published;
+	bool p2pmem_published;
 };
 
 static ssize_t size_show(struct device *dev, struct device_attribute *attr,
@@ -55,7 +55,7 @@ static ssize_t published_show(struct device *dev, struct device_attribute *attr,
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", pdev->p2pdma->published);
+	return snprintf(buf, PAGE_SIZE, "%d\n", pdev->p2pdma->p2pmem_published);
 }
 static DEVICE_ATTR_RO(published);
 
@@ -561,6 +561,15 @@ bool pci_p2pdma_assign_provider(struct pci_dev *provider,
 }
 
 /**
+ * pci_has_p2pmem - check if a given PCI device has published any p2pmem
+ * @pdev: PCI device to check
+ */
+bool pci_has_p2pmem(struct pci_dev *pdev)
+{
+	return pdev->p2pdma && pdev->p2pdma->p2pmem_published;
+}
+
+/**
  * pci_p2pmem_find - find a peer-to-peer DMA memory device compatible with
  *	the specified list of clients and shortest distance (as determined
  *	by pci_p2pmem_dma())
@@ -585,7 +594,7 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 	struct pci_dev *closest_pdev = NULL;
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
-		if (!pdev->p2pdma || !pdev->p2pdma->published)
+		if (!pci_has_p2pmem(pdev))
 			continue;
 
 		distance = pci_p2pdma_distance(pdev, clients);
@@ -745,7 +754,7 @@ void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 	if (publish && !pdev->p2pdma)
 		return;
 
-	pdev->p2pdma->published = publish;
+	pdev->p2pdma->p2pmem_published = publish;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
 
