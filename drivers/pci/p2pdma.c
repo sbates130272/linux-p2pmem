@@ -15,6 +15,7 @@
 #include <linux/genalloc.h>
 #include <linux/memremap.h>
 #include <linux/percpu-refcount.h>
+#include <linux/random.h>
 
 struct pci_p2pdma {
 	struct percpu_ref devmap_ref;
@@ -299,24 +300,38 @@ int pci_p2pdma_disable_acs(struct pci_dev *pdev)
 	return 1;
 }
 
-static bool __upstream_bridges_match(struct pci_dev *upstream,
-				     struct pci_dev *client)
+/*
+ * This function checks if two PCI devices are behind the same switch.
+ * (ie. they share the same second upstream port as returned by
+ *  get_upstream_bridge_port().)
+ *
+ * Future work could expand this to handle hierarchies of switches
+ * so any devices whose traffic can be routed without going through
+ * the root complex could be used. For now, we limit it to just one
+ * level of switch.
+ *
+ * This function returns the "distance" between the devices. 0 meaning
+ * they are the same device, 1 meaning they are behind the same switch.
+ * If they are not behind the same switch, -1 is returned.
+ */
+static int __upstream_bridges_match(struct pci_dev *upstream,
+				    struct pci_dev *client)
 {
 	struct pci_dev *dma_up;
-	bool ret = true;
+	int ret = 1;
 
 	dma_up = get_upstream_bridge_port(client);
 
 	if (!dma_up) {
 		dev_dbg(&client->dev, "not a PCI device behind a bridge\n");
-		ret = false;
+		ret = -1;
 		goto out;
 	}
 
 	if (upstream != dma_up) {
 		dev_dbg(&client->dev,
 			"does not reside on the same upstream bridge\n");
-		ret = false;
+		ret = -1;
 		goto out;
 	}
 
@@ -325,16 +340,19 @@ out:
 	return ret;
 }
 
-static bool upstream_bridges_match(struct pci_dev *pdev,
-				   struct pci_dev *client)
+static int upstream_bridges_match(struct pci_dev *provider,
+				  struct pci_dev *client)
 {
 	struct pci_dev *upstream;
-	bool ret;
+	int ret;
 
-	upstream = get_upstream_bridge_port(pdev);
+	if (provider == client)
+		return 0;
+
+	upstream = get_upstream_bridge_port(provider);
 	if (!upstream) {
-		pci_warn(pdev, "not behind a PCI bridge\n");
-		return false;
+		pci_warn(provider, "not behind a PCI bridge\n");
+		return -1;
 	}
 
 	ret = __upstream_bridges_match(upstream, client);
@@ -392,7 +410,7 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 	if (item && item->provider) {
 		provider = item->provider;
 
-		if (!upstream_bridges_match(provider, client)) {
+		if (upstream_bridges_match(provider, client) < 0) {
 			ret = -EXDEV;
 			goto put_client;
 		}
@@ -473,25 +491,39 @@ void pci_p2pdma_client_list_free(struct list_head *head)
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
 
-static bool upstream_bridges_match_list(struct pci_dev *pdev,
-					struct list_head *head)
+/*
+ * This function returns the sum of distances as returned by
+ * upstream_bridges_match(). If _any_ of the devices in the list
+ * are not behind the same switch it will return -1.
+ */
+static int upstream_bridges_match_list(struct pci_dev *provider,
+				       struct list_head *head)
 {
 	struct pci_p2pdma_client *pos;
 	struct pci_dev *upstream;
-	bool ret;
+	int ret;
+	int distance = 0;
 
-	upstream = get_upstream_bridge_port(pdev);
+	upstream = get_upstream_bridge_port(provider);
 	if (!upstream) {
-		pci_warn(pdev, "not behind a PCI bridge\n");
+		pci_warn(provider, "not behind a PCI bridge\n");
 		return false;
 	}
 
 	list_for_each_entry(pos, head, list) {
+		if (pos->client == provider)
+			continue;
+
 		ret = __upstream_bridges_match(upstream, pos->client);
-		if (!ret)
-			break;
+		if (ret < 0)
+			goto no_match;
+
+		distance += ret;
 	}
 
+	ret = distance;
+
+no_match:
 	pci_dev_put(upstream);
 	return ret;
 }
@@ -502,8 +534,14 @@ static bool upstream_bridges_match_list(struct pci_dev *pdev,
  * @dev: list of devices to check (NULL-terminated)
  *
  * For now, we only support cases where the devices that will transfer to the
- * p2pmem device are behind the same bridge. This cuts out cases that may work
+ * p2pmem device are behind the same switch. This cuts out cases that may work
  * but is safest for the user.
+ *
+ * If multiple devices are behind the same switch, the one "closest" to the
+ * client devices in use will be chosen first. (So if one of the providers are
+ * the same as one of the clients, that provider will be used ahead of any
+ * other providers that are unrelated). If multiple providers are an equal
+ * distance away, one will be chosen at random.
  *
  * Returns a pointer to the PCI device with a reference taken (use pci_dev_put
  * to return the reference) or NULL if no compatible device is found.
@@ -512,21 +550,39 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 {
 	struct pci_dev *pdev = NULL;
 	struct pci_p2pdma_client *pos;
+	int distance;
+	int closest_distance = INT_MAX;
+	struct pci_dev *closest_pdev = NULL;
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
 		if (!pdev->p2pdma || !pdev->p2pdma->published)
 			continue;
 
-		if (!upstream_bridges_match_list(pdev, clients))
+		distance = upstream_bridges_match_list(pdev, clients);
+		if (distance < 0)
 			continue;
 
-		list_for_each_entry(pos, clients, list)
-			pos->provider = pdev;
+		if (distance == closest_distance) {
+			/*
+			 * 50% chance to use this provider over the
+			 * previously found entry
+			 */
+			if (get_random_int() & 1)
+				distance++;
+		}
 
-		return pdev;
+		if (distance <= closest_distance) {
+			pci_dev_put(closest_pdev);
+			closest_distance = distance;
+			closest_pdev = pci_dev_get(pdev);
+		}
 	}
 
-	return NULL;
+	if (closest_pdev)
+		list_for_each_entry(pos, clients, list)
+			pos->provider = closest_pdev;
+
+	return closest_pdev;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_find);
 
