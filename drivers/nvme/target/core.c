@@ -804,7 +804,7 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 	struct nvmet_ns *ns;
 	int ret;
 
-	if (!req->port->allow_p2pmem || !req->p2p_client)
+	if (!req->port->use_p2pmem || !req->p2p_client)
 		return;
 
 	mutex_lock(&ctrl->subsys->lock);
@@ -822,11 +822,22 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 			goto free_devices;
 	}
 
-	ctrl->p2p_dev = pci_p2pmem_find(&ctrl->p2p_clients);
-	if (!ctrl->p2p_dev) {
-		pr_info("no supported peer-to-peer memory devices found\n");
-		goto free_devices;
+	if (req->port->p2p_dev) {
+		if (!pci_p2pdma_assign_provider(req->port->p2p_dev,
+						&ctrl->p2p_clients)) {
+			pr_info("peer-to-peer memory on %s is not supported\n",
+				pci_name(req->port->p2p_dev));
+			goto free_devices;
+		}
+		ctrl->p2p_dev = pci_dev_get(req->port->p2p_dev);
+	} else {
+		ctrl->p2p_dev = pci_p2pmem_find(&ctrl->p2p_clients);
+		if (!ctrl->p2p_dev) {
+			pr_info("no supported peer-to-peer memory devices found\n");
+			goto free_devices;
+		}
 	}
+
 	mutex_unlock(&ctrl->subsys->lock);
 
 	pr_info("using peer-to-peer memory on %s\n", pci_name(ctrl->p2p_dev));
