@@ -491,13 +491,21 @@ void pci_p2pdma_client_list_free(struct list_head *head)
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
 
-/*
- * This function returns the sum of distances as returned by
- * upstream_bridges_match(). If _any_ of the devices in the list
- * are not behind the same switch it will return -1.
+/**
+ * pci_p2pdma_distance - Determive the cumulative distance between
+ *	a p2pdma provider and the clients in use.
+ * @dev: list of devices to check (NULL-terminated)
+ *
+ * Returns -1 if any of the clients are not compatible (behind the same
+ * switch as the provider), otherwise returns a positive number where
+ * the lower number is the preferrable choice. (If there's one client
+ * that's the same as the provider it will return 0, which is best choice).
+ *
+ * For now, "compatible" means the provider and the clients are all behind
+ * the same switch. This cuts out cases that may work but is safest for the
+ * user. Future work can expand this to cases with nested switches.
  */
-static int upstream_bridges_match_list(struct pci_dev *provider,
-				       struct list_head *head)
+int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients)
 {
 	struct pci_p2pdma_client *pos;
 	struct pci_dev *upstream;
@@ -510,7 +518,7 @@ static int upstream_bridges_match_list(struct pci_dev *provider,
 		return false;
 	}
 
-	list_for_each_entry(pos, head, list) {
+	list_for_each_entry(pos, clients, list) {
 		if (pos->client == provider)
 			continue;
 
@@ -530,12 +538,9 @@ no_match:
 
 /**
  * pci_p2pmem_find - find a peer-to-peer DMA memory device compatible with
- *	the specified list of clients
+ *	the specified list of clients and shortest distance (as determined
+ *	by pci_p2pmem_dma())
  * @dev: list of devices to check (NULL-terminated)
- *
- * For now, we only support cases where the devices that will transfer to the
- * p2pmem device are behind the same switch. This cuts out cases that may work
- * but is safest for the user.
  *
  * If multiple devices are behind the same switch, the one "closest" to the
  * client devices in use will be chosen first. (So if one of the providers are
@@ -558,7 +563,7 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 		if (!pdev->p2pdma || !pdev->p2pdma->published)
 			continue;
 
-		distance = upstream_bridges_match_list(pdev, clients);
+		distance = pci_p2pdma_distance(pdev, clients);
 		if (distance < 0)
 			continue;
 
