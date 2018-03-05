@@ -494,7 +494,8 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
 /**
  * pci_p2pdma_distance - Determive the cumulative distance between
  *	a p2pdma provider and the clients in use.
- * @dev: list of devices to check (NULL-terminated)
+ * @provider: p2pdma provider to check against the client list
+ * @clients: list of devices to check (NULL-terminated)
  *
  * Returns -1 if any of the clients are not compatible (behind the same
  * switch as the provider), otherwise returns a positive number where
@@ -537,10 +538,33 @@ no_match:
 }
 
 /**
+ * pci_p2pdma_assign_provider - Check compatibily (as per pci_p2pdma_distance)
+ *	and assign a provider to a list of clients
+ * @provider: p2pdma provider to assign to the client list
+ * @clients: list of devices to check (NULL-terminated)
+ *
+ * Returns false if any of the clients are not compatible, true if the
+ * provider was successfully assigned to the clients.
+ */
+bool pci_p2pdma_assign_provider(struct pci_dev *provider,
+				struct list_head *clients)
+{
+	struct pci_p2pdma_client *pos;
+
+	if (pci_p2pdma_distance(provider, clients) < 0)
+		return false;
+
+	list_for_each_entry(pos, clients, list)
+		pos->provider = provider;
+
+	return true;
+}
+
+/**
  * pci_p2pmem_find - find a peer-to-peer DMA memory device compatible with
  *	the specified list of clients and shortest distance (as determined
  *	by pci_p2pmem_dma())
- * @dev: list of devices to check (NULL-terminated)
+ * @clients: list of devices to check (NULL-terminated)
  *
  * If multiple devices are behind the same switch, the one "closest" to the
  * client devices in use will be chosen first. (So if one of the providers are
@@ -549,7 +573,8 @@ no_match:
  * distance away, one will be chosen at random.
  *
  * Returns a pointer to the PCI device with a reference taken (use pci_dev_put
- * to return the reference) or NULL if no compatible device is found.
+ * to return the reference) or NULL if no compatible device is found. The
+ * found provider will also be assigned to the client list.
  */
 struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 {

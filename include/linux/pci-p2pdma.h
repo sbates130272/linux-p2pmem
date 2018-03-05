@@ -25,6 +25,8 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev);
 void pci_p2pdma_remove_client(struct list_head *head, struct device *dev);
 void pci_p2pdma_client_list_free(struct list_head *head);
 int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients);
+bool pci_p2pdma_assign_provider(struct pci_dev *provider,
+				struct list_head *clients);
 struct pci_dev *pci_p2pmem_find(struct list_head *clients);
 void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size);
 void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size);
@@ -64,6 +66,11 @@ static inline int pci_p2pdma_distance(struct pci_dev *provider,
 				      struct list_head *clients)
 {
 	return -1;
+}
+static bool pci_p2pdma_assign_provider(struct pci_dev *provider,
+				       struct list_head *clients)
+{
+	return false;
 }
 static inline struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 {
