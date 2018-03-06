@@ -45,7 +45,7 @@ the kernel interface as seen by application developers.
 .. toctree::
    :maxdepth: 2
 
-   userspace-api/index	      
+   userspace-api/index
 
 
 Introduction to kernel development
@@ -88,6 +88,7 @@ needed).
    sound/index
    crypto/index
    filesystems/index
+   PCI/index
 
 Architecture-specific documentation
 -----------------------------------
