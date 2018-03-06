@@ -69,7 +69,6 @@ struct nvmet_rdma_rsp {
 	u8			n_rdma;
 	u32			flags;
 	u32			invalidate_rkey;
-	struct pci_dev		*p2p_dev;
 
 	struct list_head	wait_list;
 	struct list_head	free_list;
@@ -433,8 +432,8 @@ static void nvmet_rdma_release_rsp(struct nvmet_rdma_rsp *rsp)
 	}
 
 	if (rsp->req.sg != &rsp->cmd->inline_sg) {
-		if (rsp->p2p_dev)
-			pci_p2pmem_free_sgl(rsp->p2p_dev, rsp->req.sg,
+		if (rsp->req.p2p_dev)
+			pci_p2pmem_free_sgl(rsp->req.p2p_dev, rsp->req.sg,
 					    rsp->req.sg_cnt);
 		else
 			sgl_free(rsp->req.sg);
@@ -584,15 +583,15 @@ static u16 nvmet_rdma_map_sgl_keyed(struct nvmet_rdma_rsp *rsp,
 	if (rsp->queue->nvme_sq.ctrl)
 		p2p_dev = rsp->queue->nvme_sq.ctrl->p2p_dev;
 
-	rsp->p2p_dev = NULL;
+	rsp->req.p2p_dev = NULL;
 	if (rsp->queue->nvme_sq.qid && p2p_dev) {
 		ret = pci_p2pmem_alloc_sgl(p2p_dev, &rsp->req.sg,
 					   &rsp->req.sg_cnt, len);
 		if (!ret)
-			rsp->p2p_dev = p2p_dev;
+			rsp->req.p2p_dev = p2p_dev;
 	}
 
-	if (!rsp->p2p_dev) {
+	if (!rsp->req.p2p_dev) {
 		rsp->req.sg = sgl_alloc(len, GFP_KERNEL, &rsp->req.sg_cnt);
 		if (!rsp->req.sg)
 			return NVME_SC_INTERNAL;

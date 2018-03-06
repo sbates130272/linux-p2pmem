@@ -242,6 +242,7 @@ struct nvmet_req {
 	void (*execute)(struct nvmet_req *req);
 	struct nvmet_fabrics_ops *ops;
 
+	struct pci_dev *p2p_dev;
 	struct device *p2p_client;
 };
 
