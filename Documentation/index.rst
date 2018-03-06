@@ -93,6 +93,7 @@ needed).
    filesystems/index
    vm/index
    bpf/index
+   PCI/index
 
 Architecture-specific documentation
 -----------------------------------
