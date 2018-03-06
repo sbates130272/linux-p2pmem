@@ -193,24 +193,30 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 		pci_resource_start(pdev, bar);
 
 	addr = devm_memremap_pages(&pdev->dev, pgmap);
-	if (IS_ERR(addr))
-		return PTR_ERR(addr);
+	if (IS_ERR(addr)) {
+		error = PTR_ERR(addr);
+		goto pgmap_free;
+	}
 
 	error = gen_pool_add_virt(pdev->p2pdma->pool, (unsigned long)addr,
 			pci_bus_address(pdev, bar) + offset,
 			resource_size(&pgmap->res), dev_to_node(&pdev->dev));
 	if (error)
-		return error;
+		goto pgmap_free;
 
 	error = devm_add_action_or_reset(&pdev->dev, pci_p2pdma_percpu_kill,
 					  &pdev->p2pdma->devmap_ref);
 	if (error)
-		return error;
+		goto pgmap_free;
 
 	pci_info(pdev, "added peer-to-peer DMA memory %pR\n",
 		 &pgmap->res);
 
 	return 0;
+
+pgmap_free:
+	devres_free(pgmap);
+	return error;
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_add_resource);
 
