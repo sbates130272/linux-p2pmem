@@ -597,37 +597,47 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 	struct pci_p2pdma_client *pos;
 	int distance;
 	int closest_distance = INT_MAX;
-	struct pci_dev *closest_pdev = NULL;
+	struct pci_dev **closest_pdevs;
+	int ties = 0;
+	const int max_ties = PAGE_SIZE / sizeof(*closest_pdevs);
+	int i;
+
+	closest_pdevs = kmalloc(PAGE_SIZE, GFP_KERNEL);
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
 		if (!pci_has_p2pmem(pdev))
 			continue;
 
 		distance = pci_p2pdma_distance(pdev, clients);
-		if (distance < 0)
+		if (distance < 0 || distance > closest_distance)
 			continue;
 
-		if (distance == closest_distance) {
-			/*
-			 * 50% chance to use this provider over the
-			 * previously found entry
-			 */
-			if (get_random_int() & 1)
-				distance++;
+		if (distance == closest_distance && ties >= max_ties)
+			continue;
+
+		if (distance < closest_distance) {
+			for (i = 0; i < ties; i++)
+				pci_dev_put(closest_pdevs[i]);
+
+			ties = 0;
+			closest_distance = distance;
 		}
 
-		if (distance <= closest_distance) {
-			pci_dev_put(closest_pdev);
-			closest_distance = distance;
-			closest_pdev = pci_dev_get(pdev);
-		}
+		closest_pdevs[ties++] = pci_dev_get(pdev);
 	}
 
-	if (closest_pdev)
-		list_for_each_entry(pos, clients, list)
-			pos->provider = closest_pdev;
+	if (ties)
+		pdev = pci_dev_get(closest_pdevs[prandom_u32_max(ties)]);
 
-	return closest_pdev;
+	for (i = 0; i < ties; i++)
+		pci_dev_put(closest_pdevs[i]);
+
+	if (pdev)
+		list_for_each_entry(pos, clients, list)
+			pos->provider = pdev;
+
+	kfree(closest_pdevs);
+	return pdev;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_find);
 
