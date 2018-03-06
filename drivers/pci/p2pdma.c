@@ -374,7 +374,7 @@ struct pci_p2pdma_client {
  * @dev: device to add to the list
  *
  * This adds @dev to a list of clients used by a p2pdma device.
- * This list should be passed to p2pmem_find(). Once p2pmem_find() has
+ * This list should be passed to pci_p2pmem_find(). Once pci_p2pmem_find() has
  * been called successfully, the list will be bound to a specific p2pdma
  * device and new clients can only be added to the list if they are
  * supported by that p2pdma device.
