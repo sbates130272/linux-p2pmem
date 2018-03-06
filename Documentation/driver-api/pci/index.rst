@@ -11,6 +11,7 @@ The Linux PCI driver implementer's API guide
    :maxdepth: 2
 
    pci
+   p2pdma
 
 .. only::  subproject and html
 
