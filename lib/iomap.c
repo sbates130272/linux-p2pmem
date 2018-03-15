@@ -65,8 +65,8 @@ static void bad_io_access(unsigned long port, const char *access)
 #endif
 
 #ifndef mmio_read16be
-#define mmio_read16be(addr) be16_to_cpu(__raw_readw(addr))
-#define mmio_read32be(addr) be32_to_cpu(__raw_readl(addr))
+#define mmio_read16be(addr) be16_to_cpu((__be16 __force)__raw_readw(addr))
+#define mmio_read32be(addr) be32_to_cpu((__be32 __force)__raw_readl(addr))
 #endif
 
 unsigned int ioread8(void __iomem *addr)
@@ -106,8 +106,8 @@ EXPORT_SYMBOL(ioread32be);
 #endif
 
 #ifndef mmio_write16be
-#define mmio_write16be(val,port) __raw_writew(cpu_to_be16(val),port)
-#define mmio_write32be(val,port) __raw_writel(cpu_to_be32(val),port)
+#define mmio_write16be(val,port) __raw_writew((u16 __force)cpu_to_be16(val),port)
+#define mmio_write32be(val,port) __raw_writel((u32 __force)cpu_to_be32(val),port)
 #endif
 
 void iowrite8(u8 val, void __iomem *addr)
