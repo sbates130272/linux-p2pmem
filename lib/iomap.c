@@ -106,8 +106,8 @@ EXPORT_SYMBOL(ioread32be);
 #endif
 
 #ifndef mmio_write16be
-#define mmio_write16be(val,port) __raw_writew(be16_to_cpu(val),port)
-#define mmio_write32be(val,port) __raw_writel(be32_to_cpu(val),port)
+#define mmio_write16be(val,port) __raw_writew(cpu_to_be16(val),port)
+#define mmio_write32be(val,port) __raw_writel(cpu_to_be32(val),port)
 #endif
 
 void iowrite8(u8 val, void __iomem *addr)
