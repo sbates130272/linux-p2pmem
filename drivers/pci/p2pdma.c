@@ -518,32 +518,23 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
  * @clients: list of devices to check (NULL-terminated)
  *
  * Returns -1 if any of the clients are not compatible (behind the same
- * switch as the provider), otherwise returns a positive number where
+ * root port as the provider), otherwise returns a positive number where
  * the lower number is the preferrable choice. (If there's one client
  * that's the same as the provider it will return 0, which is best choice).
  *
  * For now, "compatible" means the provider and the clients are all behind
- * the same switch. This cuts out cases that may work but is safest for the
- * user. Future work can expand this to cases with nested switches.
+ * the same PCI root port. This cuts out cases that may work but is safest
+ * for the user. Future work can expand this to white-list root complexes that
+ * can safely forward between each ports.
  */
 int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients)
 {
 	struct pci_p2pdma_client *pos;
-	struct pci_dev *upstream;
 	int ret;
 	int distance = 0;
 
-	upstream = get_upstream_bridge_port(provider);
-	if (!upstream) {
-		pci_warn(provider, "not behind a PCI bridge\n");
-		return false;
-	}
-
 	list_for_each_entry(pos, clients, list) {
-		if (pos->client == provider)
-			continue;
-
-		ret = upstream_bridge_distance(upstream, pos->client);
+		ret = upstream_bridge_distance(provider, pos->client);
 		if (ret < 0)
 			goto no_match;
 
@@ -553,7 +544,6 @@ int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients)
 	ret = distance;
 
 no_match:
-	pci_dev_put(upstream);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_distance);
