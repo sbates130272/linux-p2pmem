@@ -240,30 +240,6 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 }
 
 /*
- * If a device is behind a switch, we try to find the upstream bridge
- * port of the switch. This requires two calls to pci_upstream_bridge():
- * one for the upstream port on the switch, one on the upstream port
- * for the next level in the hierarchy. Because of this, devices connected
- * to the root port will be rejected.
- */
-static struct pci_dev *get_upstream_bridge_port(struct pci_dev *pdev)
-{
-	struct pci_dev *up1, *up2;
-
-	if (!pdev)
-		return NULL;
-
-	up1 = pci_dev_get(pci_upstream_bridge(pdev));
-	if (!up1)
-		return NULL;
-
-	up2 = pci_dev_get(pci_upstream_bridge(up1));
-	pci_dev_put(up1);
-
-	return up2;
-}
-
-/*
  * pci_p2pdma_disable_acs - disable ACS flags for ports in PCI
  *	bridges/switches
  * @pdev: device to disable ACS flags for
