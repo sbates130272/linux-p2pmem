@@ -308,65 +308,75 @@ int pci_p2pdma_disable_acs(struct pci_dev *pdev)
 }
 
 /*
- * This function checks if two PCI devices are behind the same switch.
- * (ie. they share the same second upstream port as returned by
- *  get_upstream_bridge_port().)
+ * Find the distance through the nearest common upstream bridge between
+ * two PCI devices.
  *
- * Future work could expand this to handle hierarchies of switches
- * so any devices whose traffic can be routed without going through
- * the root complex could be used. For now, we limit it to just one
- * level of switch.
+ * If the two devices are the same device then 0 will be returned.
  *
- * This function returns the "distance" between the devices. 0 meaning
- * they are the same device, 1 meaning they are behind the same switch.
- * If they are not behind the same switch, -1 is returned.
+ * If there are two virtual functions of the same device behind the same
+ * bridge port then 2 will be returned (one step down to the bridge then
+ * one step back to the same device).
+ *
+ * In the case where two devices are connected to the same PCIe switch, the
+ * value 4 will be returned. This corresponds to the following PCI tree:
+ *
+ *     -+  Root Port
+ *      \+ Switch Upstream Port
+ *       +-+ Switch Downstream Port
+ *       + \- Device A
+ *       \-+ Switch Downstream Port
+ *         \- Device B
+ *
+ * The distance is 4 because we traverse from Device A through the downstream
+ * port of the switch, to the common upstream port, back up to the second
+ * downstream port and then to Device B.
+ *
+ * Any two devices that don't have a common upstream bridge will return -1.
+ * In this way devices on seperate root ports will be rejected, which
+ * is what we want for peer-to-peer seeing there's no way to determine
+ * if the root complex supports forwarding between ports.
  */
-static int __upstream_bridges_match(struct pci_dev *upstream,
-				    struct pci_dev *client)
+static int upstream_bridge_distance(struct pci_dev *a,
+				    struct pci_dev *b)
 {
-	struct pci_dev *dma_up;
-	int ret = 1;
+	int dist_a = 0;
+	int dist_b = 0;
+	struct pci_dev *aa, *bb = NULL, *tmp;
 
-	dma_up = get_upstream_bridge_port(client);
+	aa = pci_dev_get(a);
 
-	if (!dma_up) {
-		dev_dbg(&client->dev, "not a PCI device behind a bridge\n");
-		ret = -1;
-		goto out;
+	while (aa) {
+		dist_b = 0;
+
+		pci_dev_put(bb);
+		bb = pci_dev_get(b);
+
+		while (bb) {
+			if (aa == bb)
+				goto put_and_return;
+
+			tmp = pci_dev_get(pci_upstream_bridge(bb));
+			pci_dev_put(bb);
+			bb = tmp;
+
+			dist_b++;
+		}
+
+		tmp = pci_dev_get(pci_upstream_bridge(aa));
+		pci_dev_put(aa);
+		aa = tmp;
+
+		dist_a++;
 	}
 
-	if (upstream != dma_up) {
-		dev_dbg(&client->dev,
-			"does not reside on the same upstream bridge\n");
-		ret = -1;
-		goto out;
-	}
+	dist_a = -1;
+	dist_b = 0;
 
-out:
-	pci_dev_put(dma_up);
-	return ret;
-}
+put_and_return:
+	pci_dev_put(bb);
+	pci_dev_put(aa);
 
-static int upstream_bridges_match(struct pci_dev *provider,
-				  struct pci_dev *client)
-{
-	struct pci_dev *upstream;
-	int ret;
-
-	if (provider == client)
-		return 0;
-
-	upstream = get_upstream_bridge_port(provider);
-	if (!upstream) {
-		pci_warn(provider, "not behind a PCI bridge\n");
-		return -1;
-	}
-
-	ret = __upstream_bridges_match(upstream, client);
-
-	pci_dev_put(upstream);
-
-	return ret;
+	return dist_a + dist_b;
 }
 
 struct pci_p2pdma_client {
@@ -417,7 +427,10 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 	if (item && item->provider) {
 		provider = item->provider;
 
-		if (upstream_bridges_match(provider, client) < 0) {
+		if (upstream_bridge_distance(provider, client) < 0) {
+			dev_warn(dev,
+				 "cannot be used for peer-to-peer DMA as it is not reachable by the provider\n");
+
 			ret = -EXDEV;
 			goto put_client;
 		}
@@ -530,7 +543,7 @@ int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients)
 		if (pos->client == provider)
 			continue;
 
-		ret = __upstream_bridges_match(upstream, pos->client);
+		ret = upstream_bridge_distance(upstream, pos->client);
 		if (ret < 0)
 			goto no_match;
 
