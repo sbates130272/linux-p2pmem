@@ -1698,6 +1698,7 @@ nvmet_fc_alloc_tgt_pgs(struct nvmet_fc_fcp_iod *fod)
 {
 	struct scatterlist *sg;
 	unsigned int nent;
+	int ret;
 
 	sg = sgl_alloc(fod->req.transfer_len, GFP_KERNEL, &nent);
 	if (!sg)
@@ -1705,10 +1706,12 @@ nvmet_fc_alloc_tgt_pgs(struct nvmet_fc_fcp_iod *fod)
 
 	fod->data_sg = sg;
 	fod->data_sg_cnt = nent;
-	fod->data_sg_cnt = fc_dma_map_sg(fod->tgtport->dev, sg, nent,
-				((fod->io_dir == NVMET_FCP_WRITE) ?
-					DMA_FROM_DEVICE : DMA_TO_DEVICE));
-				/* note: write from initiator perspective */
+	ret = fc_dma_map_sg(fod->tgtport->dev, sg, nent,
+			    ((fod->io_dir == NVMET_FCP_WRITE) ?
+				    DMA_FROM_DEVICE : DMA_TO_DEVICE));
+			    /* note: write from initiator perspective */
+	if (!ret)
+		goto out;
 
 	return 0;
 
