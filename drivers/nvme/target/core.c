@@ -610,7 +610,6 @@ EXPORT_SYMBOL_GPL(nvmet_req_execute);
 
 int nvmet_req_alloc_sgl(struct nvmet_req *req, struct nvmet_sq *sq)
 {
-	int ret;
 	struct pci_dev *p2p_dev = NULL;
 
 	if (sq->ctrl)
