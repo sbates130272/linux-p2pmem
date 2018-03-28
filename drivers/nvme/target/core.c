@@ -618,9 +618,9 @@ int nvmet_req_alloc_sgl(struct nvmet_req *req, struct nvmet_sq *sq)
 
 	req->p2p_dev = NULL;
 	if (sq->qid && p2p_dev) {
-		ret = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg,
-					   &req->sg_cnt, req->transfer_len);
-		if (ret) {
+		req->sg = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg_cnt,
+					       req->transfer_len);
+		if (req->sg) {
 			req->p2p_dev = p2p_dev;
 			return 0;
 		}
@@ -637,7 +637,7 @@ EXPORT_SYMBOL_GPL(nvmet_req_alloc_sgl);
 void nvmet_req_free_sgl(struct nvmet_req *req)
 {
 	if (req->p2p_dev)
-		pci_p2pmem_free_sgl(req->p2p_dev, req->sg, req->sg_cnt);
+		pci_p2pmem_free_sgl(req->p2p_dev, req->sg);
 	else
 		sgl_free(req->sg);
 }
