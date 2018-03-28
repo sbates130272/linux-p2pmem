@@ -1700,7 +1700,7 @@ nvmet_fc_alloc_tgt_pgs(struct nvmet_fc_fcp_iod *fod)
 	if (ret < 0)
 		return NVME_SC_INTERNAL;
 
-	ret = fc_dma_map_sg(fod->tgtport->dev, &fod->req.sq, fod->req.sq_cnt,
+	ret = fc_dma_map_sg(fod->tgtport->dev, fod->req.sg, fod->req.sg_cnt,
 			    ((fod->io_dir == NVMET_FCP_WRITE) ?
 				    DMA_FROM_DEVICE : DMA_TO_DEVICE));
 			    /* note: write from initiator perspective */
