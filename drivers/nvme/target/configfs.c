@@ -902,7 +902,9 @@ static ssize_t nvmet_p2pmem_store(struct config_item *item,
 			pci_dev_put(p2p_dev);
 			return -ENODEV;
 		}
-	} else if ((page[0] == '0' || page[0] == '1') && page[1] != 0) {
+	} else if (strncasecmp(page, "auto", strlen(page)) == 0) {
+		use_p2pmem = 1;
+	} else if ((page[0] == '0' || page[0] == '1') && !iscntrl(page[1])) {
 		/*
 		 * If the user enters a PCI device that  doesn't exist
 		 * like "0000:01:00.1", we don't want strtobool to think
