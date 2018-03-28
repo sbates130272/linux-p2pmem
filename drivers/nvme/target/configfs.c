@@ -891,24 +891,8 @@ static ssize_t nvmet_p2pmem_store(struct config_item *item,
 	struct pci_dev *p2p_dev = NULL;
 	bool use_p2pmem;
 
-	switch (page[0]) {
-	case 'y':
-	case 'Y':
-	case 'a':
-	case 'A':
-		use_p2pmem = true;
-		break;
-	case 'n':
-	case 'N':
-		use_p2pmem = false;
-		break;
-	default:
-		dev = bus_find_device_by_name(&pci_bus_type, NULL, page);
-		if (!dev) {
-			pr_err("No such PCI device: %s\n", page);
-			return -ENODEV;
-		}
-
+	dev = bus_find_device_by_name(&pci_bus_type, NULL, page);
+	if (dev) {
 		use_p2pmem = true;
 		p2p_dev = to_pci_dev(dev);
 
@@ -918,6 +902,16 @@ static ssize_t nvmet_p2pmem_store(struct config_item *item,
 			pci_dev_put(p2p_dev);
 			return -ENODEV;
 		}
+	} else if ((page[0] == '0' || page[0] == '1') && page[1] != 0) {
+		/*
+		 * If the user enters a PCI device that  doesn't exist
+		 * like "0000:01:00.1", we don't want strtobool to think
+		 * it's a '0' when it's clearly not what the user wanted.
+		 * So we require 0's and 1's to be exactly one character.
+		 */
+		goto no_such_pci_device;
+	} else if (strtobool(page, &use_p2pmem)) {
+		goto no_such_pci_device;
 	}
 
 	down_write(&nvmet_config_sem);
@@ -927,6 +921,10 @@ static ssize_t nvmet_p2pmem_store(struct config_item *item,
 	up_write(&nvmet_config_sem);
 
 	return count;
+
+no_such_pci_device:
+	pr_err("No such PCI device: %s\n", page);
+	return -ENODEV;
 }
 CONFIGFS_ATTR(nvmet_, p2pmem);
 #endif /* CONFIG_PCI_P2PDMA */
