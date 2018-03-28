@@ -689,15 +689,15 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_virt_to_bus);
  *
  * Returns 0 on success
  */
-int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
-			 unsigned int *nents, u32 length)
+struct scatterlist *pci_p2pmem_alloc_sgl(struct pci_dev *pdev,
+					 unsigned int *nents, u32 length)
 {
 	struct scatterlist *sg;
 	void *addr;
 
 	sg = kzalloc(sizeof(*sg), GFP_KERNEL);
 	if (!sg)
-		return -ENOMEM;
+		return NULL;
 
 	sg_init_table(sg, 1);
 
@@ -706,13 +706,12 @@ int pci_p2pmem_alloc_sgl(struct pci_dev *pdev, struct scatterlist **sgl,
 		goto out_free_sg;
 
 	sg_set_buf(sg, addr, length);
-	*sgl = sg;
 	*nents = 1;
-	return 0;
+	return sg;
 
 out_free_sg:
 	kfree(sg);
-	return -ENOMEM;
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_alloc_sgl);
 
@@ -722,17 +721,17 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_alloc_sgl);
  * @sgl: the allocated scatterlist
  * @nents: the number of SG entries in the list
  */
-void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl,
-			 unsigned int nents)
+void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl)
 {
 	struct scatterlist *sg;
 	int count;
 
-	if (!sgl || !nents)
-		return;
+	for_each_sg(sgl, sg, INT_MAX, count) {
+		if (!sg)
+			break;
 
-	for_each_sg(sgl, sg, nents, count)
 		pci_free_p2pmem(pdev, sg_virt(sg), sg->length);
+	}
 	kfree(sgl);
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_free_sgl);
