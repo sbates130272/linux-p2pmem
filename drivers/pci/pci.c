@@ -2982,6 +2982,92 @@ void pci_request_acs(void)
 	pci_acs_enable = 1;
 }
 
+#define DISABLE_ACS_REDIR_PARAM_SIZE COMMAND_LINE_SIZE
+static char disable_acs_redir_param[DISABLE_ACS_REDIR_PARAM_SIZE] = {0};
+static DEFINE_SPINLOCK(disable_acs_redir_lock);
+
+static ssize_t pci_set_disable_acs_redir_param(const char *buf, size_t count)
+{
+	if (count > DISABLE_ACS_REDIR_PARAM_SIZE - 1)
+		count = DISABLE_ACS_REDIR_PARAM_SIZE - 1;
+	spin_lock(&disable_acs_redir_lock);
+	strncpy(disable_acs_redir_param, buf, count);
+	disable_acs_redir_param[count] = '\0';
+	spin_unlock(&disable_acs_redir_lock);
+	return count;
+}
+
+static ssize_t pci_disable_acs_redir_show(struct bus_type *bus, char *buf)
+{
+	size_t count;
+
+	spin_lock(&disable_acs_redir_lock);
+	count = snprintf(buf, PAGE_SIZE, "%s\n", disable_acs_redir_param);
+	spin_unlock(&disable_acs_redir_lock);
+	return count;
+}
+
+static BUS_ATTR(disable_acs_redir, 0444, pci_disable_acs_redir_show, NULL);
+
+static int __init pci_disable_acs_redir_sysfs_init(void)
+{
+	return bus_create_file(&pci_bus_type, &bus_attr_disable_acs_redir);
+}
+late_initcall(pci_disable_acs_redir_sysfs_init);
+
+/**
+ * pci_disable_acs_redir - disable ACS redirect capabilities
+ * @dev: the PCI device
+ *
+ * For only devices specified in the disable_acs_redir parameter.
+ */
+static void pci_disable_acs_redir(struct pci_dev *dev)
+{
+	int ret = 0;
+	const char *p;
+	int pos;
+	u16 ctrl;
+
+	spin_lock(&disable_acs_redir_lock);
+
+	p = disable_acs_redir_param;
+	while (*p) {
+		ret = pci_dev_str_match(dev, p, &p);
+		if (ret < 0) {
+			pr_info_once("PCI: Can't parse disable_acs_redir parameter: %s\n",
+				     disable_acs_redir_param);
+
+			break;
+		} else if (ret == 1) {
+			/* Found a match */
+			break;
+		}
+
+		if (*p != ';' && *p != ',') {
+			/* End of param or invalid format */
+			break;
+		}
+		p++;
+	}
+	spin_unlock(&disable_acs_redir_lock);
+
+	if (ret != 1)
+		return;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);
+	if (!pos)
+		return;
+
+	pci_read_config_word(dev, pos + PCI_ACS_CTRL, &ctrl);
+
+	/* P2P Request & Completion Redirect */
+	ctrl &= ~(PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC);
+
+	pci_write_config_word(dev, pos + PCI_ACS_CTRL, ctrl);
+
+	pci_info(dev, "disabled ACS redirect\n");
+}
+
 /**
  * pci_std_enable_acs - enable ACS on devices using standard ACS capabilites
  * @dev: the PCI device
@@ -3021,12 +3107,22 @@ static void pci_std_enable_acs(struct pci_dev *dev)
 void pci_enable_acs(struct pci_dev *dev)
 {
 	if (!pci_acs_enable)
-		return;
+		goto disable_acs_redir;
 
 	if (!pci_dev_specific_enable_acs(dev))
-		return;
+		goto disable_acs_redir;
 
 	pci_std_enable_acs(dev);
+
+disable_acs_redir:
+	/*
+	 * Note: pci_disable_acs_redir() must be called even if
+	 * ACS is not enabled by the kernel because the firmware
+	 * may have unexpectedly set the flags. So if we are told
+	 * to disable it, we should always disable it after setting
+	 * the kernel's default preferences.
+	 */
+	pci_disable_acs_redir(dev);
 }
 
 static bool pci_acs_flags_enabled(struct pci_dev *pdev, u16 acs_flags)
@@ -5966,6 +6062,9 @@ static int __init pci_setup(char *str)
 				pcie_bus_config = PCIE_BUS_PEER2PEER;
 			} else if (!strncmp(str, "pcie_scan_all", 13)) {
 				pci_add_flags(PCI_SCAN_ALL_PCIE_DEVS);
+			} else if (!strncmp(str, "disable_acs_redir=", 18)) {
+				pci_set_disable_acs_redir_param(str + 18,
+					strlen(str + 18));
 			} else {
 				printk(KERN_ERR "PCI: Unknown option `%s'\n",
 						str);
