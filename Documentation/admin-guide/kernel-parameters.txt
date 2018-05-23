@@ -3000,14 +3000,18 @@
 				or a set of devices (<pci_dev>). These are
 				specified in one of the following formats:
 
-				[<domain>:]<bus>:<slot>.<func>
+				[<domain>:]<bus>:<slot>.<func>[/<slot>.<func>][/ ...]
 				pci:<vendor>:<device>[:<subvendor>:<subdevice>]
 
 				Note: the first format specifies a PCI
 				bus/slot/function address which may change
 				if new hardware is inserted, if motherboard
 				firmware changes, or due to changes caused
-				by other kernel parameters. The second format
+				by other kernel parameters. Optionally
+				a path from a device through multiple
+				slot/function addresses can be specified
+				after the base address (this is more robust
+				against renumbering issues). The second format
 				selects devices using IDs from the
 				configuration space which may match multiple
 				devices in the system.
