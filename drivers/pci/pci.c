@@ -184,22 +184,116 @@ EXPORT_SYMBOL_GPL(pci_ioremap_wc_bar);
 #endif
 
 /**
+ * pci_dev_str_match_path - test if a path string matches a device
+ * @dev:    the PCI device to test
+ * @p:      string to match the device against
+ * @endptr: pointer to the string after the match
+ *
+ * Test if a string (typically from a kernel parameter) formated as a
+ * path of slot/function addresses matches a PCI device. The string must
+ * be of the form:
+ *
+ *   [<domain>:]<bus>:<slot>.<func>/<slot>.<func>[/ ...]
+ *
+ * A path for a device can be obtained using 'lspci -t'. Using a path
+ * is more robust against renumbering of devices than using only
+ * a single bus, slot and function address.
+ *
+ * Returns 1 if the string matches the device, 0 if it does not and
+ * a negative error code if it fails to parse the string.
+ */
+static int pci_dev_str_match_path(struct pci_dev *dev, const char *p,
+				  const char **endptr)
+{
+	int ret;
+	int seg, bus, slot, func, count;
+	u8 *devfn_path;
+	int num_devfn = 0;
+	struct pci_dev *tmp;
+
+	ret = sscanf(p, "%x:%x:%x.%x%n", &seg, &bus, &slot,
+		     &func, &count);
+	if (ret != 4) {
+		seg = 0;
+		ret = sscanf(p, "%x:%x.%x%n", &bus, &slot,
+			     &func, &count);
+		if (ret != 3)
+			return -EINVAL;
+	}
+
+	p += count;
+
+	devfn_path = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	devfn_path[num_devfn++] = PCI_DEVFN(slot, func);
+
+	while (*p && *p != ',' && *p != ';') {
+		ret = sscanf(p, "/%x.%x%n", &slot, &func, &count);
+		if (ret != 2) {
+			ret = -EINVAL;
+			goto free_and_exit;
+		}
+
+		p += count;
+		devfn_path[num_devfn++] = PCI_DEVFN(slot, func);
+		if (num_devfn >= PAGE_SIZE) {
+			ret = -EINVAL;
+			goto free_and_exit;
+		}
+	}
+
+	*endptr = p;
+	ret = 0;
+
+	if (seg != pci_domain_nr(dev->bus))
+		goto free_and_exit;
+
+	pci_dev_get(dev);
+	while (num_devfn > 0 && dev) {
+		num_devfn--;
+
+		if (devfn_path[num_devfn] != dev->devfn)
+			goto put_and_exit;
+
+		if (num_devfn == 0 && bus == dev->bus->number) {
+			ret = 1;
+			goto put_and_exit;
+		}
+
+		tmp = pci_dev_get(pci_upstream_bridge(dev));
+		pci_dev_put(dev);
+		dev = tmp;
+	}
+
+put_and_exit:
+	pci_dev_put(dev);
+free_and_exit:
+	kfree(devfn_path);
+	return ret;
+}
+
+/**
  * pci_dev_str_match - test if a string matches a device
  * @dev:    the PCI device to test
  * @p:      string to match the device against
  * @endptr: pointer to the string after the match
  *
  * Test if a string (typically from a kernel parameter) matches a
- * specified. The string may be of one of two forms formats:
+ * specified. The string may be of one of three formats:
  *
  *   [<domain>:]<bus>:<slot>.<func>
+ *   path:[<domain>:]<bus>:<slot>.<func>/<slot>.<func>[/ ...]
  *   pci:<vendor>:<device>[:<subvendor>:<subdevice>]
  *
  * The first format specifies a PCI bus/slot/function address which
  * may change if new hardware is inserted, if motherboard firmware changes,
  * or due to changes caused in kernel parameters.
  *
- * The second format matches devices using IDs in the configuration
+ * The second format specifies a PCI bus/slot/function root address and
+ * a path of slot/function addresses to the specific device from the root.
+ * The path for a device can be determined through the use of 'lspci -t'.
+ * This format is more robust against renumbering issues than the first format.
+
+ * The third format matches devices using IDs in the configuration
  * space which may match multiple devices in the system. A value of 0
  * for any field will match all devices.
  *
@@ -236,7 +330,15 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 		    (!subsystem_device ||
 			    subsystem_device == dev->subsystem_device))
 			goto found;
+	} else if (strncmp(p, "path:", 5) == 0) {
+		/* PCI Root Bus and a path of Slot,Function IDs */
+		p += 5;
 
+		ret = pci_dev_str_match_path(dev, p, &p);
+		if (ret < 0)
+			return ret;
+		else if (ret)
+			goto found;
 	} else {
 		/* PCI Bus,Slot,Function ids are specified */
 		ret = sscanf(p, "%x:%x:%x.%x%n", &seg, &bus, &slot,
