@@ -15,6 +15,7 @@
 #include <linux/memremap.h>
 #include <linux/percpu-refcount.h>
 #include <linux/random.h>
+#include <linux/seq_buf.h>
 
 struct pci_p2pdma {
 	struct percpu_ref devmap_ref;
@@ -239,6 +240,38 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 }
 
 /*
+ * Check if a PCI bridge has it's ACS redirection bits set to redirect P2P
+ * TLPs upstream via ACS. Returns 1 if the packets will be redirected
+ * upstream, 0 otherwise.
+ */
+static int pci_bridge_has_acs_redir(struct pci_dev *dev)
+{
+	int pos;
+	u16 ctrl;
+
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);
+	if (!pos)
+		return 0;
+
+	pci_read_config_word(dev, pos + PCI_ACS_CTRL, &ctrl);
+
+	if (ctrl & (PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC))
+		return 1;
+
+	return 0;
+}
+
+static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *dev)
+{
+	if (!buf)
+		return;
+
+	seq_buf_printf(buf, "%04x:%02x:%02x.%x;", pci_domain_nr(dev->bus),
+		       dev->bus->number, PCI_SLOT(dev->devfn),
+		       PCI_FUNC(dev->devfn));
+}
+
+/*
  * Find the distance through the nearest common upstream bridge between
  * two PCI devices.
  *
@@ -268,31 +301,44 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
  * separate hierarchy domain and there's no way to determine whether the root
  * complex supports forwarding between them.
  *
- * In the case where two devices are connected to different PCIe switches
+ * In the case where two devices are connected to different PCIe switches,
  * this function will still return a positive distance as long as both
  * switches evenutally have a common upstream bridge. Note this covers
  * the case of using multiple PCIe switches to achieve a desired level of
  * fan-out from a root port. The exact distance will be a function of the
  * number of switches between Device A and Device B.
+ *
+ * If a bridge which has any ACS redirection bits set is in the path
+ * then this functions will return -2. This is so we reject any
+ * cases where the TLPs are forwarded up into the root complex.
+ * In this case, a list of all infringing bridge addresses will be
+ * populated in acs_list (assuming it's non-null) for printk purposes.
  */
 static int upstream_bridge_distance(struct pci_dev *a,
-				    struct pci_dev *b)
+				    struct pci_dev *b,
+				    struct seq_buf *acs_list)
 {
 	int dist_a = 0;
 	int dist_b = 0;
 	struct pci_dev *aa, *bb = NULL, *tmp;
+	int acs_cnt = 0;
 
 	aa = pci_dev_get(a);
 
 	while (aa) {
 		dist_b = 0;
 
+		if (pci_bridge_has_acs_redir(aa)) {
+			seq_buf_print_bus_devfn(acs_list, aa);
+			acs_cnt++;
+		}
+
 		pci_dev_put(bb);
 		bb = pci_dev_get(b);
 
 		while (bb) {
 			if (aa == bb)
-				goto put_and_return;
+				goto check_b_path_acs;
 
 			tmp = pci_dev_get(pci_upstream_bridge(bb));
 			pci_dev_put(bb);
@@ -310,12 +356,61 @@ static int upstream_bridge_distance(struct pci_dev *a,
 
 	dist_a = -1;
 	dist_b = 0;
+	goto put_and_return;
+
+check_b_path_acs:
+	pci_dev_put(bb);
+	bb = pci_dev_get(b);
+
+	while (bb) {
+		if (aa == bb)
+			break;
+
+		if (pci_bridge_has_acs_redir(bb)) {
+			seq_buf_print_bus_devfn(acs_list, bb);
+			acs_cnt++;
+		}
+
+		tmp = pci_dev_get(pci_upstream_bridge(bb));
+		pci_dev_put(bb);
+		bb = tmp;
+	}
+
+	if (acs_cnt) {
+		dist_a = -2;
+		dist_b = 0;
+	}
 
 put_and_return:
 	pci_dev_put(bb);
 	pci_dev_put(aa);
 
 	return dist_a + dist_b;
+}
+
+static int upstream_bridge_distance_warn(struct pci_dev *provider,
+					 struct pci_dev *client)
+{
+	struct seq_buf acs_list;
+	int ret;
+
+	seq_buf_init(&acs_list, kmalloc(PAGE_SIZE, GFP_KERNEL), PAGE_SIZE);
+
+	ret = upstream_bridge_distance(provider, client, &acs_list);
+	if (ret == -2) {
+		pci_warn(client, "cannot be used for peer-to-peer DMA as ACS redirect is set between the client and provider\n");
+		// Drop final semicolon
+		acs_list.buffer[acs_list.len-1] = 0;
+		pci_warn(client, "to disable ACS redirect for this path, add the kernel parameter: pci=disable_acs_redir=%s\n",
+			 acs_list.buffer);
+
+	} else if (ret < 0) {
+		pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider do not share an upstream bridge\n");
+	}
+
+	kfree(acs_list.buffer);
+
+	return ret;
 }
 
 struct pci_p2pdma_client {
@@ -353,7 +448,6 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 		return -ENODEV;
 	}
 
-
 	client = find_parent_pci_dev(dev);
 	if (!client) {
 		dev_warn(dev, "cannot be used for peer-to-peer DMA as it is not a PCI device\n");
@@ -364,9 +458,8 @@ int pci_p2pdma_add_client(struct list_head *head, struct device *dev)
 	if (item && item->provider) {
 		provider = item->provider;
 
-		if (upstream_bridge_distance(provider, client) < 0) {
-			dev_warn(dev, "cannot be used for peer-to-peer DMA as the client and provider do not share an upstream bridge\n");
-
+		ret = upstream_bridge_distance_warn(provider, client);
+		if (ret < 0) {
 			ret = -EXDEV;
 			goto put_client;
 		}
@@ -452,6 +545,7 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
  *	a p2pdma provider and the clients in use.
  * @provider: p2pdma provider to check against the client list
  * @clients: list of devices to check (NULL-terminated)
+ * @verbose: if true, print warnings for devices when we return -1
  *
  * Returns -1 if any of the clients are not compatible (behind the same
  * root port as the provider), otherwise returns a positive number where
@@ -463,27 +557,38 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_client_list_free);
  * for the user. Future work can expand this to white-list root complexes that
  * can safely forward between each ports.
  */
-int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients)
+int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients,
+		        bool verbose)
 {
 	struct pci_p2pdma_client *pos;
 	int ret;
 	int distance = 0;
+	bool not_supported = false;
 
 	if (list_empty(clients))
 		return -1;
 
 	list_for_each_entry(pos, clients, list) {
-		ret = upstream_bridge_distance(provider, pos->client);
+		if (verbose)
+			ret = upstream_bridge_distance_warn(provider,
+							    pos->client);
+		else
+			ret = upstream_bridge_distance(provider, pos->client,
+						       NULL);
+
 		if (ret < 0)
-			goto no_match;
+			not_supported = true;
+
+		if (not_supported && !verbose)
+			break;
 
 		distance += ret;
 	}
 
-	ret = distance;
+	if (not_supported)
+		return -1;
 
-no_match:
-	return ret;
+	return distance;
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_distance);
 
@@ -501,7 +606,7 @@ bool pci_p2pdma_assign_provider(struct pci_dev *provider,
 {
 	struct pci_p2pdma_client *pos;
 
-	if (pci_p2pdma_distance(provider, clients) < 0)
+	if (pci_p2pdma_distance(provider, clients, true) < 0)
 		return false;
 
 	list_for_each_entry(pos, clients, list)
@@ -554,7 +659,7 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 		if (!pci_has_p2pmem(pdev))
 			continue;
 
-		distance = pci_p2pdma_distance(pdev, clients);
+		distance = pci_p2pdma_distance(pdev, clients, false);
 		if (distance < 0 || distance > closest_distance)
 			continue;
 
