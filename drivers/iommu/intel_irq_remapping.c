@@ -356,6 +356,8 @@ static int set_hpet_sid(struct irte *irte, u8 id)
 struct set_msi_sid_data {
 	struct pci_dev *pdev;
 	u16 alias;
+	int count;
+	int busmatch_count;
 };
 
 static int set_msi_sid_cb(struct pci_dev *pdev, u16 alias, void *opaque)
@@ -364,6 +366,10 @@ static int set_msi_sid_cb(struct pci_dev *pdev, u16 alias, void *opaque)
 
 	data->pdev = pdev;
 	data->alias = alias;
+	data->count++;
+
+	if (PCI_BUS_NUM(alias) == pdev->bus->number)
+		data->busmatch_count++;
 
 	return 0;
 }
@@ -375,6 +381,8 @@ static int set_msi_sid(struct irte *irte, struct pci_dev *dev)
 	if (!irte || !dev)
 		return -1;
 
+	data.count = 0;
+	data.busmatch_count = 0;
 	pci_for_each_dma_alias(dev, set_msi_sid_cb, &data);
 
 	/*
@@ -393,6 +401,10 @@ static int set_msi_sid(struct irte *irte, struct pci_dev *dev)
 	if (PCI_BUS_NUM(data.alias) != data.pdev->bus->number)
 		set_irte_sid(irte, SVT_VERIFY_BUS, SQ_ALL_16,
 			     PCI_DEVID(PCI_BUS_NUM(data.alias),
+				       dev->bus->number));
+	else if (data.count >= 2 && data.busmatch_count == data.count)
+		set_irte_sid(irte, SVT_VERIFY_BUS, SQ_ALL_16,
+			     PCI_DEVID(dev->bus->number,
 				       dev->bus->number));
 	else if (data.pdev->bus->number != dev->bus->number)
 		set_irte_sid(irte, SVT_VERIFY_SID_SQ, SQ_ALL_16, data.alias);
