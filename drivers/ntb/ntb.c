@@ -100,6 +100,8 @@ EXPORT_SYMBOL(ntb_unregister_client);
 
 int ntb_register_device(struct ntb_dev *ntb)
 {
+	int ret;
+
 	if (!ntb)
 		return -EINVAL;
 	if (!ntb->pdev)
@@ -120,7 +122,16 @@ int ntb_register_device(struct ntb_dev *ntb)
 	ntb->ctx_ops = NULL;
 	spin_lock_init(&ntb->ctx_lock);
 
-	return device_register(&ntb->dev);
+	device_initialize(&ntb->dev);
+
+	ret = dma_coerce_mask_and_coherent(&ntb->dev,
+					   dma_get_mask(&ntb->pdev->dev));
+	if (ret != 0) {
+		dev_err(&ntb->dev, "Failed to set NTB device DMA bit mask\n");
+		return ret;
+	}
+
+	return device_add(&ntb->dev);
 }
 EXPORT_SYMBOL(ntb_register_device);
 
