@@ -36,6 +36,21 @@ int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 			    bool *use_p2pdma);
 ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 			       bool use_p2pdma);
+
+struct p2pdmem_dev;
+#ifdef CONFIG_PCI_P2PMEM_HACK
+struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev);
+void p2pmem_destroy(struct p2pmem_dev *p);
+#else
+static inline struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev)
+{
+	return NULL;
+}
+static inline void p2pmem_destroy(struct p2pmem_dev *p)
+{
+}
+#endif
+
 #else /* CONFIG_PCI_P2PDMA */
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)

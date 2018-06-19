@@ -23,6 +23,7 @@ struct pci_p2pdma {
 	struct percpu_ref devmap_ref;
 	struct completion devmap_ref_done;
 	struct gen_pool *pool;
+	struct p2pmem_dev *p2pmem_dev;
 	bool p2pmem_published;
 };
 
@@ -102,6 +103,8 @@ static void pci_p2pdma_release(void *data)
 
 	if (!pdev->p2pdma)
 		return;
+
+	p2pmem_destroy(pdev->p2pdma->p2pmem_dev);
 
 	wait_for_completion(&pdev->p2pdma->devmap_ref_done);
 	percpu_ref_exit(&pdev->p2pdma->devmap_ref);
@@ -212,6 +215,9 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 
 	pci_info(pdev, "added peer-to-peer DMA memory %pR\n",
 		 &pgmap->res);
+
+	if (!pdev->p2pdma->p2pmem_dev)
+		pdev->p2pdma->p2pmem_dev = p2pmem_create(pdev);
 
 	return 0;
 
