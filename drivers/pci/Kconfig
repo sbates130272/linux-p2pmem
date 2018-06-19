@@ -149,6 +149,16 @@ config PCI_P2PDMA
 
 	  If unsure, say N.
 
+config PCI_P2PDMA_DEV
+	tristate "PCI peer-to-peer device"
+	depends on PCI_P2PDMA
+	help
+	  Create a device tree entry for each p2pmem device in the
+	  system. Note this is a very nasty hack and not part of the
+	  official kernel submission.
+
+	  If unsure, say N.
+
 config PCI_LABEL
 	def_bool y if (DMI || ACPI)
 	depends on PCI
