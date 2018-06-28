@@ -204,7 +204,10 @@ __list_lru_walk_one(struct list_lru *lru, int nid, int memcg_idx,
 	struct list_head *item, *n;
 	unsigned long isolated = 0;
 
-	spin_lock(&nlru->lock);
+	if (lru->lock_irq)
+		spin_lock_irq(&nlru->lock);
+	else
+		spin_lock(&nlru->lock);
 	l = list_lru_from_memcg_idx(nlru, memcg_idx);
 restart:
 	list_for_each_safe(item, n, &l->list) {
@@ -251,7 +254,10 @@ restart:
 		}
 	}
 
-	spin_unlock(&nlru->lock);
+	if (lru->lock_irq)
+		spin_unlock_irq(&nlru->lock);
+	else
+		spin_unlock(&nlru->lock);
 	return isolated;
 }
 
@@ -553,7 +559,7 @@ static void memcg_destroy_list_lru(struct list_lru *lru)
 }
 #endif /* CONFIG_MEMCG && !CONFIG_SLOB */
 
-int __list_lru_init(struct list_lru *lru, bool memcg_aware,
+int __list_lru_init(struct list_lru *lru, bool memcg_aware, bool lock_irq,
 		    struct lock_class_key *key)
 {
 	int i;
@@ -580,7 +586,7 @@ int __list_lru_init(struct list_lru *lru, bool memcg_aware,
 		lru->node = NULL;
 		goto out;
 	}
-
+	lru->lock_irq = lock_irq;
 	list_lru_register(lru);
 out:
 	memcg_put_cache_ids();

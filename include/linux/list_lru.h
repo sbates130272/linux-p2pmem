@@ -51,18 +51,22 @@ struct list_lru_node {
 
 struct list_lru {
 	struct list_lru_node	*node;
+	bool			lock_irq;
 #if defined(CONFIG_MEMCG) && !defined(CONFIG_SLOB)
 	struct list_head	list;
 #endif
 };
 
 void list_lru_destroy(struct list_lru *lru);
-int __list_lru_init(struct list_lru *lru, bool memcg_aware,
+int __list_lru_init(struct list_lru *lru, bool memcg_aware, bool lock_irq,
 		    struct lock_class_key *key);
 
-#define list_lru_init(lru)		__list_lru_init((lru), false, NULL)
-#define list_lru_init_key(lru, key)	__list_lru_init((lru), false, (key))
-#define list_lru_init_memcg(lru)	__list_lru_init((lru), true, NULL)
+#define list_lru_init(lru)		__list_lru_init((lru), false, false, \
+							NULL)
+#define list_lru_init_key(lru, key)	__list_lru_init((lru), false, false, \
+							(key))
+#define list_lru_init_memcg(lru)	__list_lru_init((lru), true, false, \
+							NULL)
 
 int memcg_update_all_list_lrus(int num_memcgs);
 void memcg_drain_all_list_lrus(int src_idx, int dst_idx);

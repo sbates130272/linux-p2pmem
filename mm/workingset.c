@@ -480,13 +480,8 @@ out:
 static unsigned long scan_shadow_nodes(struct shrinker *shrinker,
 				       struct shrink_control *sc)
 {
-	unsigned long ret;
-
-	/* list_lru lock nests inside the IRQ-safe i_pages lock */
-	local_irq_disable();
-	ret = list_lru_shrink_walk(&shadow_nodes, sc, shadow_lru_isolate, NULL);
-	local_irq_enable();
-	return ret;
+	return list_lru_shrink_walk(&shadow_nodes, sc, shadow_lru_isolate,
+				    NULL);
 }
 
 static struct shrinker workingset_shadow_shrinker = {
@@ -523,7 +518,8 @@ static int __init workingset_init(void)
 	pr_info("workingset: timestamp_bits=%d max_order=%d bucket_order=%u\n",
 	       timestamp_bits, max_order, bucket_order);
 
-	ret = __list_lru_init(&shadow_nodes, true, &shadow_nodes_key);
+	/* list_lru lock nests inside the IRQ-safe i_pages lock */
+	ret = __list_lru_init(&shadow_nodes, true, true, &shadow_nodes_key);
 	if (ret)
 		goto err;
 	ret = register_shrinker(&workingset_shadow_shrinker);
