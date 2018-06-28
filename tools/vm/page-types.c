@@ -305,7 +305,7 @@ static unsigned long kpagecount_read(uint64_t *buf,
 				     unsigned long index,
 				     unsigned long pages)
 {
-	return kpagecount_fd < 0 ? pages:
+	return kpagecount_fd < 0 ? pages :
 		do_u64_read(kpagecount_fd, PROC_KPAGECOUNT,
 			    buf, index, pages);
 }
