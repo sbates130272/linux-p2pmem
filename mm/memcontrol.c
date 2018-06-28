@@ -2732,7 +2732,7 @@ static long oom_evaluate_memcg(struct mem_cgroup *memcg,
 			}
 
 			task_lock(task);
-			if (!task->mm || task->mm->owner != task) {
+			if (!task->mm) {
 				task_unlock(task);
 				continue;
 			}
