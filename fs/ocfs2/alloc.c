@@ -1482,16 +1482,16 @@ static int ocfs2_find_branch_target(struct ocfs2_extent_tree *et,
 	while(le16_to_cpu(el->l_tree_depth) > 1) {
 		if (le16_to_cpu(el->l_next_free_rec) == 0) {
 			status = ocfs2_error(ocfs2_metadata_cache_get_super(et->et_ci),
-				             "Owner %llu has empty extent list (next_free_rec == 0)\n",
-				             (unsigned long long)ocfs2_metadata_cache_owner(et->et_ci));
+					"Owner %llu has empty extent list (next_free_rec == 0)\n",
+					(unsigned long long)ocfs2_metadata_cache_owner(et->et_ci));
 			goto bail;
 		}
 		i = le16_to_cpu(el->l_next_free_rec) - 1;
 		blkno = le64_to_cpu(el->l_recs[i].e_blkno);
 		if (!blkno) {
 			status = ocfs2_error(ocfs2_metadata_cache_get_super(et->et_ci),
-				             "Owner %llu has extent list where extent # %d has no physical block start\n",
-				             (unsigned long long)ocfs2_metadata_cache_owner(et->et_ci), i);
+					"Owner %llu has extent list where extent # %d has no physical block start\n",
+					(unsigned long long)ocfs2_metadata_cache_owner(et->et_ci), i);
 			goto bail;
 		}
 
@@ -3213,9 +3213,9 @@ rightmost_no_delete:
 
 		if (le16_to_cpu(el->l_next_free_rec) == 0) {
 			ret = ocfs2_error(ocfs2_metadata_cache_get_super(et->et_ci),
-				          "Owner %llu has empty extent block at %llu\n",
-				          (unsigned long long)ocfs2_metadata_cache_owner(et->et_ci),
-				          (unsigned long long)le64_to_cpu(eb->h_blkno));
+					"Owner %llu has empty extent block at %llu\n",
+					(unsigned long long)ocfs2_metadata_cache_owner(et->et_ci),
+					(unsigned long long)le64_to_cpu(eb->h_blkno));
 			goto out;
 		}
 
@@ -4409,10 +4409,10 @@ static int ocfs2_figure_merge_contig_type(struct ocfs2_extent_tree *et,
 				bh = path_leaf_bh(left_path);
 				eb = (struct ocfs2_extent_block *)bh->b_data;
 				status = ocfs2_error(sb,
-					             "Extent block #%llu has an invalid l_next_free_rec of %d.  It should have matched the l_count of %d\n",
-					             (unsigned long long)le64_to_cpu(eb->h_blkno),
-					             le16_to_cpu(new_el->l_next_free_rec),
-					             le16_to_cpu(new_el->l_count));
+						"Extent block #%llu has an invalid l_next_free_rec of %d.  It should have matched the l_count of %d\n",
+						(unsigned long long)le64_to_cpu(eb->h_blkno),
+						le16_to_cpu(new_el->l_next_free_rec),
+						le16_to_cpu(new_el->l_count));
 				goto free_left_path;
 			}
 			rec = &new_el->l_recs[
@@ -4463,9 +4463,9 @@ static int ocfs2_figure_merge_contig_type(struct ocfs2_extent_tree *et,
 				bh = path_leaf_bh(right_path);
 				eb = (struct ocfs2_extent_block *)bh->b_data;
 				status = ocfs2_error(sb,
-					             "Extent block #%llu has an invalid l_next_free_rec of %d\n",
-					             (unsigned long long)le64_to_cpu(eb->h_blkno),
-					             le16_to_cpu(new_el->l_next_free_rec));
+						"Extent block #%llu has an invalid l_next_free_rec of %d\n",
+						(unsigned long long)le64_to_cpu(eb->h_blkno),
+						le16_to_cpu(new_el->l_next_free_rec));
 				goto free_right_path;
 			}
 			rec = &new_el->l_recs[1];

@@ -664,9 +664,9 @@ int ocfs2_reserve_local_alloc_bits(struct ocfs2_super *osb,
 	if (le32_to_cpu(alloc->id1.bitmap1.i_used) !=
 	    ocfs2_local_alloc_count_bits(alloc)) {
 		status = ocfs2_error(osb->sb, "local alloc inode %llu says it has %u used bits, but a count shows %u\n",
-			             (unsigned long long)le64_to_cpu(alloc->i_blkno),
-			             le32_to_cpu(alloc->id1.bitmap1.i_used),
-			             ocfs2_local_alloc_count_bits(alloc));
+				(unsigned long long)le64_to_cpu(alloc->i_blkno),
+				le32_to_cpu(alloc->id1.bitmap1.i_used),
+				ocfs2_local_alloc_count_bits(alloc));
 		goto bail;
 	}
 #endif
