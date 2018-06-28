@@ -387,11 +387,6 @@ static inline void mem_cgroup_put(struct mem_cgroup *memcg)
 		css_put(&memcg->css);
 }
 
-static inline void mem_cgroup_put(struct mem_cgroup *memcg)
-{
-	css_put(&memcg->css);
-}
-
 #define mem_cgroup_from_counter(counter, member)	\
 	container_of(counter, struct mem_cgroup, member)
 
@@ -867,10 +862,6 @@ static inline struct mem_cgroup *get_mem_cgroup_from_mm(struct mm_struct *mm)
 static inline struct mem_cgroup *get_mem_cgroup_from_page(struct page *page)
 {
 	return NULL;
-}
-
-static inline void mem_cgroup_put(struct mem_cgroup *memcg)
-{
 }
 
 static inline void mem_cgroup_put(struct mem_cgroup *memcg)
