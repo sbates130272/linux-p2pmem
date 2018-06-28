@@ -28,6 +28,7 @@
 #include <linux/eventfd.h>
 #include <linux/mm.h>
 #include <linux/vmstat.h>
+#include <linux/oom.h>
 #include <linux/writeback.h>
 #include <linux/page-flags.h>
 
