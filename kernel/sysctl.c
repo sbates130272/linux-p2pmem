@@ -1099,6 +1099,14 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &hung_task_timeout_max,
 	},
 	{
+		.procname	= "hung_task_check_interval_secs",
+		.data		= &sysctl_hung_task_check_interval_secs,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= proc_dohung_task_timeout_secs,
+		.extra2		= &hung_task_timeout_max,
+	},
+	{
 		.procname	= "hung_task_warnings",
 		.data		= &sysctl_hung_task_warnings,
 		.maxlen		= sizeof(int),
