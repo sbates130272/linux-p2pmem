@@ -1183,8 +1183,6 @@ static const char *const memcg1_stat_names[] = {
 void mem_cgroup_print_oom_context(struct mem_cgroup *memcg, struct task_struct *p,
 	enum oom_constraint constraint, nodemask_t *nodemask)
 {
-	struct cgroup *origin_cgrp, *kill_cgrp;
-
 	rcu_read_lock();
 	pr_info("oom-kill:constraint=%s,nodemask=%*pbl",
 	   oom_constraint_text[constraint], nodemask_pr_args(nodemask));
