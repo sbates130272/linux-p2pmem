@@ -219,4 +219,8 @@ struct prctl_mm_map {
 # define PR_SPEC_DISABLE		(1UL << 2)
 # define PR_SPEC_FORCE_DISABLE		(1UL << 3)
 
+/* Process-based variant of PDEATHSIG */
+#define PR_SET_PDEATHSIG_PROC		48
+#define PR_GET_PDEATHSIG_PROC		49
+
 #endif /* _LINUX_PRCTL_H */
