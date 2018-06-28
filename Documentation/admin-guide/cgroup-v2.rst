@@ -1349,13 +1349,13 @@ of the OOM'ing cgroup.
 
 Leaf cgroups and cgroups with oom_group option set are compared based
 on their cumulative memory usage. The root cgroup is treated as a
-leaf memory cgroup as well, so it's compared with other leaf memory
+leaf memory cgroup as well, so it is compared with other leaf memory
 cgroups. Due to internal implementation restrictions the size of
-the root cgroup is a cumulative sum of oom_badness of all its tasks
+the root cgroup is the cumulative sum of oom_badness of all its tasks
 (in other words oom_score_adj of each task is obeyed). Relying on
-oom_score_adj (appart from OOM_SCORE_ADJ_MIN) can lead to over or
-underestimating of the root cgroup consumption and it is therefore
-discouraged. This might change in the future, though.
+oom_score_adj (apart from OOM_SCORE_ADJ_MIN) can lead to over- or
+underestimation of the root cgroup consumption and it is therefore
+discouraged. This might change in the future, however.
 
 If there are no cgroups with the enabled memory controller,
 the OOM killer is using the "traditional" process-based approach.
