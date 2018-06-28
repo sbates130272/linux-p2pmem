@@ -22,11 +22,11 @@ static int uptime_proc_show(struct seq_file *m, void *v)
 	ktime_get_boottime_ts64(&uptime);
 	idle.tv_sec = div_u64_rem(nsec, NSEC_PER_SEC, &rem);
 	idle.tv_nsec = rem;
-	seq_printf(m, "%lu.%02lu %lu.%02lu\n",
+	seq_printf(m, "%lu.%02u %lu.%02u\n",
 			(unsigned long) uptime.tv_sec,
-			(uptime.tv_nsec / (NSEC_PER_SEC / 100)),
+			(unsigned int)(uptime.tv_nsec / (NSEC_PER_SEC / 100)),
 			(unsigned long) idle.tv_sec,
-			(idle.tv_nsec / (NSEC_PER_SEC / 100)));
+			(unsigned int)(idle.tv_nsec / (NSEC_PER_SEC / 100)));
 	return 0;
 }
 
