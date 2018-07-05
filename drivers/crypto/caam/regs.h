@@ -138,18 +138,26 @@ static inline void clrsetbits_32(void __iomem *reg, u32 clear, u32 set)
  */
 static inline void wr_reg64(void __iomem *reg, u64 data)
 {
-	if (!caam_imx && caam_little_end)
+	if (caam_imx && caam_little_end) {
+		iowrite32(data >> 32, reg);
+		iowrite32(data, reg + sizeof(u32));
+	} else if (caam_little_end) {
 		iowrite64(data, reg);
-	else
+	} else {
 		iowrite64be(data, reg);
+	}
 }
 
 static inline u64 rd_reg64(void __iomem *reg)
 {
-	if (!caam_imx && caam_little_end)
+	if (caam_imx && caam_little_end) {
+		return ((u64)ioread32(reg) << 32) |
+			(u64)ioread32(reg + sizeof(u32));
+	} else if (caam_little_end) {
 		return ioread64(reg);
-	else
+	} else {
 		return ioread64be(reg);
+	}
 }
 
 static inline u64 cpu_to_caam_dma64(dma_addr_t value)
