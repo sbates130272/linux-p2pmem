@@ -12,6 +12,14 @@ menuconfig NTB
 
 if NTB
 
+config NTB_LIBMSI
+	tristate "NTB MSI Interrupt Library"
+	help
+	  This is a library for NTB clients to use MSI interrupt forwarding
+	  instead of (or in addition to) hardware doorbells. MSI interrupts
+	  typically offer better performance than doorbells and more
+	  MSI interrupts can be made available.
+
 source "drivers/ntb/hw/Kconfig"
 
 source "drivers/ntb/test/Kconfig"

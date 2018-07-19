@@ -58,9 +58,11 @@
 
 #include <linux/completion.h>
 #include <linux/device.h>
+#include <linux/interrupt.h>
 
 struct ntb_client;
 struct ntb_dev;
+struct ntb_msi;
 struct pci_dev;
 
 /**
@@ -425,6 +427,8 @@ struct ntb_dev {
 	spinlock_t			ctx_lock;
 	/* block unregister until device is fully released */
 	struct completion		released;
+
+	struct ntb_msi *msi;
 };
 #define dev_ntb(__dev) container_of((__dev), struct ntb_dev, dev)
 
@@ -1573,5 +1577,34 @@ static inline int ntb_peer_highest_mw_idx(struct ntb_dev *ntb, int pidx)
 
 	return ntb_mw_count(ntb, pidx) - ret - 1;
 }
+
+struct ntb_msi_desc {
+	u32 addr_offset;
+	u32 data;
+};
+
+int ntb_msi_init(struct ntb_dev *ntb);
+int ntb_msi_setup_mws(struct ntb_dev *ntb);
+void ntb_msi_clear_mws(struct ntb_dev *ntb);
+
+int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
+				  irq_handler_t thread_fn,
+				  const char *name, void *dev_id,
+				  struct ntb_msi_desc *msi_desc);
+
+static inline int ntbm_msi_request_irq(struct ntb_dev *ntb,
+				       irq_handler_t handler,
+				       const char *name, void *dev_id,
+				       struct ntb_msi_desc *msi_desc)
+{
+	return ntbm_msi_request_threaded_irq(ntb, handler, NULL, name,
+					     dev_id, msi_desc);
+}
+
+int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
+			 struct ntb_msi_desc *desc);
+int ntb_msi_peer_addr(struct ntb_dev *ntb, int peer,
+		      struct ntb_msi_desc *desc,
+		      phys_addr_t *msi_addr);
 
 #endif
