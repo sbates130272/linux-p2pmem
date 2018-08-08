@@ -107,6 +107,70 @@ static void write_pmem(void *pmem_addr, struct page *page,
 	}
 }
 
+static void pmem_dma_callback(void *data, const struct dmaengine_result *res)
+{
+	blk_status_t *dma_rc = data;
+	enum dmaengine_tx_result dma_err = res->result;
+
+	if (dma_err != DMA_TRANS_NOERROR)
+		*dma_rc = BLK_STS_IOERR;
+}
+
+static void write_pmem_dma(struct pmem_device *pmem, blk_status_t *dma_rc,
+			   void *pmem_addr, struct page *page,
+			   unsigned int off, unsigned int len)
+{
+	size_t pmem_off = (size_t)pmem_addr & ~PAGE_MASK;
+	struct dma_chan *chan = pmem->dma_chan;
+	struct dma_device *dma_dev = chan->device;
+	struct dma_async_tx_descriptor *txd;
+	struct dmaengine_unmap_data *unmap;
+	dma_cookie_t cookie;
+
+	if (!is_dma_copy_aligned(dma_dev, off, pmem_off, len))
+		goto fallback;
+
+	unmap = dmaengine_get_unmap_data(dma_dev->dev, 2, GFP_NOWAIT);
+	if (!unmap)
+		goto fallback;
+
+	unmap->len = len;
+	unmap->addr[0] = dma_map_page(dma_dev->dev, page, off, len,
+				      DMA_TO_DEVICE);
+	if (dma_mapping_error(dma_dev->dev, unmap->addr[0]))
+		goto fallback_put_unmap;
+	unmap->to_cnt = 1;
+
+	unmap->addr[1] = dma_map_page(dma_dev->dev, virt_to_page(pmem_addr),
+				      pmem_off, len, DMA_FROM_DEVICE);
+	if (dma_mapping_error(dma_dev->dev, unmap->addr[1]))
+		goto fallback_put_unmap;
+	unmap->from_cnt = 1;
+
+	txd = dma_dev->device_prep_dma_memcpy(chan, unmap->addr[1],
+					      unmap->addr[0], len,
+					      DMA_PREP_INTERRUPT);
+	if (!txd)
+		goto fallback_put_unmap;
+
+	txd->callback_result = pmem_dma_callback;
+	txd->callback_param = dma_rc;
+	dma_set_unmap(txd, unmap);
+
+	cookie = dmaengine_submit(txd);
+	if (dma_submit_error(cookie))
+		goto fallback_put_unmap;
+
+	dmaengine_unmap_put(unmap);
+
+	return;
+
+fallback_put_unmap:
+	dmaengine_unmap_put(unmap);
+fallback:
+	write_pmem(pmem_addr, page, off, len);
+}
+
 static blk_status_t read_pmem(struct page *page, unsigned int off,
 		void *pmem_addr, unsigned int len)
 {
@@ -129,9 +193,65 @@ static blk_status_t read_pmem(struct page *page, unsigned int off,
 	return BLK_STS_OK;
 }
 
-static blk_status_t pmem_do_bvec(struct pmem_device *pmem, struct page *page,
-			unsigned int len, unsigned int off, bool is_write,
-			sector_t sector)
+static int read_pmem_dma(struct pmem_device *pmem, blk_status_t *dma_rc,
+			 struct page *page, unsigned int off,
+			 void *pmem_addr, unsigned int len)
+{
+	size_t pmem_off = (size_t)pmem_addr & ~PAGE_MASK;
+	struct dma_chan *chan = pmem->dma_chan;
+	struct dma_device *dma_dev = chan->device;
+	struct dma_async_tx_descriptor *txd;
+	struct dmaengine_unmap_data *unmap;
+	dma_cookie_t cookie;
+
+	if (!is_dma_copy_aligned(dma_dev, off, pmem_off, len))
+		goto fallback;
+
+	unmap = dmaengine_get_unmap_data(dma_dev->dev, 2, GFP_NOWAIT);
+	if (!unmap)
+		goto fallback;
+
+	unmap->len = len;
+	unmap->addr[0] = dma_map_page(dma_dev->dev, virt_to_page(pmem_addr),
+				      pmem_off,len,
+				      DMA_TO_DEVICE);
+	if (dma_mapping_error(dma_dev->dev, unmap->addr[0]))
+		goto fallback_put_unmap;
+	unmap->to_cnt = 1;
+
+	unmap->addr[1] = dma_map_page(dma_dev->dev, page, off, len,
+				      DMA_FROM_DEVICE);
+	if (dma_mapping_error(dma_dev->dev, unmap->addr[1]))
+		goto fallback_put_unmap;
+	unmap->from_cnt = 1;
+
+	txd = dma_dev->device_prep_dma_memcpy(chan, unmap->addr[1],
+					      unmap->addr[0], len,
+					      DMA_PREP_INTERRUPT);
+	if (!txd)
+		goto fallback_put_unmap;
+
+	txd->callback_result = pmem_dma_callback;
+	txd->callback_param = dma_rc;
+	dma_set_unmap(txd, unmap);
+
+	cookie = dmaengine_submit(txd);
+	if (dma_submit_error(cookie))
+		goto fallback_put_unmap;
+
+	dmaengine_unmap_put(unmap);
+
+	return 0;
+
+fallback_put_unmap:
+	dmaengine_unmap_put(unmap);
+fallback:
+	return read_pmem(page, off, pmem_addr, len);
+}
+
+static blk_status_t pmem_do_bvec(struct pmem_device *pmem, blk_status_t *dma_rc,
+			struct page *page, unsigned int len, unsigned int off,
+			bool is_write, sector_t sector)
 {
 	blk_status_t rc = BLK_STS_OK;
 	bool bad_pmem = false;
@@ -144,7 +264,10 @@ static blk_status_t pmem_do_bvec(struct pmem_device *pmem, struct page *page,
 	if (!is_write) {
 		if (unlikely(bad_pmem))
 			rc = BLK_STS_IOERR;
-		else {
+		else if (len >= dma_bytes && pmem->dma_chan) {
+			rc = read_pmem_dma(pmem, dma_rc, page, off, pmem_addr,
+					   len);
+		} else {
 			rc = read_pmem(page, off, pmem_addr, len);
 			flush_dcache_page(page);
 		}
@@ -164,7 +287,11 @@ static blk_status_t pmem_do_bvec(struct pmem_device *pmem, struct page *page,
 		 * after clear poison.
 		 */
 		flush_dcache_page(page);
-		write_pmem(pmem_addr, page, off, len);
+		if (!unlikely(bad_pmem) && len >= dma_bytes &&
+		    pmem->dma_chan)
+			write_pmem_dma(pmem, dma_rc, pmem_addr, page, off, len);
+		else
+			write_pmem(pmem_addr, page, off, len);
 		if (unlikely(bad_pmem)) {
 			rc = pmem_clear_poison(pmem, pmem_off, len);
 			write_pmem(pmem_addr, page, off, len);
@@ -188,15 +315,19 @@ static blk_qc_t pmem_make_request(struct request_queue *q, struct bio *bio)
 	struct bvec_iter iter;
 	struct pmem_device *pmem = q->queuedata;
 	struct nd_region *nd_region = to_region(pmem);
+	blk_status_t dma_rc = 0;
+	int x = 0;
 
 	if (bio->bi_opf & REQ_FLUSH)
 		nvdimm_flush(nd_region);
 
 	do_acct = nd_iostat_start(bio, &start);
 	bio_for_each_segment(bvec, bio, iter) {
-		rc = pmem_do_bvec(pmem, bvec.bv_page, bvec.bv_len,
-				bvec.bv_offset, op_is_write(bio_op(bio)),
-				iter.bi_sector);
+		x++;
+		rc = pmem_do_bvec(pmem, &dma_rc, bvec.bv_page,
+				  bvec.bv_len, bvec.bv_offset,
+				  op_is_write(bio_op(bio)),
+				  iter.bi_sector);
 		if (rc) {
 			bio->bi_status = rc;
 			break;
@@ -204,6 +335,13 @@ static blk_qc_t pmem_make_request(struct request_queue *q, struct bio *bio)
 	}
 	if (do_acct)
 		nd_iostat_end(bio, start);
+
+	if (pmem->dma_chan) {
+		dma_async_issue_pending(pmem->dma_chan);
+		dmaengine_synchronize(pmem->dma_chan);
+		if (dma_rc)
+			bio->bi_status = dma_rc;
+	}
 
 	if (bio->bi_opf & REQ_FUA)
 		nvdimm_flush(nd_region);
@@ -216,10 +354,18 @@ static int pmem_rw_page(struct block_device *bdev, sector_t sector,
 		       struct page *page, bool is_write)
 {
 	struct pmem_device *pmem = bdev->bd_queue->queuedata;
+	blk_status_t dma_rc = 0;
 	blk_status_t rc;
 
-	rc = pmem_do_bvec(pmem, page, hpage_nr_pages(page) * PAGE_SIZE,
+	rc = pmem_do_bvec(pmem, &dma_rc, page, hpage_nr_pages(page) * PAGE_SIZE,
 			  0, is_write, sector);
+
+	if (!rc && pmem->dma_chan) {
+		dma_async_issue_pending(pmem->dma_chan);
+		dmaengine_synchronize(pmem->dma_chan);
+		if (dma_rc)
+			rc = dma_rc;
+	}
 
 	/*
 	 * The ->rw_page interface is subtle and tricky.  The core
