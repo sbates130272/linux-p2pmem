@@ -23,6 +23,8 @@ struct pmem_device {
 	struct dax_device	*dax_dev;
 	struct gendisk		*disk;
 	struct dev_pagemap	pgmap;
+
+	struct dma_chan *dma_chan;
 };
 
 long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,

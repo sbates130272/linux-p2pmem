@@ -32,10 +32,20 @@
 #include <linux/dax.h>
 #include <linux/nd.h>
 #include <linux/backing-dev.h>
+#include <linux/dmaengine.h>
+#include <linux/dma-mapping.h>
 #include "pmem.h"
 #include "pfn.h"
 #include "nd.h"
 #include "nd-core.h"
+
+static unsigned int dma_bytes = 4096;
+module_param(dma_bytes, uint, 0644);
+MODULE_PARM_DESC(dma_bytes, "Threshold under which PMEM will use the CPU to copy instead of DMA");
+
+static bool use_dma;
+module_param(use_dma, bool, 0644);
+MODULE_PARM_DESC(use_dma, "Use DMA engine to perform large data copy");
 
 static struct device *to_dev(struct pmem_device *pmem)
 {
@@ -294,6 +304,36 @@ static void pmem_release_disk(void *__pmem)
 	put_disk(pmem->disk);
 }
 
+static bool pmem_dma_filter_fn(struct dma_chan *chan, void *node)
+{
+	return dev_to_node(&chan->dev->device) == (int)(unsigned long)node;
+}
+
+static void pmem_release_dma_chan(void *data)
+{
+	struct pmem_device *pmem = data;
+
+	if (pmem->dma_chan)
+		dma_release_channel(pmem->dma_chan);
+}
+
+static void pmem_request_dma_chan(struct device * dev,
+				   struct pmem_device *pmem)
+{
+	int node = dev_to_node(dev);
+	dma_cap_mask_t dma_mask;
+
+	dma_cap_zero(dma_mask);
+	dma_cap_set(DMA_MEMCPY, dma_mask);
+
+	pmem->dma_chan = dma_request_channel(dma_mask, pmem_dma_filter_fn,
+						(void *)(unsigned long)node);
+	if (!pmem->dma_chan)
+		dev_warn(dev, "Unable to get a DMA channel\n");
+
+	devm_add_action_or_reset(dev, pmem_release_dma_chan, pmem);
+}
+
 static int pmem_attach_disk(struct device *dev,
 		struct nd_namespace_common *ndns)
 {
@@ -380,6 +420,9 @@ static int pmem_attach_disk(struct device *dev,
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
 	pmem->virt_addr = addr;
+
+	if (use_dma)
+		pmem_request_dma_chan(dev, pmem);
 
 	blk_queue_write_cache(q, true, fua);
 	blk_queue_make_request(q, pmem_make_request);
