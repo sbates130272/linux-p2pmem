@@ -3,6 +3,7 @@ menu "Display Engine Configuration"
 
 config DRM_AMD_DC
 	bool "AMD DC - Enable new display engine"
+	depends on !X86 || !(KCOV_INSTRUMENT_ALL && KCOV_ENABLE_COMPARISONS) || BROKEN
 	default y
 	help
 	  Choose this option if you want to use the new display engine
