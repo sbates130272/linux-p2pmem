@@ -2266,11 +2266,11 @@ generic_make_request_checks(struct bio *bio)
 
 	/*
 	 * Ensure PCI P2PDMA memory is not used in requests to queues that
-	 * have no support. Also, ensure such requests use REQ_NOMERGE
-	 * seeing requests can not mix P2PDMA and non-P2PDMA memory at
-	 * this time. This should never happen if the higher layers using
+	 * have no support. This should never happen if the higher layers using
 	 * P2PDMA do the right thing and use the proper P2PDMA client
-	 * infrastructure.
+	 * infrastructure. Also, ensure such requests use REQ_NOMERGE
+	 * seeing requests can not mix P2PDMA and non-P2PDMA memory at
+	 * this time.
 	 */
 	if (unlikely(is_pci_p2pdma_page(bio->bi_io_vec->bv_page))) {
 		if (!blk_queue_pci_p2pdma(q)) {
@@ -2278,10 +2278,7 @@ generic_make_request_checks(struct bio *bio)
 			goto not_supported;
 		}
 
-		if (!(bio->bi_opf & REQ_NOMERGE)) {
-			WARN_ON_ONCE(1);
-			goto not_supported;
-		}
+		bio->bi_opf |= REQ_NOMERGE;
 	}
 
 	if (should_fail_bio(bio))
