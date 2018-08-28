@@ -785,10 +785,8 @@ static void nvme_unmap_data(struct nvme_dev *dev, struct request *req)
 			DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
 	if (iod->nents) {
-		if (REQ_IS_PCI_P2PDMA(req))
-			pci_p2pdma_unmap_sg(dev->dev, iod->sg, iod->nents,
-					    dma_dir);
-		else
+		/* P2PDMA requests do not need to be unmapped */
+		if (!REQ_IS_PCI_P2PDMA(req))
 			dma_unmap_sg(dev->dev, iod->sg, iod->nents, dma_dir);
 
 		if (blk_integrity_rq(req))
