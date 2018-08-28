@@ -79,7 +79,7 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 	}
 
 	if (is_pci_p2pdma_page(sg_page(req->sg)))
-		op_flags |= REQ_PCI_P2PDMA;
+		op_flags |= REQ_NOMERGE;
 
 	sector = le64_to_cpu(req->cmd->rw.slba);
 	sector <<= (req->ns->blksize_shift - 9);
