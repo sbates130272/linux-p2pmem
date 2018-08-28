@@ -822,7 +822,7 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
  * @nents: elements in the scatterlist
  * @dir: DMA direction
  *
- * Returns the number of SG entries mapped
+ * Returns the number of SG entries mapped.
  */
 int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		      enum dma_data_direction dir)
@@ -834,10 +834,15 @@ int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 
 	/*
 	 * p2pdma mappings are not compatible with devices that use
-	 * dma_virt_ops.
+	 * dma_virt_ops. If the upper layers do the right thing
+	 * this should never happen because it will be prevented
+	 * by the check in pci_p2pdma_add_client()
 	 */
-	if (IS_ENABLED(CONFIG_DMA_VIRT_OPS) && dev->dma_ops == &dma_virt_ops)
+	if (unlikely(IS_ENABLED(CONFIG_DMA_VIRT_OPS) &&
+		     dev->dma_ops == &dma_virt_ops)) {
+		WARN_ON_ONCE(1);
 		return 0;
+	}
 
 	for_each_sg(sg, s, nents, i) {
 		pgmap = sg_page(s)->pgmap;
