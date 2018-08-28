@@ -42,7 +42,7 @@ int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)
 {
-	return 0;
+	return -EFAULT;
 }
 static inline int pci_p2pdma_add_client(struct list_head *head,
 		struct device *dev)
