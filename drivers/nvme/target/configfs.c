@@ -1105,7 +1105,7 @@ static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
 }
 
 static ssize_t nvmet_p2pmem_store(struct config_item *item,
-				  const char *page, size_t count)
+		const char *page, size_t count)
 {
 	struct nvmet_port *port = to_nvmet_port(item);
 	struct pci_dev *p2p_dev = NULL;

@@ -367,7 +367,7 @@ static void nvmet_ns_dev_disable(struct nvmet_ns *ns)
 }
 
 static int nvmet_p2pdma_add_client(struct nvmet_ctrl *ctrl,
-				   struct nvmet_ns *ns)
+		struct nvmet_ns *ns)
 {
 	int ret;
 
