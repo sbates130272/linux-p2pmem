@@ -738,7 +738,7 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 
 	ret = BLK_STS_RESOURCE;
 
-	if (REQ_IS_PCI_P2PDMA(req))
+	if (is_pci_p2pdma_page(sg_page(iod->sg)))
 		nr_mapped = pci_p2pdma_map_sg(dev->dev, iod->sg, iod->nents,
 					  dma_dir);
 	else
@@ -786,7 +786,7 @@ static void nvme_unmap_data(struct nvme_dev *dev, struct request *req)
 
 	if (iod->nents) {
 		/* P2PDMA requests do not need to be unmapped */
-		if (!REQ_IS_PCI_P2PDMA(req))
+		if (!is_pci_p2pdma_page(sg_page(iod->sg)))
 			dma_unmap_sg(dev->dev, iod->sg, iod->nents, dma_dir);
 
 		if (blk_integrity_rq(req))
