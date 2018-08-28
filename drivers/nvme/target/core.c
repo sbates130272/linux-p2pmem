@@ -768,16 +768,18 @@ int nvmet_req_alloc_sgl(struct nvmet_req *req, struct nvmet_sq *sq)
 {
 	struct pci_dev *p2p_dev = NULL;
 
-	if (sq->ctrl)
-		p2p_dev = sq->ctrl->p2p_dev;
+	if (IS_ENABLED(CONFIG_PCI_P2PDMA)) {
+		if (sq->ctrl)
+			p2p_dev = sq->ctrl->p2p_dev;
 
-	req->p2p_dev = NULL;
-	if (sq->qid && p2p_dev) {
-		req->sg = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg_cnt,
-					       req->transfer_len);
-		if (req->sg) {
-			req->p2p_dev = p2p_dev;
-			return 0;
+		req->p2p_dev = NULL;
+		if (sq->qid && p2p_dev) {
+			req->sg = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg_cnt,
+						       req->transfer_len);
+			if (req->sg) {
+				req->p2p_dev = p2p_dev;
+				return 0;
+			}
 		}
 	}
 
