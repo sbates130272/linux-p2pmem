@@ -101,10 +101,9 @@ static inline void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 {
 }
 static inline int pci_p2pdma_map_sg(struct device *dev,
-	struct scatterlist *sg, int nents, enum dma_data_direction dir)
+		struct scatterlist *sg, int nents, enum dma_data_direction dir)
 {
 	return 0;
-}
 }
 #endif /* CONFIG_PCI_P2PDMA */
 #endif /* _LINUX_PCI_P2P_H */
