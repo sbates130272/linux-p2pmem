@@ -1101,47 +1101,20 @@ static ssize_t nvmet_p2pmem_show(struct config_item *item, char *page)
 {
 	struct nvmet_port *port = to_nvmet_port(item);
 
-	if (!port->use_p2pmem)
-		return sprintf(page, "none\n");
-
-	if (!port->p2p_dev)
-		return sprintf(page, "auto\n");
-
-	return sprintf(page, "%s\n", pci_name(port->p2p_dev));
+	return pci_p2pdma_enable_show(page, port->p2p_dev, port->use_p2pmem);
 }
 
 static ssize_t nvmet_p2pmem_store(struct config_item *item,
 				  const char *page, size_t count)
 {
 	struct nvmet_port *port = to_nvmet_port(item);
-	struct device *dev;
 	struct pci_dev *p2p_dev = NULL;
 	bool use_p2pmem;
+	int error;
 
-	dev = bus_find_device_by_name(&pci_bus_type, NULL, page);
-	if (dev) {
-		use_p2pmem = true;
-		p2p_dev = to_pci_dev(dev);
-
-		if (!pci_has_p2pmem(p2p_dev)) {
-			pr_err("PCI device has no peer-to-peer memory: %s\n",
-			       page);
-			pci_dev_put(p2p_dev);
-			return -ENODEV;
-		}
-	} else if (sysfs_streq(page, "auto")) {
-		use_p2pmem = 1;
-	} else if ((page[0] == '0' || page[0] == '1') && !iscntrl(page[1])) {
-		/*
-		 * If the user enters a PCI device that  doesn't exist
-		 * like "0000:01:00.1", we don't want strtobool to think
-		 * it's a '0' when it's clearly not what the user wanted.
-		 * So we require 0's and 1's to be exactly one character.
-		 */
-		goto no_such_pci_device;
-	} else if (strtobool(page, &use_p2pmem)) {
-		goto no_such_pci_device;
-	}
+	error = pci_p2pdma_enable_store(page, &p2p_dev, &use_p2pmem);
+	if (error)
+		return error;
 
 	down_write(&nvmet_config_sem);
 	port->use_p2pmem = use_p2pmem;
@@ -1150,10 +1123,6 @@ static ssize_t nvmet_p2pmem_store(struct config_item *item,
 	up_write(&nvmet_config_sem);
 
 	return count;
-
-no_such_pci_device:
-	pr_err("No such PCI device: %s\n", page);
-	return -ENODEV;
 }
 CONFIGFS_ATTR(nvmet_, p2pmem);
 #endif /* CONFIG_PCI_P2PDMA */
