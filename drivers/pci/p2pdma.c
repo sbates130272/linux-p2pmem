@@ -387,7 +387,7 @@ static int upstream_bridge_distance_warn(struct pci_dev *provider,
 	ret = upstream_bridge_distance(provider, client, &acs_list);
 	if (ret == -2) {
 		pci_warn(client, "cannot be used for peer-to-peer DMA as ACS redirect is set between the client and provider\n");
-		// Drop final semicolon
+		/* Drop final semicolon */
 		acs_list.buffer[acs_list.len-1] = 0;
 		pci_warn(client, "to disable ACS redirect for this path, add the kernel parameter: pci=disable_acs_redir=%s\n",
 			 acs_list.buffer);
