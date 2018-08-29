@@ -1688,8 +1688,11 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 	if (size > bar_size - offset)
 		size = bar_size - offset;
 
-	if (pci_p2pdma_add_resource(pdev, bar, size, offset))
+	if (pci_p2pdma_add_resource(pdev, bar, size, offset)) {
+		dev_warn(dev->ctrl.device,
+			 "the device supports CMB but P2PDMA support is required to use it\n");
 		return;
+	}
 
 	dev->cmb_size = size;
 	dev->cmb_use_sqes = use_cmb_sqes && (dev->cmbsz & NVME_CMBSZ_SQS);
