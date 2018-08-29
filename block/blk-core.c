@@ -2272,7 +2272,7 @@ generic_make_request_checks(struct bio *bio)
 	 * seeing requests can not mix P2PDMA and non-P2PDMA memory at
 	 * this time.
 	 */
-	if (unlikely(is_pci_p2pdma_page(bio->bi_io_vec->bv_page))) {
+	if (is_pci_p2pdma_page(bio->bi_io_vec->bv_page)) {
 		if (!blk_queue_pci_p2pdma(q)) {
 			WARN_ON_ONCE(1);
 			goto not_supported;
