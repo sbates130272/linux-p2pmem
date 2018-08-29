@@ -913,6 +913,7 @@ int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 	pr_err("No such PCI device: %s\n", page);
 	return -ENODEV;
 }
+EXPORT_SYMBOL_GPL(pci_p2pdma_enable_store);
 
 /**
  * pci_p2pdma_enable_show - show a configfs/sysfs attribute indicating
@@ -937,3 +938,4 @@ ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 
 	return sprintf(page, "%s\n", pci_name(p2p_dev));
 }
+EXPORT_SYMBOL_GPL(pci_p2pdma_enable_show);
