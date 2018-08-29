@@ -842,11 +842,9 @@ int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	 * this should never happen because it will be prevented
 	 * by the check in pci_p2pdma_add_client()
 	 */
-	if (unlikely(IS_ENABLED(CONFIG_DMA_VIRT_OPS) &&
-		     dev->dma_ops == &dma_virt_ops)) {
-		WARN_ON_ONCE(1);
+	if (WARN_ON_ONCE(IS_ENABLED(CONFIG_DMA_VIRT_OPS) &&
+			 dev->dma_ops == &dma_virt_ops))
 		return 0;
-	}
 
 	for_each_sg(sg, s, nents, i) {
 		pgmap = sg_page(s)->pgmap;
