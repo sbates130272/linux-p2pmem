@@ -2273,7 +2273,7 @@ generic_make_request_checks(struct bio *bio)
 	 * this time.
 	 */
 	if (bio->bi_vcnt && is_pci_p2pdma_page(bio->bi_io_vec->bv_page)) {
-		if (WARN_ON_ONCE(!blk_queue_pci_p2pdma(q))
+		if (WARN_ON_ONCE(!blk_queue_pci_p2pdma(q)))
 			goto not_supported;
 		bio->bi_opf |= REQ_NOMERGE;
 	}
