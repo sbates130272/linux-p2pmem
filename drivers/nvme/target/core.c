@@ -1028,6 +1028,7 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 	}
 
 	if (req->port->p2p_dev) {
+		/* A specific P2P device was selected in configfs */
 		if (!pci_p2pdma_assign_provider(req->port->p2p_dev,
 						&ctrl->p2p_clients)) {
 			pr_info("peer-to-peer memory on %s is not supported\n",
@@ -1036,6 +1037,10 @@ static void nvmet_setup_p2pmem(struct nvmet_ctrl *ctrl, struct nvmet_req *req)
 		}
 		ctrl->p2p_dev = pci_dev_get(req->port->p2p_dev);
 	} else {
+		/*
+		 * No P2P device was provided in configfs, therefore find one
+		 * automatically.
+		 */
 		ctrl->p2p_dev = pci_p2pmem_find(&ctrl->p2p_clients);
 		if (!ctrl->p2p_dev) {
 			pr_info("no supported peer-to-peer memory devices found\n");
