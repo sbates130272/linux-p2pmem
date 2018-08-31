@@ -81,6 +81,13 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 	sector = le64_to_cpu(req->cmd->rw.slba);
 	sector <<= (req->ns->blksize_shift - 9);
 
+	/*
+	 * Ensure P2PDMA backed requests are not merged by the block layer
+	 * seeing we don't support mapping heterogenous memory types.
+	 */
+	if (is_pci_p2pdma_page(sg_page(req->sg)))
+		op_flags |= REQ_NOMERGE;
+
 	bio_init(bio, req->inline_bvec, ARRAY_SIZE(req->inline_bvec));
 	bio_set_dev(bio, req->ns->bdev);
 	bio->bi_iter.bi_sector = sector;
