@@ -16,7 +16,7 @@ simple way to determine if a given Root Complex supports this or not.
 (See PCIe r4.0, sec 1.3.1). Therefore, as of this writing, the kernel
 only supports doing P2P when the endpoints involved are all behind the
 same PCI bridge, as such devices are all in the same PCI hierarchy
-domain, and the spec guarantees that all transacations within the
+domain, and the spec guarantees that all transactions within the
 hierarchy will be routable, but it does not require routing
 between hierarchies.
 
@@ -38,7 +38,7 @@ types of kernel drivers in play:
 * Client - A driver which makes use of a resource by setting up a
   DMA transaction to or from it.
 * Orchestrator - A driver which orchestrates the flow of data between
-  clients and providers
+  clients and providers.
 
 In many cases there could be overlap between these three types (i.e.,
 it may be typical for a driver to be both a provider and a client).
