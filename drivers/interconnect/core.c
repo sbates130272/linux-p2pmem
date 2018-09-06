@@ -227,7 +227,7 @@ static int aggregate_requests(struct icc_node *node)
 static int apply_constraints(struct icc_path *path)
 {
 	struct icc_node *next, *prev = NULL;
-	int ret;
+	int ret = -EINVAL;
 	int i;
 
 	for (i = 0; i < path->num_nodes; i++, prev = next) {
