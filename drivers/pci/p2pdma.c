@@ -9,6 +9,7 @@
  */
 
 #define pr_fmt(fmt) "pci-p2pdma: " fmt
+#include <linux/blkdev.h>
 #include <linux/ctype.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/module.h>
@@ -939,3 +940,37 @@ ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 	return sprintf(page, "%s\n", pci_name(p2p_dev));
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_enable_show);
+
+#ifdef CONFIG_BLOCK
+
+/**
+ * pci_p2pdma_submit_bio - submit a bio that may contain peer-to-peer memory
+ * @bio: bio to validate
+ *
+ * This function wraps submit_bio() and must be called for any bio that
+ * might contain P2P memory. It prepends additional checks for P2P memory
+ * and sets the NO_MERGE flag appropriately to ensure that such bios are not
+ * merged with those that have regular memory.
+ */
+blk_qc_t pci_p2pdma_submit_bio(struct bio *bio)
+{
+	if (bio->bi_vcnt && is_pci_p2pdma_page(bio->bi_io_vec->bv_page)) {
+		/*
+		 * This should never happen if the higher layers using
+		 * P2PDMA do the right thing and use the proper P2PDMA
+		 * client infrastructure.
+		 */
+		if (WARN_ON_ONCE(!blk_queue_pci_p2pdma(bio->bi_disk->queue))) {
+			bio->bi_status = BLK_STS_NOTSUPP;
+			bio_endio(bio);
+			return BLK_QC_T_NONE;
+		}
+
+		bio->bi_opf |= REQ_NOMERGE;
+	}
+
+	return submit_bio(bio);
+}
+EXPORT_SYMBOL_GPL(pci_p2pdma_submit_bio);
+
+#endif

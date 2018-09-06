@@ -13,6 +13,7 @@
 #define _LINUX_PCI_P2PDMA_H
 
 #include <linux/pci.h>
+#include <linux/bio.h>
 
 struct block_device;
 struct scatterlist;
@@ -42,6 +43,9 @@ int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 			    bool *use_p2pdma);
 ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 			       bool use_p2pdma);
+#ifdef CONFIG_BLOCK
+blk_qc_t pci_p2pdma_submit_bio(struct bio *bio);
+#endif
 #else /* CONFIG_PCI_P2PDMA */
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)
@@ -120,5 +124,11 @@ static inline ssize_t pci_p2pdma_enable_show(char *page,
 {
 	return sprintf(page, "none\n");
 }
+#ifdef CONFIG_BLOCK
+static inline blk_qc_t pci_p2pdma_submit_bio(struct bio *bio)
+{
+	return submit_bio(bio);
+}
+#endif
 #endif /* CONFIG_PCI_P2PDMA */
 #endif /* _LINUX_PCI_P2P_H */
