@@ -436,7 +436,6 @@ static int qnoc_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < num_nodes; i++) {
-		int ret;
 		size_t j;
 
 		node = icc_node_create(qnodes[i]->id);
