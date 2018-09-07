@@ -347,7 +347,6 @@ EXPORT_SYMBOL_GPL(of_icc_get);
 int icc_set(struct icc_path *path, u32 avg_bw, u32 peak_bw)
 {
 	struct icc_node *node;
-	struct icc_provider *p;
 	size_t i;
 	int ret;
 
@@ -358,7 +357,6 @@ int icc_set(struct icc_path *path, u32 avg_bw, u32 peak_bw)
 
 	for (i = 0; i < path->num_nodes; i++) {
 		node = path->reqs[i].node;
-		p = node->provider;
 
 		/* update the consumer request for this path */
 		path->reqs[i].avg_bw = avg_bw;
