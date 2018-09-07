@@ -324,10 +324,8 @@ static int cpuset_get_tree(struct fs_context *fc)
 	int ret = -ENODEV;
 
 	cgroup_fs = get_fs_type("cgroup");
-	if (cgroup_fs) {
-		ret = PTR_ERR(cgroup_fs);
+	if (!cgroup_fs)
 		goto out;
-	}
 
 	cg_fc = vfs_new_fs_context(cgroup_fs, NULL, fc->sb_flags, fc->sb_flags,
 				   fc->purpose);
