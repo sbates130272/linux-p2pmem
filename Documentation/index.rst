@@ -65,6 +65,7 @@ merged much easier.
    kernel-hacking/index
    trace/index
    maintainer/index
+   kunit/index
 
 Kernel API documentation
 ------------------------
