@@ -160,13 +160,6 @@
  *	@orig_data is the size of the original data
  *	@copy copied data which will be passed to the security module.
  *	Returns 0 if the copy was successful.
- * @sb_remount:
- *	Extracts security system specific mount options and verifies no changes
- *	are being made to those options.
- *	@sb superblock being remounted
- *	@data contains the filesystem-specific data.
- *	@data_size contains the size of the data.
- *	Return 0 if permission is granted.
  * @sb_umount:
  *	Check permission before the @mnt file system is unmounted.
  *	@mnt contains the mounted file system.
@@ -1522,9 +1515,6 @@ union security_list_options {
 	int (*sb_alloc_security)(struct super_block *sb);
 	void (*sb_free_security)(struct super_block *sb);
 	int (*sb_copy_data)(char *orig, size_t orig_size, char *copy);
-	int (*sb_remount)(struct super_block *sb, void *data, size_t data_size);
-	int (*sb_kern_mount)(struct super_block *sb, int flags,
-			     void *data, size_t data_size);
 	int (*sb_show_options)(struct seq_file *m, struct super_block *sb);
 	int (*sb_statfs)(struct dentry *dentry);
 	int (*sb_mount)(const char *dev_name, const struct path *path,
@@ -1872,8 +1862,6 @@ struct security_hook_heads {
 	struct hlist_head sb_alloc_security;
 	struct hlist_head sb_free_security;
 	struct hlist_head sb_copy_data;
-	struct hlist_head sb_remount;
-	struct hlist_head sb_kern_mount;
 	struct hlist_head sb_show_options;
 	struct hlist_head sb_statfs;
 	struct hlist_head sb_mount;

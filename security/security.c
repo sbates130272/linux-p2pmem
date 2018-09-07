@@ -420,16 +420,6 @@ int security_sb_copy_data(char *orig, size_t data_size, char *copy)
 }
 EXPORT_SYMBOL(security_sb_copy_data);
 
-int security_sb_remount(struct super_block *sb, void *data, size_t data_size)
-{
-	return call_int_hook(sb_remount, 0, sb, data, data_size);
-}
-
-int security_sb_kern_mount(struct super_block *sb, int flags, void *data, size_t data_size)
-{
-	return call_int_hook(sb_kern_mount, 0, sb, flags, data, data_size);
-}
-
 int security_sb_show_options(struct seq_file *m, struct super_block *sb)
 {
 	return call_int_hook(sb_show_options, 0, m, sb);
