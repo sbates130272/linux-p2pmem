@@ -14,6 +14,7 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/mutex.h>
 
 struct cred;
 struct dentry;
@@ -35,6 +36,19 @@ enum fs_context_purpose {
 	FS_CONTEXT_FOR_RECONFIGURE,	/* Superblock reconfiguration (remount) */
 	FS_CONTEXT_FOR_UMOUNT,		/* Reconfiguration to R/O for unmount */
 	FS_CONTEXT_FOR_EMERGENCY_RO,	/* Emergency reconfiguration to R/O */
+};
+
+/*
+ * Userspace usage phase for fsopen/fspick.
+ */
+enum fs_context_phase {
+	FS_CONTEXT_CREATE_PARAMS,	/* Loading params for sb creation */
+	FS_CONTEXT_CREATING,		/* A superblock is being created */
+	FS_CONTEXT_AWAITING_MOUNT,	/* Superblock created, awaiting fsmount() */
+	FS_CONTEXT_AWAITING_RECONF,	/* Awaiting initialisation for reconfiguration */
+	FS_CONTEXT_RECONF_PARAMS,	/* Loading params for reconfiguration */
+	FS_CONTEXT_RECONFIGURING,	/* Reconfiguring the superblock */
+	FS_CONTEXT_FAILED,		/* Failed to correctly transition a context */
 };
 
 /*
@@ -77,6 +91,7 @@ struct fs_parameter {
  */
 struct fs_context {
 	const struct fs_context_operations *ops;
+	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	struct file_system_type	*fs_type;
 	void			*fs_private;	/* The filesystem's context */
 	struct dentry		*root;		/* The root and superblock */
@@ -91,6 +106,7 @@ struct fs_context {
 	unsigned int		sb_flags_mask;	/* Superblock flags that were changed */
 	unsigned int		lsm_flags;	/* Information flags from the fs to the LSM */
 	enum fs_context_purpose	purpose:8;
+	enum fs_context_phase	phase:8;	/* The phase the context is in */
 	bool			sloppy:1;	/* T if unrecognised options are okay */
 	bool			silent:1;	/* T if "o silent" specified */
 	bool			need_free:1;	/* Need to call ops->free() */
@@ -135,6 +151,8 @@ extern int vfs_get_super(struct fs_context *fc,
 			 enum vfs_get_super_keying keying,
 			 int (*fill_super)(struct super_block *sb,
 					   struct fs_context *fc));
+
+extern const struct file_operations fscontext_fops;
 
 #define logfc(FC, FMT, ...) pr_notice(FMT, ## __VA_ARGS__)
 

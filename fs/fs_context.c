@@ -274,6 +274,8 @@ struct fs_context *vfs_new_fs_context(struct file_system_type *fs_type,
 	fc->fs_type	= get_filesystem(fs_type);
 	fc->cred	= get_current_cred();
 
+	mutex_init(&fc->uapi_mutex);
+
 	switch (purpose) {
 	case FS_CONTEXT_FOR_KERNEL_MOUNT:
 		fc->sb_flags |= SB_KERNMOUNT;
@@ -340,6 +342,8 @@ struct fs_context *vfs_dup_fs_context(struct fs_context *src_fc,
 	fc = kmemdup(src_fc, sizeof(struct fs_context), GFP_KERNEL);
 	if (!fc)
 		return ERR_PTR(-ENOMEM);
+
+	mutex_init(&fc->uapi_mutex);
 
 	fc->fs_private	= NULL;
 	fc->s_fs_info	= NULL;
