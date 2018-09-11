@@ -1220,6 +1220,7 @@ static int test_gfs2_super(struct super_block *s, void *ptr)
  * @flags: Mount flags
  * @dev_name: The name of the device
  * @data: The mount arguments
+ * @data_size: The size of the mount arguments
  *
  * Q. Why not use get_sb_bdev() ?
  * A. We need to select one of two root directories to mount, independent
@@ -1229,7 +1230,7 @@ static int test_gfs2_super(struct super_block *s, void *ptr)
  */
 
 static struct dentry *gfs2_mount(struct file_system_type *fs_type, int flags,
-		       const char *dev_name, void *data)
+		       const char *dev_name, void *data, size_t data_size)
 {
 	struct block_device *bdev;
 	struct super_block *s;
@@ -1326,7 +1327,8 @@ static int set_meta_super(struct super_block *s, void *ptr)
 }
 
 static struct dentry *gfs2_mount_meta(struct file_system_type *fs_type,
-			int flags, const char *dev_name, void *data)
+				      int flags, const char *dev_name,
+				      void *data, size_t data_size)
 {
 	struct super_block *s;
 	struct gfs2_sbd *sdp;

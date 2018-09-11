@@ -19,8 +19,8 @@
 #include <linux/mount.h>
 
 extern struct dentry *mount_mtd(struct file_system_type *fs_type, int flags,
-		      const char *dev_name, void *data,
-		      int (*fill_super)(struct super_block *, void *, int));
+		      const char *dev_name, void *data, size_t data_size,
+		      int (*fill_super)(struct super_block *, void *, size_t, int));
 extern void kill_mtd_super(struct super_block *sb);
 
 

@@ -454,7 +454,8 @@ static int parse_options(char *options, struct omfs_sb_info *sbi)
 	return 1;
 }
 
-static int omfs_fill_super(struct super_block *sb, void *data, int silent)
+static int omfs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			   int silent)
 {
 	struct buffer_head *bh, *bh2;
 	struct omfs_super_block *omfs_sb;
@@ -596,9 +597,11 @@ end:
 }
 
 static struct dentry *omfs_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name, void *data)
+				 int flags, const char *dev_name,
+				 void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, omfs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  omfs_fill_super);
 }
 
 static struct file_system_type omfs_fs_type = {

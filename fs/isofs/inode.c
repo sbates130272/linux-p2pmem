@@ -112,7 +112,8 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(isofs_inode_cachep);
 }
 
-static int isofs_remount(struct super_block *sb, int *flags, char *data)
+static int isofs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	if (!(*flags & SB_RDONLY))
@@ -620,7 +621,8 @@ static bool rootdir_empty(struct super_block *sb, unsigned long block)
  * Note: a check_disk_change() has been done immediately prior
  * to this call, so we don't need to check again.
  */
-static int isofs_fill_super(struct super_block *s, void *data, int silent)
+static int isofs_fill_super(struct super_block *s, void *data, size_t data_size,
+			    int silent)
 {
 	struct buffer_head *bh = NULL, *pri_bh = NULL;
 	struct hs_primary_descriptor *h_pri = NULL;
@@ -1565,9 +1567,10 @@ struct inode *__isofs_iget(struct super_block *sb,
 }
 
 static struct dentry *isofs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, isofs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  isofs_fill_super);
 }
 
 static struct file_system_type iso9660_fs_type = {

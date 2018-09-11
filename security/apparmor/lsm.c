@@ -520,7 +520,8 @@ static int apparmor_file_mprotect(struct vm_area_struct *vma,
 }
 
 static int apparmor_sb_mount(const char *dev_name, const struct path *path,
-			     const char *type, unsigned long flags, void *data)
+			     const char *type, unsigned long flags,
+			     void *data, size_t data_size)
 {
 	struct aa_label *label;
 	int error = 0;

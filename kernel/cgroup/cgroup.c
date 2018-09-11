@@ -2031,7 +2031,7 @@ struct dentry *cgroup_do_mount(struct file_system_type *fs_type, int flags,
 
 static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 			 int flags, const char *unused_dev_name,
-			 void *data)
+			 void *data, size_t data_size)
 {
 	struct cgroup_namespace *ns = current->nsproxy->cgroup_ns;
 	struct dentry *dentry;

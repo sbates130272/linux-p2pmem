@@ -1220,7 +1220,8 @@ bad_val:
 }
 
 static int
-hugetlbfs_fill_super(struct super_block *sb, void *data, int silent)
+hugetlbfs_fill_super(struct super_block *sb, void *data, size_t data_size,
+		     int silent)
 {
 	int ret;
 	struct hugetlbfs_config config;
@@ -1279,9 +1280,10 @@ out_free:
 }
 
 static struct dentry *hugetlbfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_nodev(fs_type, flags, data, hugetlbfs_fill_super);
+	return mount_nodev(fs_type, flags, data, data_size,
+			   hugetlbfs_fill_super);
 }
 
 static struct file_system_type hugetlbfs_fs_type = {
@@ -1398,10 +1400,11 @@ static int __init init_hugetlbfs_fs(void)
 	for_each_hstate(h) {
 		char buf[50];
 		unsigned ps_kb = 1U << (h->order + PAGE_SHIFT - 10);
+		int n;
 
-		snprintf(buf, sizeof(buf), "pagesize=%uK", ps_kb);
+		n = snprintf(buf, sizeof(buf), "pagesize=%uK", ps_kb);
 		hugetlbfs_vfsmount[i] = kern_mount_data(&hugetlbfs_fs_type,
-							buf);
+							buf, n + 1);
 
 		if (IS_ERR(hugetlbfs_vfsmount[i])) {
 			pr_err("Cannot mount internal hugetlbfs for "

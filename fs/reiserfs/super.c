@@ -61,7 +61,8 @@ static int is_any_reiserfs_magic_string(struct reiserfs_super_block *rs)
 		is_reiserfs_jr(rs));
 }
 
-static int reiserfs_remount(struct super_block *s, int *flags, char *data);
+static int reiserfs_remount(struct super_block *s, int *flags,
+			    char *data, size_t data_size);
 static int reiserfs_statfs(struct dentry *dentry, struct kstatfs *buf);
 
 static int reiserfs_sync_fs(struct super_block *s, int wait)
@@ -1433,7 +1434,8 @@ static void handle_quota_files(struct super_block *s, char **qf_names,
 }
 #endif
 
-static int reiserfs_remount(struct super_block *s, int *mount_flags, char *arg)
+static int reiserfs_remount(struct super_block *s, int *mount_flags,
+			    char *arg, size_t data_size)
 {
 	struct reiserfs_super_block *rs;
 	struct reiserfs_transaction_handle th;
@@ -1898,7 +1900,8 @@ static int function2code(hashf_t func)
 	if (!(silent))				\
 		reiserfs_warning(s, id, __VA_ARGS__)
 
-static int reiserfs_fill_super(struct super_block *s, void *data, int silent)
+static int reiserfs_fill_super(struct super_block *s, void *data, size_t data_size,
+			       int silent)
 {
 	struct inode *root_inode;
 	struct reiserfs_transaction_handle th;
@@ -2600,9 +2603,10 @@ out:
 
 static struct dentry *get_super_block(struct file_system_type *fs_type,
 			   int flags, const char *dev_name,
-			   void *data)
+			   void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, reiserfs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  reiserfs_fill_super);
 }
 
 static int __init init_reiserfs_fs(void)

@@ -326,7 +326,8 @@ static int hfsplus_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
-static int hfsplus_remount(struct super_block *sb, int *flags, char *data)
+static int hfsplus_remount(struct super_block *sb, int *flags,
+			   char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	if ((bool)(*flags & SB_RDONLY) == sb_rdonly(sb))
@@ -371,7 +372,8 @@ static const struct super_operations hfsplus_sops = {
 	.show_options	= hfsplus_show_options,
 };
 
-static int hfsplus_fill_super(struct super_block *sb, void *data, int silent)
+static int hfsplus_fill_super(struct super_block *sb,
+			      void *data, size_t data_size, int silent)
 {
 	struct hfsplus_vh *vhdr;
 	struct hfsplus_sb_info *sbi;
@@ -643,9 +645,11 @@ static void hfsplus_destroy_inode(struct inode *inode)
 #define HFSPLUS_INODE_SIZE	sizeof(struct hfsplus_inode_info)
 
 static struct dentry *hfsplus_mount(struct file_system_type *fs_type,
-			  int flags, const char *dev_name, void *data)
+				    int flags, const char *dev_name,
+				    void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, hfsplus_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  hfsplus_fill_super);
 }
 
 static struct file_system_type hfsplus_fs_type = {

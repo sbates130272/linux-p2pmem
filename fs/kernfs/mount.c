@@ -22,7 +22,8 @@
 
 struct kmem_cache *kernfs_node_cache;
 
-static int kernfs_sop_remount_fs(struct super_block *sb, int *flags, char *data)
+static int kernfs_sop_remount_fs(struct super_block *sb, int *flags,
+				 char *data, size_t data_size)
 {
 	struct kernfs_root *root = kernfs_info(sb)->root;
 	struct kernfs_syscall_ops *scops = root->syscall_ops;

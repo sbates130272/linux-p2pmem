@@ -21,7 +21,7 @@ static struct kernfs_root *sysfs_root;
 struct kernfs_node *sysfs_root_kn;
 
 static struct dentry *sysfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
 	struct dentry *root;
 	void *ns;

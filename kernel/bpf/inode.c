@@ -629,7 +629,7 @@ static int bpf_parse_options(char *data, struct bpf_mount_opts *opts)
 	return 0;
 }
 
-static int bpf_fill_super(struct super_block *sb, void *data, int silent)
+static int bpf_fill_super(struct super_block *sb, void *data, size_t data_size, int silent)
 {
 	static const struct tree_descr bpf_rfiles[] = { { "" } };
 	struct bpf_mount_opts opts;
@@ -655,9 +655,10 @@ static int bpf_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *bpf_mount(struct file_system_type *type, int flags,
-				const char *dev_name, void *data)
+				const char *dev_name, void *data,
+				size_t data_size)
 {
-	return mount_nodev(type, flags, data, bpf_fill_super);
+	return mount_nodev(type, flags, data, data_size, bpf_fill_super);
 }
 
 static struct file_system_type bpf_fs_type = {

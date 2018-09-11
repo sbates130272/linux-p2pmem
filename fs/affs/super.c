@@ -26,7 +26,8 @@
 
 static int affs_statfs(struct dentry *dentry, struct kstatfs *buf);
 static int affs_show_options(struct seq_file *m, struct dentry *root);
-static int affs_remount (struct super_block *sb, int *flags, char *data);
+static int affs_remount (struct super_block *sb, int *flags,
+			 char *data, size_t data_size);
 
 static void
 affs_commit_super(struct super_block *sb, int wait)
@@ -335,7 +336,8 @@ static int affs_show_options(struct seq_file *m, struct dentry *root)
  * hopefully have the guts to do so. Until then: sorry for the mess.
  */
 
-static int affs_fill_super(struct super_block *sb, void *data, int silent)
+static int affs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			   int silent)
 {
 	struct affs_sb_info	*sbi;
 	struct buffer_head	*root_bh = NULL;
@@ -550,7 +552,7 @@ got_root:
 }
 
 static int
-affs_remount(struct super_block *sb, int *flags, char *data)
+affs_remount(struct super_block *sb, int *flags, char *data, size_t data_size)
 {
 	struct affs_sb_info	*sbi = AFFS_SB(sb);
 	int			 blocksize;
@@ -633,9 +635,10 @@ affs_statfs(struct dentry *dentry, struct kstatfs *buf)
 }
 
 static struct dentry *affs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, affs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  affs_fill_super);
 }
 
 static void affs_kill_sb(struct super_block *sb)

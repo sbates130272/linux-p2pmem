@@ -31,7 +31,8 @@
 
 static void afs_i_init_once(void *foo);
 static struct dentry *afs_mount(struct file_system_type *fs_type,
-		      int flags, const char *dev_name, void *data);
+				int flags, const char *dev_name,
+				void *data, size_t data_size);
 static void afs_kill_super(struct super_block *sb);
 static struct inode *afs_alloc_inode(struct super_block *sb);
 static void afs_destroy_inode(struct inode *inode);
@@ -490,7 +491,8 @@ static void afs_kill_super(struct super_block *sb)
  * get an AFS superblock
  */
 static struct dentry *afs_mount(struct file_system_type *fs_type,
-				int flags, const char *dev_name, void *options)
+				int flags, const char *dev_name,
+				void *options, size_t data_size)
 {
 	struct afs_mount_params params;
 	struct super_block *sb;

@@ -57,7 +57,8 @@ static int sysv_sync_fs(struct super_block *sb, int wait)
 	return 0;
 }
 
-static int sysv_remount(struct super_block *sb, int *flags, char *data)
+static int sysv_remount(struct super_block *sb, int *flags,
+			char *data, size_t data_size)
 {
 	struct sysv_sb_info *sbi = SYSV_SB(sb);
 

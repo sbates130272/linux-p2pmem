@@ -774,7 +774,8 @@ static u64 ufs_max_bytes(struct super_block *sb)
 	return res << uspi->s_bshift;
 }
 
-static int ufs_fill_super(struct super_block *sb, void *data, int silent)
+static int ufs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			  int silent)
 {
 	struct ufs_sb_info * sbi;
 	struct ufs_sb_private_info * uspi;
@@ -1297,7 +1298,8 @@ failed_nomem:
 	return -ENOMEM;
 }
 
-static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
+static int ufs_remount (struct super_block *sb, int *mount_flags,
+			char *data, size_t data_size)
 {
 	struct ufs_sb_private_info * uspi;
 	struct ufs_super_block_first * usb1;
@@ -1505,9 +1507,10 @@ static const struct super_operations ufs_super_ops = {
 };
 
 static struct dentry *ufs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, ufs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  ufs_fill_super);
 }
 
 static struct file_system_type ufs_fs_type = {

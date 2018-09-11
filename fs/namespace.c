@@ -943,7 +943,8 @@ static struct mount *skip_mnt_tree(struct mount *p)
 }
 
 struct vfsmount *
-vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void *data)
+vfs_kern_mount(struct file_system_type *type, int flags, const char *name,
+	       void *data, size_t data_size)
 {
 	struct mount *mnt;
 	struct dentry *root;
@@ -958,7 +959,7 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (flags & SB_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
-	root = mount_fs(type, flags, name, data);
+	root = mount_fs(type, flags, name, data, data_size);
 	if (IS_ERR(root)) {
 		mnt_free_id(mnt);
 		free_vfsmnt(mnt);
@@ -978,7 +979,7 @@ EXPORT_SYMBOL_GPL(vfs_kern_mount);
 
 struct vfsmount *
 vfs_submount(const struct dentry *mountpoint, struct file_system_type *type,
-	     const char *name, void *data)
+	     const char *name, void *data, size_t data_size)
 {
 	/* Until it is worked out how to pass the user namespace
 	 * through from the parent mount to the submount don't support
@@ -987,7 +988,7 @@ vfs_submount(const struct dentry *mountpoint, struct file_system_type *type,
 	if (mountpoint->d_sb->s_user_ns != &init_user_ns)
 		return ERR_PTR(-EPERM);
 
-	return vfs_kern_mount(type, SB_SUBMOUNT, name, data);
+	return vfs_kern_mount(type, SB_SUBMOUNT, name, data, data_size);
 }
 EXPORT_SYMBOL_GPL(vfs_submount);
 
@@ -1533,7 +1534,7 @@ static int do_umount(struct mount *mnt, int flags)
 			return -EPERM;
 		down_write(&sb->s_umount);
 		if (!sb_rdonly(sb))
-			retval = do_remount_sb(sb, SB_RDONLY, NULL, 0);
+			retval = do_remount_sb(sb, SB_RDONLY, NULL, 0, 0);
 		up_write(&sb->s_umount);
 		return retval;
 	}
@@ -2226,7 +2227,7 @@ static int change_mount_flags(struct vfsmount *mnt, int ms_flags)
  * on it - tough luck.
  */
 static int do_remount(struct path *path, int ms_flags, int sb_flags,
-		      int mnt_flags, void *data)
+		      int mnt_flags, void *data, size_t data_size)
 {
 	int err;
 	struct super_block *sb = path->mnt->mnt_sb;
@@ -2265,7 +2266,7 @@ static int do_remount(struct path *path, int ms_flags, int sb_flags,
 		return -EPERM;
 	}
 
-	err = security_sb_remount(sb, data);
+	err = security_sb_remount(sb, data, data_size);
 	if (err)
 		return err;
 
@@ -2275,7 +2276,7 @@ static int do_remount(struct path *path, int ms_flags, int sb_flags,
 	else if (!ns_capable(sb->s_user_ns, CAP_SYS_ADMIN))
 		err = -EPERM;
 	else
-		err = do_remount_sb(sb, sb_flags, data, 0);
+		err = do_remount_sb(sb, sb_flags, data, data_size, 0);
 	if (!err) {
 		lock_mount_hash();
 		mnt_flags |= mnt->mnt.mnt_flags & ~MNT_USER_SETTABLE_MASK;
@@ -2441,7 +2442,8 @@ static bool mount_too_revealing(struct vfsmount *mnt, int *new_mnt_flags);
  * namespace's tree
  */
 static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
-			int mnt_flags, const char *name, void *data)
+			int mnt_flags, const char *name,
+			void *data, size_t data_size)
 {
 	struct file_system_type *type;
 	struct vfsmount *mnt;
@@ -2454,7 +2456,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!type)
 		return -ENODEV;
 
-	mnt = vfs_kern_mount(type, sb_flags, name, data);
+	mnt = vfs_kern_mount(type, sb_flags, name, data, data_size);
 	if (!IS_ERR(mnt) && (type->fs_flags & FS_HAS_SUBTYPE) &&
 	    !mnt->mnt_sb->s_subtype)
 		mnt = fs_set_subtype(mnt, fstype);
@@ -2710,6 +2712,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 {
 	struct path path;
 	unsigned int mnt_flags = 0, sb_flags;
+	size_t data_size = data_page ? PAGE_SIZE : 0;
 	int retval = 0;
 
 	/* Discard magic */
@@ -2728,8 +2731,8 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (retval)
 		return retval;
 
-	retval = security_sb_mount(dev_name, &path,
-				   type_page, flags, data_page);
+	retval = security_sb_mount(dev_name, &path, type_page, flags,
+				   data_page, data_size);
 	if (!retval && !may_mount())
 		retval = -EPERM;
 	if (!retval && (flags & SB_MANDLOCK) && !may_mandlock())
@@ -2776,7 +2779,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 
 	if (flags & MS_REMOUNT)
 		retval = do_remount(&path, flags, sb_flags, mnt_flags,
-				    data_page);
+				    data_page, data_size);
 	else if (flags & MS_BIND)
 		retval = do_loopback(&path, dev_name, flags & MS_REC);
 	else if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE))
@@ -2785,7 +2788,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 		retval = do_move_mount(&path, dev_name);
 	else
 		retval = do_new_mount(&path, type_page, sb_flags, mnt_flags,
-				      dev_name, data_page);
+				      dev_name, data_page, data_size);
 dput_out:
 	path_put(&path);
 	return retval;
@@ -3175,7 +3178,7 @@ static void __init init_mount_tree(void)
 	type = get_fs_type("rootfs");
 	if (!type)
 		panic("Can't find rootfs type");
-	mnt = vfs_kern_mount(type, 0, "rootfs", NULL);
+	mnt = vfs_kern_mount(type, 0, "rootfs", NULL, 0);
 	put_filesystem(type);
 	if (IS_ERR(mnt))
 		panic("Can't create rootfs");
@@ -3237,10 +3240,11 @@ void put_mnt_ns(struct mnt_namespace *ns)
 	free_mnt_ns(ns);
 }
 
-struct vfsmount *kern_mount_data(struct file_system_type *type, void *data)
+struct vfsmount *kern_mount_data(struct file_system_type *type,
+				 void *data, size_t data_size)
 {
 	struct vfsmount *mnt;
-	mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, data);
+	mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, data, data_size);
 	if (!IS_ERR(mnt)) {
 		/*
 		 * it is a longterm mount, don't release mnt until

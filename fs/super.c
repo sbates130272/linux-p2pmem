@@ -838,11 +838,13 @@ rescan:
  *	@sb:	superblock in question
  *	@sb_flags: revised superblock flags
  *	@data:	the rest of options
+ *	@data_size: The size of the data
  *      @force: whether or not to force the change
  *
  *	Alters the mount options of a mounted file system.
  */
-int do_remount_sb(struct super_block *sb, int sb_flags, void *data, int force)
+int do_remount_sb(struct super_block *sb, int sb_flags, void *data,
+		  size_t data_size, int force)
 {
 	int retval;
 	int remount_ro;
@@ -885,7 +887,7 @@ int do_remount_sb(struct super_block *sb, int sb_flags, void *data, int force)
 	}
 
 	if (sb->s_op->remount_fs) {
-		retval = sb->s_op->remount_fs(sb, &sb_flags, data);
+		retval = sb->s_op->remount_fs(sb, &sb_flags, data, data_size);
 		if (retval) {
 			if (!force)
 				goto cancel_readonly;
@@ -924,7 +926,7 @@ static void do_emergency_remount_callback(struct super_block *sb)
 		/*
 		 * What lock protects sb->s_flags??
 		 */
-		do_remount_sb(sb, SB_RDONLY, NULL, 1);
+		do_remount_sb(sb, SB_RDONLY, NULL, 0, 1);
 	}
 	up_write(&sb->s_umount);
 }
@@ -1054,8 +1056,9 @@ static int ns_set_super(struct super_block *sb, void *data)
 }
 
 struct dentry *mount_ns(struct file_system_type *fs_type,
-	int flags, void *data, void *ns, struct user_namespace *user_ns,
-	int (*fill_super)(struct super_block *, void *, int))
+	int flags, void *data, size_t data_size,
+	void *ns, struct user_namespace *user_ns,
+	int (*fill_super)(struct super_block *, void *, size_t, int))
 {
 	struct super_block *sb;
 
@@ -1072,7 +1075,7 @@ struct dentry *mount_ns(struct file_system_type *fs_type,
 
 	if (!sb->s_root) {
 		int err;
-		err = fill_super(sb, data, flags & SB_SILENT ? 1 : 0);
+		err = fill_super(sb, data, data_size, flags & SB_SILENT ? 1 : 0);
 		if (err) {
 			deactivate_locked_super(sb);
 			return ERR_PTR(err);
@@ -1102,8 +1105,8 @@ static int test_bdev_super(struct super_block *s, void *data)
 }
 
 struct dentry *mount_bdev(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data,
-	int (*fill_super)(struct super_block *, void *, int))
+	int flags, const char *dev_name, void *data, size_t data_size,
+	int (*fill_super)(struct super_block *, void *, size_t, int))
 {
 	struct block_device *bdev;
 	struct super_block *s;
@@ -1155,7 +1158,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		s->s_mode = mode;
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		sb_set_blocksize(s, block_size(bdev));
-		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
+		error = fill_super(s, data, data_size, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
 			goto error;
@@ -1192,8 +1195,8 @@ EXPORT_SYMBOL(kill_block_super);
 #endif
 
 struct dentry *mount_nodev(struct file_system_type *fs_type,
-	int flags, void *data,
-	int (*fill_super)(struct super_block *, void *, int))
+	int flags, void *data, size_t data_size,
+	int (*fill_super)(struct super_block *, void *, size_t, int))
 {
 	int error;
 	struct super_block *s = sget(fs_type, NULL, set_anon_super, flags, NULL);
@@ -1201,7 +1204,7 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 
-	error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
+	error = fill_super(s, data, data_size, flags & SB_SILENT ? 1 : 0);
 	if (error) {
 		deactivate_locked_super(s);
 		return ERR_PTR(error);
@@ -1217,8 +1220,8 @@ static int compare_single(struct super_block *s, void *p)
 }
 
 struct dentry *mount_single(struct file_system_type *fs_type,
-	int flags, void *data,
-	int (*fill_super)(struct super_block *, void *, int))
+	int flags, void *data, size_t data_size,
+	int (*fill_super)(struct super_block *, void *, size_t, int))
 {
 	struct super_block *s;
 	int error;
@@ -1227,21 +1230,22 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 	if (!s->s_root) {
-		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
+		error = fill_super(s, data, data_size, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
 			return ERR_PTR(error);
 		}
 		s->s_flags |= SB_ACTIVE;
 	} else {
-		do_remount_sb(s, flags, data, 0);
+		do_remount_sb(s, flags, data, data_size, 0);
 	}
 	return dget(s->s_root);
 }
 EXPORT_SYMBOL(mount_single);
 
 struct dentry *
-mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
+mount_fs(struct file_system_type *type, int flags, const char *name,
+	 void *data, size_t data_size)
 {
 	struct dentry *root;
 	struct super_block *sb;
@@ -1253,12 +1257,12 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 		if (!secdata)
 			goto out;
 
-		error = security_sb_copy_data(data, secdata);
+		error = security_sb_copy_data(data, data_size, secdata);
 		if (error)
 			goto out_free_secdata;
 	}
 
-	root = type->mount(type, flags, name, data);
+	root = type->mount(type, flags, name, data, data_size);
 	if (IS_ERR(root)) {
 		error = PTR_ERR(root);
 		goto out_free_secdata;
@@ -1276,7 +1280,7 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 	smp_wmb();
 	sb->s_flags |= SB_BORN;
 
-	error = security_sb_kern_mount(sb, flags, secdata);
+	error = security_sb_kern_mount(sb, flags, secdata, data_size);
 	if (error)
 		goto out_sb;
 

@@ -322,7 +322,7 @@ err:
 	return ERR_PTR(ret);
 }
 
-static int mqueue_fill_super(struct super_block *sb, void *data, int silent)
+static int mqueue_fill_super(struct super_block *sb, void *data, size_t data_size, int silent)
 {
 	struct inode *inode;
 	struct ipc_namespace *ns = sb->s_fs_info;
@@ -345,7 +345,7 @@ static int mqueue_fill_super(struct super_block *sb, void *data, int silent)
 
 static struct dentry *mqueue_mount(struct file_system_type *fs_type,
 			 int flags, const char *dev_name,
-			 void *data)
+			 void *data, size_t data_size)
 {
 	struct ipc_namespace *ns;
 	if (flags & SB_KERNMOUNT) {
@@ -354,7 +354,8 @@ static struct dentry *mqueue_mount(struct file_system_type *fs_type,
 	} else {
 		ns = current->nsproxy->ipc_ns;
 	}
-	return mount_ns(fs_type, flags, data, ns, ns->user_ns, mqueue_fill_super);
+	return mount_ns(fs_type, flags, data, data_size, ns, ns->user_ns,
+			mqueue_fill_super);
 }
 
 static void init_once(void *foo)
@@ -1538,7 +1539,7 @@ int mq_init_ns(struct ipc_namespace *ns)
 	ns->mq_msg_default   = DFLT_MSG;
 	ns->mq_msgsize_default  = DFLT_MSGSIZE;
 
-	ns->mq_mnt = kern_mount_data(&mqueue_fs_type, ns);
+	ns->mq_mnt = kern_mount_data(&mqueue_fs_type, ns, 0);
 	if (IS_ERR(ns->mq_mnt)) {
 		int err = PTR_ERR(ns->mq_mnt);
 		ns->mq_mnt = NULL;

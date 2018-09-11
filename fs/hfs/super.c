@@ -111,7 +111,8 @@ static int hfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
-static int hfs_remount(struct super_block *sb, int *flags, char *data)
+static int hfs_remount(struct super_block *sb, int *flags,
+		       char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_NODIRATIME;
@@ -382,7 +383,8 @@ static int parse_options(char *options, struct hfs_sb_info *hsb)
  * hfs_btree_init() to get the necessary data about the extents and
  * catalog B-trees and, finally, reading the root inode into memory.
  */
-static int hfs_fill_super(struct super_block *sb, void *data, int silent)
+static int hfs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			  int silent)
 {
 	struct hfs_sb_info *sbi;
 	struct hfs_find_data fd;
@@ -458,9 +460,11 @@ bail:
 }
 
 static struct dentry *hfs_mount(struct file_system_type *fs_type,
-		      int flags, const char *dev_name, void *data)
+				int flags, const char *dev_name,
+				void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, hfs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  hfs_fill_super);
 }
 
 static struct file_system_type hfs_fs_type = {

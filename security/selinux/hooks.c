@@ -2791,7 +2791,7 @@ static inline void take_selinux_option(char **to, char *from, int *first,
 	}
 }
 
-static int selinux_sb_copy_data(char *orig, char *copy)
+static int selinux_sb_copy_data(char *orig, size_t data_size, char *copy)
 {
 	int fnosec, fsec, rc = 0;
 	char *in_save, *in_curr, *in_end;
@@ -2833,7 +2833,7 @@ out:
 	return rc;
 }
 
-static int selinux_sb_remount(struct super_block *sb, void *data)
+static int selinux_sb_remount(struct super_block *sb, void *data, size_t data_size)
 {
 	int rc, i, *flags;
 	struct security_mnt_opts opts;
@@ -2853,7 +2853,7 @@ static int selinux_sb_remount(struct super_block *sb, void *data)
 	secdata = alloc_secdata();
 	if (!secdata)
 		return -ENOMEM;
-	rc = selinux_sb_copy_data(data, secdata);
+	rc = selinux_sb_copy_data(data, data_size, secdata);
 	if (rc)
 		goto out_free_secdata;
 
@@ -2918,7 +2918,7 @@ out_bad_option:
 	goto out_free_opts;
 }
 
-static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
+static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data, size_t data_size)
 {
 	const struct cred *cred = current_cred();
 	struct common_audit_data ad;
@@ -2951,7 +2951,8 @@ static int selinux_mount(const char *dev_name,
 			 const struct path *path,
 			 const char *type,
 			 unsigned long flags,
-			 void *data)
+			 void *data,
+			 size_t data_size)
 {
 	const struct cred *cred = current_cred();
 

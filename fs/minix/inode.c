@@ -22,7 +22,8 @@
 static int minix_write_inode(struct inode *inode,
 		struct writeback_control *wbc);
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf);
-static int minix_remount (struct super_block * sb, int * flags, char * data);
+static int minix_remount (struct super_block * sb, int * flags,
+			  char * data, size_t data_size);
 
 static void minix_evict_inode(struct inode *inode)
 {
@@ -118,7 +119,8 @@ static const struct super_operations minix_sops = {
 	.remount_fs	= minix_remount,
 };
 
-static int minix_remount (struct super_block * sb, int * flags, char * data)
+static int minix_remount (struct super_block * sb, int * flags,
+			  char * data, size_t data_size)
 {
 	struct minix_sb_info * sbi = minix_sb(sb);
 	struct minix_super_block * ms;
@@ -155,7 +157,8 @@ static int minix_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-static int minix_fill_super(struct super_block *s, void *data, int silent)
+static int minix_fill_super(struct super_block *s, void *data, size_t data_size,
+			    int silent)
 {
 	struct buffer_head *bh;
 	struct buffer_head **map;
@@ -651,9 +654,10 @@ void minix_truncate(struct inode * inode)
 }
 
 static struct dentry *minix_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, minix_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  minix_fill_super);
 }
 
 static struct file_system_type minix_fs_type = {

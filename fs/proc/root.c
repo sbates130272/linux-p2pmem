@@ -78,7 +78,8 @@ int proc_parse_options(char *options, struct pid_namespace *pid)
 	return 1;
 }
 
-int proc_remount(struct super_block *sb, int *flags, char *data)
+int proc_remount(struct super_block *sb, int *flags,
+		 char *data, size_t data_size)
 {
 	struct pid_namespace *pid = sb->s_fs_info;
 
@@ -87,7 +88,8 @@ int proc_remount(struct super_block *sb, int *flags, char *data)
 }
 
 static struct dentry *proc_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+				 int flags, const char *dev_name,
+				 void *data, size_t data_size)
 {
 	struct pid_namespace *ns;
 
@@ -98,7 +100,8 @@ static struct dentry *proc_mount(struct file_system_type *fs_type,
 		ns = task_active_pid_ns(current);
 	}
 
-	return mount_ns(fs_type, flags, data, ns, ns->user_ns, proc_fill_super);
+	return mount_ns(fs_type, flags, data, data_size, ns, ns->user_ns,
+			proc_fill_super);
 }
 
 static void proc_kill_sb(struct super_block *sb)
@@ -211,7 +214,7 @@ int pid_ns_prepare_proc(struct pid_namespace *ns)
 {
 	struct vfsmount *mnt;
 
-	mnt = kern_mount_data(&proc_fs_type, ns);
+	mnt = kern_mount_data(&proc_fs_type, ns, 0);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 

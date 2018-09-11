@@ -88,13 +88,15 @@ static LIST_HEAD(service_processors);
 
 static struct inode *ibmasmfs_make_inode(struct super_block *sb, int mode);
 static void ibmasmfs_create_files (struct super_block *sb);
-static int ibmasmfs_fill_super (struct super_block *sb, void *data, int silent);
+static int ibmasmfs_fill_super (struct super_block *sb, void *data, size_t data_size,
+				int silent);
 
 
 static struct dentry *ibmasmfs_mount(struct file_system_type *fst,
-			int flags, const char *name, void *data)
+				     int flags, const char *name,
+				     void *data, size_t data_size)
 {
-	return mount_single(fst, flags, data, ibmasmfs_fill_super);
+	return mount_single(fst, flags, data, data_size, ibmasmfs_fill_super);
 }
 
 static const struct super_operations ibmasmfs_s_ops = {
@@ -112,7 +114,8 @@ static struct file_system_type ibmasmfs_type = {
 };
 MODULE_ALIAS_FS("ibmasmfs");
 
-static int ibmasmfs_fill_super (struct super_block *sb, void *data, int silent)
+static int ibmasmfs_fill_super (struct super_block *sb,
+				void *data, size_t data_size, int silent)
 {
 	struct inode *root;
 

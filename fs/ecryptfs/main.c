@@ -488,7 +488,7 @@ static struct file_system_type ecryptfs_fs_type;
  * @raw_data: The options passed into the kernel
  */
 static struct dentry *ecryptfs_mount(struct file_system_type *fs_type, int flags,
-			const char *dev_name, void *raw_data)
+			const char *dev_name, void *raw_data, size_t data_size)
 {
 	struct super_block *s;
 	struct ecryptfs_sb_info *sbi;

@@ -316,7 +316,8 @@ static inline bool is_in_v2_mode(void)
  * silently switch it to mount "cgroup" instead
  */
 static struct dentry *cpuset_mount(struct file_system_type *fs_type,
-			 int flags, const char *unused_dev_name, void *data)
+				   int flags, const char *unused_dev_name,
+				   void *data, size_t data_size)
 {
 	struct file_system_type *cgroup_fs = get_fs_type("cgroup");
 	struct dentry *ret = ERR_PTR(-ENODEV);
@@ -324,8 +325,8 @@ static struct dentry *cpuset_mount(struct file_system_type *fs_type,
 		char mountopts[] =
 			"cpuset,noprefix,"
 			"release_agent=/sbin/cpuset_release_agent";
-		ret = cgroup_fs->mount(cgroup_fs, flags,
-					   unused_dev_name, mountopts);
+		ret = cgroup_fs->mount(cgroup_fs, flags, unused_dev_name,
+				       mountopts, data_size);
 		put_filesystem(cgroup_fs);
 	}
 	return ret;

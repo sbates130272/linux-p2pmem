@@ -373,20 +373,20 @@ void security_sb_free(struct super_block *sb)
 	call_void_hook(sb_free_security, sb);
 }
 
-int security_sb_copy_data(char *orig, char *copy)
+int security_sb_copy_data(char *orig, size_t data_size, char *copy)
 {
-	return call_int_hook(sb_copy_data, 0, orig, copy);
+	return call_int_hook(sb_copy_data, 0, orig, data_size, copy);
 }
 EXPORT_SYMBOL(security_sb_copy_data);
 
-int security_sb_remount(struct super_block *sb, void *data)
+int security_sb_remount(struct super_block *sb, void *data, size_t data_size)
 {
-	return call_int_hook(sb_remount, 0, sb, data);
+	return call_int_hook(sb_remount, 0, sb, data, data_size);
 }
 
-int security_sb_kern_mount(struct super_block *sb, int flags, void *data)
+int security_sb_kern_mount(struct super_block *sb, int flags, void *data, size_t data_size)
 {
-	return call_int_hook(sb_kern_mount, 0, sb, flags, data);
+	return call_int_hook(sb_kern_mount, 0, sb, flags, data, data_size);
 }
 
 int security_sb_show_options(struct seq_file *m, struct super_block *sb)
@@ -400,9 +400,11 @@ int security_sb_statfs(struct dentry *dentry)
 }
 
 int security_sb_mount(const char *dev_name, const struct path *path,
-                       const char *type, unsigned long flags, void *data)
+		      const char *type, unsigned long flags,
+		      void *data, size_t data_size)
 {
-	return call_int_hook(sb_mount, 0, dev_name, path, type, flags, data);
+	return call_int_hook(sb_mount, 0, dev_name, path, type, flags,
+			     data, data_size);
 }
 
 int security_sb_umount(struct vfsmount *mnt, int flags)

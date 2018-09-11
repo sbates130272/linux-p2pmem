@@ -116,7 +116,7 @@ v9fs_fill_super(struct super_block *sb, struct v9fs_session_info *v9ses,
  */
 
 static struct dentry *v9fs_mount(struct file_system_type *fs_type, int flags,
-		       const char *dev_name, void *data)
+		       const char *dev_name, void *data, size_t data_size)
 {
 	struct super_block *sb = NULL;
 	struct inode *inode = NULL;

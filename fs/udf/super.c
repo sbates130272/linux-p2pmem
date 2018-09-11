@@ -87,10 +87,10 @@ enum {
 enum { UDF_MAX_LINKS = 0xffff };
 
 /* These are the "meat" - everything else is stuffing */
-static int udf_fill_super(struct super_block *, void *, int);
+static int udf_fill_super(struct super_block *, void *, size_t, int);
 static void udf_put_super(struct super_block *);
 static int udf_sync_fs(struct super_block *, int);
-static int udf_remount_fs(struct super_block *, int *, char *);
+static int udf_remount_fs(struct super_block *, int *, char *, size_t);
 static void udf_load_logicalvolint(struct super_block *, struct kernel_extent_ad);
 static int udf_find_fileset(struct super_block *, struct kernel_lb_addr *,
 			    struct kernel_lb_addr *);
@@ -126,9 +126,11 @@ struct logicalVolIntegrityDescImpUse *udf_sb_lvidiu(struct super_block *sb)
 
 /* UDF filesystem type */
 static struct dentry *udf_mount(struct file_system_type *fs_type,
-		      int flags, const char *dev_name, void *data)
+				int flags, const char *dev_name,
+				void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, udf_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  udf_fill_super);
 }
 
 static struct file_system_type udf_fstype = {
@@ -608,7 +610,8 @@ static int udf_parse_options(char *options, struct udf_options *uopt,
 	return 1;
 }
 
-static int udf_remount_fs(struct super_block *sb, int *flags, char *options)
+static int udf_remount_fs(struct super_block *sb, int *flags,
+			  char *options, size_t data_size)
 {
 	struct udf_options uopt;
 	struct udf_sb_info *sbi = UDF_SB(sb);
@@ -2032,7 +2035,8 @@ u64 lvid_get_unique_id(struct super_block *sb)
 	return ret;
 }
 
-static int udf_fill_super(struct super_block *sb, void *options, int silent)
+static int udf_fill_super(struct super_block *sb,
+			  void *options, size_t data_size, int silent)
 {
 	int ret = -EINVAL;
 	struct inode *inode = NULL;

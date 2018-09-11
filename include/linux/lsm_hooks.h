@@ -104,6 +104,7 @@
  *	@type contains the filesystem type.
  *	@flags contains the mount flags.
  *	@data contains the filesystem-specific data.
+ *	@data_size contains the size of the data.
  *	Return 0 if permission is granted.
  * @sb_copy_data:
  *	Allow mount option data to be copied prior to parsing by the filesystem,
@@ -113,6 +114,7 @@
  *	specific options to avoid having to make filesystems aware of them.
  *	@type the type of filesystem being mounted.
  *	@orig the original mount data copied from userspace.
+ *	@orig_data is the size of the original data
  *	@copy copied data which will be passed to the security module.
  *	Returns 0 if the copy was successful.
  * @sb_remount:
@@ -120,6 +122,7 @@
  *	are being made to those options.
  *	@sb superblock being remounted
  *	@data contains the filesystem-specific data.
+ *	@data_size contains the size of the data.
  *	Return 0 if permission is granted.
  * @sb_umount:
  *	Check permission before the @mnt file system is unmounted.
@@ -1461,13 +1464,15 @@ union security_list_options {
 
 	int (*sb_alloc_security)(struct super_block *sb);
 	void (*sb_free_security)(struct super_block *sb);
-	int (*sb_copy_data)(char *orig, char *copy);
-	int (*sb_remount)(struct super_block *sb, void *data);
-	int (*sb_kern_mount)(struct super_block *sb, int flags, void *data);
+	int (*sb_copy_data)(char *orig, size_t orig_size, char *copy);
+	int (*sb_remount)(struct super_block *sb, void *data, size_t data_size);
+	int (*sb_kern_mount)(struct super_block *sb, int flags,
+			     void *data, size_t data_size);
 	int (*sb_show_options)(struct seq_file *m, struct super_block *sb);
 	int (*sb_statfs)(struct dentry *dentry);
 	int (*sb_mount)(const char *dev_name, const struct path *path,
-			const char *type, unsigned long flags, void *data);
+			const char *type, unsigned long flags,
+			void *data, size_t data_size);
 	int (*sb_umount)(struct vfsmount *mnt, int flags);
 	int (*sb_pivotroot)(const struct path *old_path, const struct path *new_path);
 	int (*sb_set_mnt_opts)(struct super_block *sb,

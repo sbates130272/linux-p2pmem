@@ -1817,7 +1817,7 @@ static int mkdir_mondata_all(struct kernfs_node *parent_kn,
 
 static struct dentry *rdt_mount(struct file_system_type *fs_type,
 				int flags, const char *unused_dev_name,
-				void *data)
+				void *data, size_t data_size)
 {
 	struct rdt_domain *dom;
 	struct rdt_resource *r;

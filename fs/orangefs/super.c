@@ -207,7 +207,8 @@ out_op_release:
  * Remount as initiated by VFS layer.  We just need to reparse the mount
  * options, no need to signal pvfs2-client-core about it.
  */
-static int orangefs_remount_fs(struct super_block *sb, int *flags, char *data)
+static int orangefs_remount_fs(struct super_block *sb, int *flags,
+			       char *data, size_t data_size)
 {
 	gossip_debug(GOSSIP_SUPER_DEBUG, "orangefs_remount_fs: called\n");
 	return parse_mount_options(sb, data, 1);
@@ -457,7 +458,7 @@ static int orangefs_fill_sb(struct super_block *sb,
 struct dentry *orangefs_mount(struct file_system_type *fst,
 			   int flags,
 			   const char *devname,
-			   void *data)
+			   void *data, size_t data_size)
 {
 	int ret = -EINVAL;
 	struct super_block *sb = ERR_PTR(-EINVAL);

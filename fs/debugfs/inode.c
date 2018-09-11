@@ -130,7 +130,8 @@ static int debugfs_apply_options(struct super_block *sb)
 	return 0;
 }
 
-static int debugfs_remount(struct super_block *sb, int *flags, char *data)
+static int debugfs_remount(struct super_block *sb, int *flags,
+			   char *data, size_t data_size)
 {
 	int err;
 	struct debugfs_fs_info *fsi = sb->s_fs_info;
@@ -190,7 +191,7 @@ static struct vfsmount *debugfs_automount(struct path *path)
 {
 	debugfs_automount_t f;
 	f = (debugfs_automount_t)path->dentry->d_fsdata;
-	return f(path->dentry, d_inode(path->dentry)->i_private);
+	return f(path->dentry, d_inode(path->dentry)->i_private, 0);
 }
 
 static const struct dentry_operations debugfs_dops = {
@@ -199,7 +200,8 @@ static const struct dentry_operations debugfs_dops = {
 	.d_automount = debugfs_automount,
 };
 
-static int debug_fill_super(struct super_block *sb, void *data, int silent)
+static int debug_fill_super(struct super_block *sb,
+			    void *data, size_t data_size, int silent)
 {
 	static const struct tree_descr debug_files[] = {{""}};
 	struct debugfs_fs_info *fsi;
@@ -235,9 +237,9 @@ fail:
 
 static struct dentry *debug_mount(struct file_system_type *fs_type,
 			int flags, const char *dev_name,
-			void *data)
+			void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, debug_fill_super);
+	return mount_single(fs_type, flags, data, data_size, debug_fill_super);
 }
 
 static struct file_system_type debug_fs_type = {
@@ -539,7 +541,7 @@ EXPORT_SYMBOL_GPL(debugfs_create_dir);
 struct dentry *debugfs_create_automount(const char *name,
 					struct dentry *parent,
 					debugfs_automount_t f,
-					void *data)
+					void *data, size_t data_size)
 {
 	struct dentry *dentry = start_creating(name, parent);
 	struct inode *inode;

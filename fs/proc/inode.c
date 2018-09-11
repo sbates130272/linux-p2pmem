@@ -491,7 +491,8 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 	return inode;
 }
 
-int proc_fill_super(struct super_block *s, void *data, int silent)
+int proc_fill_super(struct super_block *s, void *data, size_t data_size,
+		    int silent)
 {
 	struct pid_namespace *ns = get_pid_ns(s->s_fs_info);
 	struct inode *root_inode;
