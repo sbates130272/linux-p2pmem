@@ -705,19 +705,15 @@ EXPORT_SYMBOL_GPL(icc_provider_del);
 
 static int __init icc_init(void)
 {
-#ifdef CONFIG_DEBUG_FS
 	icc_debugfs_dir = debugfs_create_dir("interconnect", NULL);
 	debugfs_create_file("interconnect_summary", 0444,
 			    icc_debugfs_dir, NULL, &icc_summary_fops);
-#endif
 	return 0;
 }
 
 static void __exit icc_exit(void)
 {
-#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(icc_debugfs_dir);
-#endif
 }
 module_init(icc_init);
 module_exit(icc_exit);
