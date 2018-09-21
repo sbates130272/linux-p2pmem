@@ -867,15 +867,15 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_map_sg);
  *		to enable p2pdma
  * @page: contents of the value to be stored
  * @p2p_dev: returns the PCI device that was selected to be used
- *		(if 'auto', 'none or a boolean isn't the store value)
+ *		(if one was specified in the stored value)
  * @use_p2pdma: returns whether to enable p2pdma or not
  *
  * Parses an attribute value to decide whether to enable p2pdma.
  * The value can select a PCI device (using it's full BDF device
- * name), a boolean, or 'auto'. 'auto' and a true boolean value
- * have the same meaning. A false value disables p2pdma and
- * a PCI device enables it to use a specific device as the
- * backing provider.
+ * name) or a boolean (in any format strtobool() accepts). A false
+ * value disables p2pdma, a true value expects the caller
+ * to automatically find a compatible device and specifying a PCI device
+ * expects the caller to use the specific provider.
  *
  * pci_p2pdma_enable_show() should be used as the show operation for
  * the attribute.
@@ -893,15 +893,13 @@ int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 		*p2p_dev = to_pci_dev(dev);
 
 		if (!pci_has_p2pmem(*p2p_dev)) {
-			pr_err("PCI device has no peer-to-peer memory: %s\n",
-			       page);
+			pci_err(*p2p_dev,
+				"PCI device has no peer-to-peer memory: %s\n",
+				page);
 			pci_dev_put(*p2p_dev);
 			return -ENODEV;
 		}
 
-		return 0;
-	} else if (sysfs_streq(page, "auto")) {
-		*use_p2pdma = true;
 		return 0;
 	} else if ((page[0] == '0' || page[0] == '1') && !iscntrl(page[1])) {
 		/*
@@ -935,10 +933,10 @@ ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 			       bool use_p2pdma)
 {
 	if (!use_p2pdma)
-		return sprintf(page, "none\n");
+		return sprintf(page, "0\n");
 
 	if (!p2p_dev)
-		return sprintf(page, "auto\n");
+		return sprintf(page, "1\n");
 
 	return sprintf(page, "%s\n", pci_name(p2p_dev));
 }
