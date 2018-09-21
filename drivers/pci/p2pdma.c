@@ -381,6 +381,8 @@ static int upstream_bridge_distance_warn(struct pci_dev *provider,
 	int ret;
 
 	seq_buf_init(&acs_list, kmalloc(PAGE_SIZE, GFP_KERNEL), PAGE_SIZE);
+	if (!acs_list.buffer)
+		return -ENOMEM;
 
 	ret = upstream_bridge_distance(provider, client, &acs_list);
 	if (ret == -2) {
