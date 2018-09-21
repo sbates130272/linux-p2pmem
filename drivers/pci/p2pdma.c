@@ -268,9 +268,7 @@ static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
 	if (!buf)
 		return;
 
-	seq_buf_printf(buf, "%04x:%02x:%02x.%x;", pci_domain_nr(pdev->bus),
-		       pdev->bus->number, PCI_SLOT(pdev->devfn),
-		       PCI_FUNC(pdev->devfn));
+	seq_buf_printf(buf, "%s;", pci_name(pdev));
 }
 
 /*
@@ -305,7 +303,7 @@ static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
  *
  * In the case where two devices are connected to different PCIe switches,
  * this function will still return a positive distance as long as both
- * switches evenutally have a common upstream bridge. Note this covers
+ * switches eventually have a common upstream bridge. Note this covers
  * the case of using multiple PCIe switches to achieve a desired level of
  * fan-out from a root port. The exact distance will be a function of the
  * number of switches between Device A and Device B.
