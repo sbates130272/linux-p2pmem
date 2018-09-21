@@ -115,8 +115,8 @@ With the client list in hand, the orchestrator may then call
 :c:func:`pci_p2pmem_find()` to obtain a published P2P memory provider
 that is supported (behind the same root port) as all the clients. If more
 than one provider is supported, the one nearest to all the clients will
-be chosen first. If there are more than one provider is an equal distance
-away, the one returned will be chosen at random. This function returns the PCI
+be chosen first. If more than one provider is an equal distance away, the
+one returned will be chosen at random. This function returns the PCI
 device to use for the provider with a reference taken and therefore
 when it's no longer needed it should be returned with pci_dev_put().
 
