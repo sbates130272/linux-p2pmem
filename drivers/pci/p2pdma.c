@@ -242,20 +242,20 @@ static struct pci_dev *find_parent_pci_dev(struct device *dev)
 }
 
 /*
- * Check if a PCI bridge has it's ACS redirection bits set to redirect P2P
+ * Check if a PCI bridge has its ACS redirection bits set to redirect P2P
  * TLPs upstream via ACS. Returns 1 if the packets will be redirected
  * upstream, 0 otherwise.
  */
-static int pci_bridge_has_acs_redir(struct pci_dev *dev)
+static int pci_bridge_has_acs_redir(struct pci_dev *pdev)
 {
 	int pos;
 	u16 ctrl;
 
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);
+	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ACS);
 	if (!pos)
 		return 0;
 
-	pci_read_config_word(dev, pos + PCI_ACS_CTRL, &ctrl);
+	pci_read_config_word(pdev, pos + PCI_ACS_CTRL, &ctrl);
 
 	if (ctrl & (PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC))
 		return 1;
@@ -263,14 +263,14 @@ static int pci_bridge_has_acs_redir(struct pci_dev *dev)
 	return 0;
 }
 
-static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *dev)
+static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
 {
 	if (!buf)
 		return;
 
-	seq_buf_printf(buf, "%04x:%02x:%02x.%x;", pci_domain_nr(dev->bus),
-		       dev->bus->number, PCI_SLOT(dev->devfn),
-		       PCI_FUNC(dev->devfn));
+	seq_buf_printf(buf, "%04x:%02x:%02x.%x;", pci_domain_nr(pdev->bus),
+		       pdev->bus->number, PCI_SLOT(pdev->devfn),
+		       PCI_FUNC(pdev->devfn));
 }
 
 /*
