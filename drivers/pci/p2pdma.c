@@ -8,6 +8,7 @@
  * Copyright (c) 2018, Eideticom Inc.
  */
 
+#define pr_fmt(fmt) "pci-p2pdma: " fmt
 #include <linux/ctype.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/module.h>
