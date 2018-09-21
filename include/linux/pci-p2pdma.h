@@ -6,7 +6,6 @@
  * Copyright (c) 2016-2017, Microsemi Corporation
  * Copyright (c) 2017, Christoph Hellwig
  * Copyright (c) 2018, Eideticom Inc.
- *
  */
 
 #ifndef _LINUX_PCI_P2PDMA_H
