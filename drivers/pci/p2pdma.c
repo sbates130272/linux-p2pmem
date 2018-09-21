@@ -386,14 +386,16 @@ static int upstream_bridge_distance_warn(struct pci_dev *provider,
 
 	ret = upstream_bridge_distance(provider, client, &acs_list);
 	if (ret == -2) {
-		pci_warn(client, "cannot be used for peer-to-peer DMA as ACS redirect is set between the client and provider\n");
+		pci_warn(client, "cannot be used for peer-to-peer DMA as ACS redirect is set between the client and provider (%s)\n",
+			 pci_name(provider));
 		/* Drop final semicolon */
 		acs_list.buffer[acs_list.len-1] = 0;
 		pci_warn(client, "to disable ACS redirect for this path, add the kernel parameter: pci=disable_acs_redir=%s\n",
 			 acs_list.buffer);
 
 	} else if (ret < 0) {
-		pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider do not share an upstream bridge\n");
+		pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider (%s) do not share an upstream bridge\n",
+			 pci_name(provider));
 	}
 
 	kfree(acs_list.buffer);
@@ -581,7 +583,7 @@ int pci_p2pdma_distance(struct pci_dev *provider, struct list_head *clients,
 EXPORT_SYMBOL_GPL(pci_p2pdma_distance);
 
 /**
- * pci_p2pdma_assign_provider - Check compatibily (as per pci_p2pdma_distance)
+ * pci_p2pdma_assign_provider - Check compatibility (as per pci_p2pdma_distance)
  *	and assign a provider to a list of clients
  * @provider: p2pdma provider to assign to the client list
  * @clients: list of devices to check (NULL-terminated)
@@ -642,6 +644,8 @@ struct pci_dev *pci_p2pmem_find(struct list_head *clients)
 	int i;
 
 	closest_pdevs = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!closest_pdevs)
+		return NULL;
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
 		if (!pci_has_p2pmem(pdev))
