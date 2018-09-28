@@ -89,6 +89,26 @@ extern pgd_t swapper_pg_dir[];
 #define __S110	PAGE_SHARED_EXEC
 #define __S111	PAGE_SHARED_EXEC
 
+#define VMALLOC_SIZE     (KERN_VIRT_SIZE >> 1)
+#define VMALLOC_END      (PAGE_OFFSET - 1)
+#define VMALLOC_START    (PAGE_OFFSET - VMALLOC_SIZE)
+
+/*
+ * Log2 of the upper bound of the size of a struct page. Used for sizing
+ * the vmemmap region only, does not affect actual memory footprint.
+ * We don't use sizeof(struct page) directly since taking its size here
+ * requires its definition to be available at this point in the inclusion
+ * chain, and it may not be a power of 2 in the first place.
+ */
+#define STRUCT_PAGE_MAX_SHIFT	6
+
+#define VMEMMAP_SIZE	(UL(1) << (CONFIG_VA_BITS - PAGE_SHIFT - 1 + \
+				   STRUCT_PAGE_MAX_SHIFT))
+#define VMEMMAP_END	(VMALLOC_START - 1)
+#define VMEMMAP_START	(VMALLOC_START - VMEMMAP_SIZE)
+
+#define vmemmap		((struct page *)VMEMMAP_START)
+
 /*
  * ZERO_PAGE is a global shared page that is always zero,
  * used for zero-mapped memory areas, etc.
@@ -410,10 +430,6 @@ static inline void pgtable_cache_init(void)
 {
 	/* No page table caches to initialize */
 }
-
-#define VMALLOC_SIZE     (KERN_VIRT_SIZE >> 1)
-#define VMALLOC_END      (PAGE_OFFSET - 1)
-#define VMALLOC_START    (PAGE_OFFSET - VMALLOC_SIZE)
 
 /*
  * Task size is 0x40000000000 for RV64 or 0xb800000 for RV32.
