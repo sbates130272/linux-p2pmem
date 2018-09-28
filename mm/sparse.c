@@ -5,6 +5,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/mmzone.h>
+#include <linux/memblock.h>
 #include <linux/bootmem.h>
 #include <linux/compiler.h>
 #include <linux/highmem.h>
@@ -237,6 +238,20 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 		}
 	}
 }
+
+#ifdef CONFIG_HAVE_MEMBLOCK
+void __init memblocks_present(void)
+{
+	struct memblock_region *reg;
+
+	for_each_memblock(memory, reg) {
+		int nid = memblock_get_region_node(reg);
+
+		memory_present(nid, memblock_region_memory_base_pfn(reg),
+			       memblock_region_memory_end_pfn(reg));
+	}
+}
+#endif
 
 /*
  * Subtle, we encode the real pfn into the mem_map such that
