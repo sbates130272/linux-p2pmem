@@ -164,6 +164,24 @@ void __init parse_dtb(unsigned int hartid, void *dtb)
 	early_init_dt_scan(__va(dtb));
 }
 
+#ifndef CONFIG_SPARSEMEM
+static void __init riscv_memory_present(void)
+{
+}
+#else
+static void __init riscv_memory_present(void)
+{
+	struct memblock_region *reg;
+
+	for_each_memblock(memory, reg) {
+		int nid = memblock_get_region_node(reg);
+
+		memory_present(nid, memblock_region_memory_base_pfn(reg),
+			       memblock_region_memory_end_pfn(reg));
+	}
+}
+#endif
+
 static void __init setup_bootmem(void)
 {
 	struct memblock_region *reg;
@@ -205,6 +223,9 @@ static void __init setup_bootmem(void)
 		                  PFN_PHYS(end_pfn - start_pfn),
 		                  &memblock.memory, 0);
 	}
+
+	riscv_memory_present();
+	sparse_init();
 }
 
 void __init setup_arch(char **cmdline_p)
@@ -239,4 +260,3 @@ void __init setup_arch(char **cmdline_p)
 
 	riscv_fill_hwcap();
 }
-
