@@ -193,6 +193,9 @@ static void __init setup_bootmem(void)
 		                  PFN_PHYS(end_pfn - start_pfn),
 		                  &memblock.memory, 0);
 	}
+
+	memblocks_present();
+	sparse_init();
 }
 
 void __init setup_arch(char **cmdline_p)
@@ -224,4 +227,3 @@ void __init setup_arch(char **cmdline_p)
 
 	riscv_fill_hwcap();
 }
-
