@@ -141,6 +141,9 @@ void __init setup_bootmem(void)
 				  PFN_PHYS(end_pfn - start_pfn),
 				  &memblock.memory, 0);
 	}
+
+	memblocks_present();
+	sparse_init();
 }
 
 pgd_t swapper_pg_dir[PTRS_PER_PGD] __page_aligned_bss;
@@ -224,3 +227,11 @@ asmlinkage void __init setup_vm(void)
 				__pgprot(_PAGE_TABLE));
 #endif
 }
+
+#ifdef CONFIG_SPARSEMEM
+int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
+			       struct vmem_altmap *altmap)
+{
+	return vmemmap_populate_basepages(start, end, node);
+}
+#endif
