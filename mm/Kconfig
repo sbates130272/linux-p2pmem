@@ -668,7 +668,6 @@ config ARCH_HAS_ZONE_DEVICE
 config ZONE_DEVICE
 	bool "Device memory (pmem, HMM, etc...) hotplug support"
 	depends on MEMORY_HOTPLUG
-	depends on MEMORY_HOTREMOVE
 	depends on SPARSEMEM_VMEMMAP
 	depends on ARCH_HAS_ZONE_DEVICE
 	select RADIX_TREE_MULTIORDER

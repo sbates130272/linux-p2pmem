@@ -136,8 +136,8 @@ static void devm_memremap_pages_release(void *data)
 		- align_start;
 
 	mem_hotplug_begin();
-	arch_remove_memory(align_start, align_size, pgmap->altmap_valid ?
-			&pgmap->altmap : NULL);
+/*	arch_remove_memory(align_start, align_size, pgmap->altmap_valid ?
+	&pgmap->altmap : NULL);*/
 	kasan_remove_zero_shadow(__va(align_start), align_size);
 	mem_hotplug_done();
 

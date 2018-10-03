@@ -44,6 +44,7 @@ config RISCV
 	select RISCV_TIMER
 	select GENERIC_IRQ_MULTI_HANDLER
 	select ARCH_HAS_PTE_SPECIAL
+	select ARCH_HAS_ZONE_DEVICE
 
 config MMU
 	def_bool y
@@ -70,6 +71,12 @@ config PAGE_OFFSET
 
 config ARCH_FLATMEM_ENABLE
 	def_bool y
+
+config ARCH_ENABLE_MEMORY_HOTPLUG
+       def_bool y
+
+config ARCH_ENABLE_MEMORY_HOTREMOVE
+       def_bool y
 
 config ARCH_SPARSEMEM_ENABLE
 	def_bool y

@@ -699,7 +699,7 @@ int __meminit sparse_add_one_section(struct pglist_data *pgdat,
 		return -ENOMEM;
 	usemap = __kmalloc_section_usemap();
 	if (!usemap) {
-		__kfree_section_memmap(memmap, altmap);
+		//__kfree_section_memmap(memmap, altmap);
 		return -ENOMEM;
 	}
 
@@ -726,7 +726,7 @@ out:
 	pgdat_resize_unlock(pgdat, &flags);
 	if (ret < 0) {
 		kfree(usemap);
-		__kfree_section_memmap(memmap, altmap);
+		//__kfree_section_memmap(memmap, altmap);
 	}
 	return ret;
 }
