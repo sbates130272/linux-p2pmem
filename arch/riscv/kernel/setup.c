@@ -164,6 +164,16 @@ void __init parse_dtb(unsigned int hartid, void *dtb)
 	early_init_dt_scan(__va(dtb));
 }
 
+/* Temporory debig stuff... To Be Removed */
+static void print_range(const char *name, unsigned long start,
+			unsigned long end)
+{
+	unsigned long bytes = end - start + 1;
+
+	pr_info("%s: \t%08lx to %08lx (%luGB)\n", name, start, end,
+		bytes >> 30);
+}
+
 static void __init setup_bootmem(void)
 {
 	struct memblock_region *reg;
@@ -194,6 +204,14 @@ static void __init setup_bootmem(void)
 
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();
+
+	print_range("Linear Mapping", va_pa_offset, 0xFFFFFFFFFFFFFFFFUL);
+	pr_info("  PAGE_OFFSET: \t%08lx\n", PAGE_OFFSET);
+	print_range("VMALLOC Region", VMALLOC_START, VMALLOC_END);
+#ifdef CONFIG_SPARSEMEM
+	print_range("vmemmap Region", VMEMMAP_START, VMEMMAP_END);
+#endif
+
 	memblock_allow_resize();
 	memblock_dump_all();
 
