@@ -1,0 +1,24 @@
+Sv32:
+
+00000000 - 7fffffff   user space, different per mm (2G)
+80000000 - 81ffffff   virtual memory map (32MB)
+82000000 - bfffffff   vmalloc/ioremap space (1GB - 32MB)
+c0000000 - ffffffff   direct mapping of lower phys. memory (1GB)
+
+Sv39:
+
+0000000000000000 - 0000003fffffffff  user space, different per mm (256GB)
+hole caused by [38:63] sign extension
+ffffffc000000000 - ffffffc0ffffffff  virtual memory map (4GB)
+ffffffc100000000 - ffffffd0ffffffff  vmalloc/ioremap spac (64GB)
+ffffffd100000000 - ffffffffffffffff  linear mapping of physical space (188GB)
+  ffffffd200000000 - 0xfffffff200000000 linear mapping of all physical memory
+
+Architecture defines virtual address bits in multiples of nine starting
+from 39. These are referred to as Sv39, Sv48, Sv57 and Sv64. Currently
+only Sv39 is supported. Bits 63 through to the most-significant implemented
+bit are sign extended. This causes a hole between user space and kernel
+addresses if you interpret them as unsigned.
+
+The direct mapping covers as much of the physical memory space as
+possible so may cover some IO memory but not all of it.
