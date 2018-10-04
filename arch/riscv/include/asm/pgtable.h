@@ -89,9 +89,7 @@ extern pgd_t swapper_pg_dir[];
 #define __S110	PAGE_SHARED_EXEC
 #define __S111	PAGE_SHARED_EXEC
 
-#define VMALLOC_SIZE     (KERN_VIRT_SIZE >> 1)
-#define VMALLOC_END      (PAGE_OFFSET - 1)
-#define VMALLOC_START    (PAGE_OFFSET - VMALLOC_SIZE)
+#define KERN_SPACE_START	(-1UL << (CONFIG_VA_BITS - 1))
 
 /*
  * Log2 of the upper bound of the size of a struct page. Used for sizing
@@ -102,12 +100,24 @@ extern pgd_t swapper_pg_dir[];
  */
 #define STRUCT_PAGE_MAX_SHIFT	6
 
+#ifdef CONFIG_SPARSEMEM
 #define VMEMMAP_SIZE	(UL(1) << (CONFIG_VA_BITS - PAGE_SHIFT - 1 + \
 				   STRUCT_PAGE_MAX_SHIFT))
-#define VMEMMAP_END	(VMALLOC_START - 1)
-#define VMEMMAP_START	(VMALLOC_START - VMEMMAP_SIZE)
-
+#define VMEMMAP_START	(KERN_SPACE_START)
+#define VMEMMAP_END	(VMEMMAP_START + VMEMMAP_SIZE - 1)
 #define vmemmap		((struct page *)VMEMMAP_START)
+#else
+#define VMEMMAP_END	KERN_SPACE_START
+#endif
+
+#if defined(CONFIG_32BIT)
+#define VMALLOC_SIZE	((1UL << 30) - VMEMMAP_SIZE)
+#else
+#define VMALLOC_SIZE	(64UL << 30)
+#endif
+
+#define VMALLOC_START	(VMEMMAP_END + 1)
+#define VMALLOC_END	(VMALLOC_START + VMALLOC_SIZE - 1)
 
 /*
  * ZERO_PAGE is a global shared page that is always zero,
