@@ -271,3 +271,30 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 	return vmemmap_populate_basepages(start, end, node);
 }
 #endif
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+void vmemmap_free(unsigned long start, unsigned long end,
+		  struct vmem_altmap *altmap)
+{
+}
+
+int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
+		    bool want_memblock)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+	int ret;
+
+	if ((start + size) > -va_pa_offset) {
+		pr_err("Cannot hotplug memory from %08llx to %08llx as it doesn't fall within the linear mapping\n",
+		       start, start + size);
+		return -EFAULT;
+	}
+
+	ret = __add_pages(nid, start_pfn, nr_pages, altmap, want_memblock);
+	WARN_ON_ONCE(ret);
+
+	return ret;
+}
+
+#endif
