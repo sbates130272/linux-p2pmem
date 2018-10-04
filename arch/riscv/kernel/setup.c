@@ -59,7 +59,6 @@ EXPORT_SYMBOL(empty_zero_page);
 /* The lucky hart to first increment this variable will boot the other cores */
 atomic_t hart_lottery;
 unsigned long boot_cpu_hartid;
-
 void __init parse_dtb(unsigned int hartid, void *dtb)
 {
 	if (early_init_dt_scan(__va(dtb)))
