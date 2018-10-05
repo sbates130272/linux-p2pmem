@@ -30,10 +30,14 @@
 #define _PAGE_GLOBAL    (1 << 5)    /* Global */
 #define _PAGE_ACCESSED  (1 << 6)    /* Set by hardware on any access */
 #define _PAGE_DIRTY     (1 << 7)    /* Set by hardware on any write */
-#define _PAGE_SOFT      (1 << 8)    /* Reserved for software */
+#define _PAGE_SOFT1     (1 << 8)    /* Reserved for software */
+#define _PAGE_SOFT2     (1 << 9)    /* Reserved for software */
 
-#define _PAGE_SPECIAL   _PAGE_SOFT
+#define _PAGE_SPECIAL   _PAGE_SOFT1
+#define _PAGE_DEVMAP	_PAGE_SOFT2
 #define _PAGE_TABLE     _PAGE_PRESENT
+
+#define __HAVE_ARCH_PTE_DEVMAP
 
 #define _PAGE_PFN_SHIFT 10
 
