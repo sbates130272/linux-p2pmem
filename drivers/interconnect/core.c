@@ -52,8 +52,6 @@ struct icc_path {
 	struct icc_req reqs[];
 };
 
-#ifdef CONFIG_DEBUG_FS
-
 static void icc_summary_show_one(struct seq_file *s, struct icc_node *n)
 {
 	if (!n)
@@ -106,7 +104,6 @@ static const struct file_operations icc_summary_fops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
-#endif
 
 static struct icc_node *node_find(const int id)
 {
