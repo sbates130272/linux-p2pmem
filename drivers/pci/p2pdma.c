@@ -678,10 +678,8 @@ EXPORT_SYMBOL_GPL(pci_p2pmem_free_sgl);
  */
 void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 {
-	if (publish && !pdev->p2pdma)
-		return;
-
-	pdev->p2pdma->p2pmem_published = publish;
+	if (pdev->p2pdma)
+		pdev->p2pdma->p2pmem_published = publish;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
 
