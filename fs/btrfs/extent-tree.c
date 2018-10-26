@@ -9566,10 +9566,10 @@ void btrfs_dec_block_group_ro(struct btrfs_block_group_cache *cache)
 /*
  * checks to see if its even possible to relocate this block group.
  *
- * @return - -1 if it's not a good idea to relocate this block group, 0 if its
- * ok to go ahead and try.
+ * @return - false if not enough space can be found for relocation, true
+ * otherwise
  */
-int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
+bool btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 {
 	struct btrfs_root *root = fs_info->extent_root;
 	struct btrfs_block_group_cache *block_group;
@@ -9584,7 +9584,7 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 	int debug;
 	int index;
 	int full = 0;
-	int ret = 0;
+	bool can_reloc = true;
 
 	debug = btrfs_test_opt(fs_info, ENOSPC_DEBUG);
 
@@ -9596,7 +9596,7 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 			btrfs_warn(fs_info,
 				   "can't find block group for bytenr %llu",
 				   bytenr);
-		return -1;
+		return false;
 	}
 
 	min_free = btrfs_block_group_used(&block_group->item);
@@ -9632,16 +9632,8 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 	 * group is going to be restriped, run checks against the target
 	 * profile instead of the current one.
 	 */
-	ret = -1;
+	can_reloc = false;
 
-	/*
-	 * index:
-	 *      0: raid10
-	 *      1: raid1
-	 *      2: dup
-	 *      3: raid0
-	 *      4: single
-	 */
 	target = get_restripe_target(fs_info, block_group->flags);
 	if (target) {
 		index = btrfs_bg_flags_to_raid_index(extended_to_chunk(target));
@@ -9677,10 +9669,8 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 
 	/* We need to do this so that we can look at pending chunks */
 	trans = btrfs_join_transaction(root);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
+	if (IS_ERR(trans))
 		goto out;
-	}
 
 	mutex_lock(&fs_info->chunk_mutex);
 	list_for_each_entry(device, &fs_devices->alloc_list, dev_alloc_list) {
@@ -9692,18 +9682,17 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 		 */
 		if (device->total_bytes > device->bytes_used + min_free &&
 		    !test_bit(BTRFS_DEV_STATE_REPLACE_TGT, &device->dev_state)) {
-			ret = find_free_dev_extent(trans, device, min_free,
-						   &dev_offset, NULL);
-			if (!ret)
+			if (!find_free_dev_extent(trans, device, min_free,
+						   &dev_offset, NULL))
 				dev_nr++;
 
-			if (dev_nr >= dev_min)
+			if (dev_nr >= dev_min) {
+				can_reloc = true;
 				break;
-
-			ret = -1;
+			}
 		}
 	}
-	if (debug && ret == -1)
+	if (debug && !can_reloc)
 		btrfs_warn(fs_info,
 			   "no space to allocate a new chunk for block group %llu",
 			   block_group->key.objectid);
@@ -9711,7 +9700,7 @@ int btrfs_can_relocate(struct btrfs_fs_info *fs_info, u64 bytenr)
 	btrfs_end_transaction(trans);
 out:
 	btrfs_put_block_group(block_group);
-	return ret;
+	return can_reloc;
 }
 
 static int find_first_block_group(struct btrfs_fs_info *fs_info,
