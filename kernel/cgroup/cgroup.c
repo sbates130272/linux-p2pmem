@@ -55,6 +55,7 @@
 #include <linux/nsproxy.h>
 #include <linux/file.h>
 #include <linux/fs_parser.h>
+#include <linux/fsinfo.h>
 #include <linux/sched/cputime.h>
 #include <net/sock.h>
 
@@ -1784,6 +1785,35 @@ static int cgroup_show_options(struct seq_file *seq, struct kernfs_root *kf_root
 	    cgrp_dfl_root.flags & CGRP_ROOT_NS_DELEGATE)
 		seq_puts(seq, ",nsdelegate");
 	return 0;
+}
+
+static int cgroup_fsinfo(struct kernfs_root *kf_root, struct fsinfo_kparams *params)
+{
+	const char *str = NULL;
+
+	switch (params->request) {
+	case FSINFO_ATTR_PARAMETER:
+		if (params->Mth)
+			return -ENODATA;
+		switch (params->Nth) {
+		case Opt_nsdelegate:
+			if (current->nsproxy->cgroup_ns == &init_cgroup_ns &&
+			    cgrp_dfl_root.flags & CGRP_ROOT_NS_DELEGATE)
+				str = "nsdelegate";
+			goto string;
+		default:
+			return -ENODATA;
+		}
+
+	default:
+		return -EAGAIN; /* Tell kernfs to call generic_fsinfo() */
+	}
+
+string:
+	if (!str)
+		return 0;
+	strcpy(params->buffer, str);
+	return strlen(params->buffer);
 }
 
 static void apply_cgroup_root_flags(unsigned int root_flags)
@@ -5260,6 +5290,7 @@ int cgroup_rmdir(struct kernfs_node *kn)
 
 static struct kernfs_syscall_ops cgroup_kf_syscall_ops = {
 	.show_options		= cgroup_show_options,
+	.fsinfo			= cgroup_fsinfo,
 	.reconfigure		= cgroup_reconfigure,
 	.mkdir			= cgroup_mkdir,
 	.rmdir			= cgroup_rmdir,

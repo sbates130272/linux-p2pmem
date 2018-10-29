@@ -17,6 +17,7 @@
 #include <linux/namei.h>
 #include <linux/seq_file.h>
 #include <linux/exportfs.h>
+#include <linux/fsinfo.h>
 
 #include "kernfs-internal.h"
 
@@ -55,6 +56,20 @@ static int kernfs_sop_show_path(struct seq_file *sf, struct dentry *dentry)
 	return 0;
 }
 
+static int kernfs_sop_fsinfo(struct path *path, struct fsinfo_kparams *params)
+{
+	struct kernfs_root *root = kernfs_root(kernfs_dentry_node(path->dentry));
+	struct kernfs_syscall_ops *scops = root->syscall_ops;
+	int ret;
+
+	if (scops && scops->fsinfo) {
+		ret = scops->fsinfo(root, params);
+		if (ret != -EAGAIN)
+			return ret;
+	}
+	return generic_fsinfo(path, params);
+}
+
 const struct super_operations kernfs_sops = {
 	.statfs		= simple_statfs,
 	.drop_inode	= generic_delete_inode,
@@ -62,6 +77,7 @@ const struct super_operations kernfs_sops = {
 
 	.show_options	= kernfs_sop_show_options,
 	.show_path	= kernfs_sop_show_path,
+	.fsinfo		= kernfs_sop_fsinfo,
 };
 
 /*

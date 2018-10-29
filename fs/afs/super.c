@@ -197,7 +197,7 @@ static int afs_show_options(struct seq_file *m, struct dentry *root)
 
 	if (as->dyn_root)
 		seq_puts(m, ",dyn");
-	if (test_bit(AFS_VNODE_AUTOCELL, &AFS_FS_I(d_inode(root))->flags))
+	if (as->autocell)
 		seq_puts(m, ",autocell");
 	return 0;
 }
@@ -444,7 +444,7 @@ static int afs_fill_super(struct super_block *sb, struct afs_fs_context *ctx)
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 
-	if (ctx->autocell || as->dyn_root)
+	if (as->autocell || as->dyn_root)
 		set_bit(AFS_VNODE_AUTOCELL, &AFS_FS_I(inode)->flags);
 
 	ret = -ENOMEM;
@@ -483,6 +483,8 @@ static struct afs_super_info *afs_alloc_sbi(struct fs_context *fc)
 			as->cell = afs_get_cell(ctx->cell);
 			as->volume = __afs_get_volume(ctx->volume);
 		}
+		if (ctx->autocell)
+			as->autocell = true;
 	}
 	return as;
 }
@@ -790,6 +792,7 @@ static int afs_fsinfo(struct path *path, struct fsinfo_kparams *params)
 	struct afs_volume *volume = as->volume;
 	struct afs_cell *cell = as->cell;
 	struct afs_net *net = afs_d2net(dentry);
+	const char *str = NULL;
 	bool dyn_root = as->dyn_root;
 	int ret;
 
@@ -894,7 +897,39 @@ static int afs_fsinfo(struct path *path, struct fsinfo_kparams *params)
 		afs_put_serverlist(net, slist);
 		return ret;
 
+	case FSINFO_ATTR_PARAMETER:
+		if (params->Mth)
+			return -ENODATA;
+		switch (params->Nth) {
+		case Opt_source:
+			if (dyn_root)
+				return 0;
+			return sprintf(params->buffer, "source=%c%s:%s%s",
+				       volume->type == AFSVL_RWVOL ? '%' : '#',
+				       cell->name,
+				       volume->name,
+				       volume->type == AFSVL_RWVOL ? "" :
+				       volume->type == AFSVL_ROVOL ? ".readonly" :
+				       ".backup");
+		case Opt_autocell:
+			if (as->autocell)
+				str = "autocell";
+			goto string;
+		case Opt_dyn:
+			if (dyn_root)
+				str = "dyn";
+			goto string;
+		default:
+			return -ENODATA;
+		}
+
 	default:
 		return generic_fsinfo(path, params);
 	}
+
+string:
+	if (!str)
+		return 0;
+	strcpy(params->buffer, str);
+	return strlen(params->buffer);
 }

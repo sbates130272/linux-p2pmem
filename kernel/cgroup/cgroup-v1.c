@@ -14,6 +14,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/cgroupstats.h>
 #include <linux/fs_parser.h>
+#include <linux/fsinfo.h>
 
 #include <trace/events/cgroup.h>
 
@@ -948,6 +949,76 @@ const struct fs_parameter_description cgroup1_fs_parameters = {
 	.no_source	= true,
 };
 
+static int cgroup1_fsinfo(struct kernfs_root *kf_root, struct fsinfo_kparams *params)
+{
+	struct cgroup_root *root = cgroup_root_from_kf(kf_root);
+	struct cgroup_subsys *ss;
+	const char *str = NULL;
+	unsigned int Mth;
+	int ret = 0, ssid;
+
+	switch (params->request) {
+	case FSINFO_ATTR_PARAMETER:
+		if (params->Mth && params->Nth != nr__cgroup1_params)
+			return -ENODATA;
+		switch (params->Nth) {
+		case Opt_all:
+			return 0;
+		case Opt_clone_children:
+			if (test_bit(CGRP_CPUSET_CLONE_CHILDREN, &root->cgrp.flags))
+				str = "clone_children";
+			goto string;
+		case Opt_cpuset_v2_mode:
+			if (root->flags & CGRP_ROOT_CPUSET_V2_MODE)
+				str = "noprefix";
+			goto string;
+		case Opt_name:
+			if (strlen(root->name))
+				return sprintf(params->buffer, "name=%s", root->name);
+			return 0;
+		case Opt_none:
+			return 0;
+		case Opt_noprefix:
+			if (root->flags & CGRP_ROOT_NOPREFIX)
+				str = "noprefix";
+			goto string;
+		case Opt_release_agent:
+			spin_lock(&release_agent_path_lock);
+			if (strlen(root->release_agent_path))
+				ret = sprintf(params->buffer, "release_agent=%s",
+					      root->release_agent_path);
+			spin_unlock(&release_agent_path_lock);
+			return ret;
+		case Opt_xattr:
+			if (root->flags & CGRP_ROOT_XATTR)
+				str = "noprefix";
+			goto string;
+		case nr__cgroup1_params:
+			Mth = params->Mth;
+			for_each_subsys(ss, ssid) {
+				if (Mth == 0) {
+					if (root->subsys_mask & (1 << ssid))
+						str = ss->legacy_name;
+					goto string;
+				}
+				Mth--;
+			}
+			return -ENODATA;
+		default:
+			return -ENODATA;
+		}
+
+	default:
+		return -EAGAIN; /* Tell kernfs to call generic_fsinfo() */
+	}
+
+string:
+	if (!str)
+		return 0;
+	strcpy(params->buffer, str);
+	return strlen(params->buffer);
+}
+
 int cgroup1_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct cgroup_fs_context *ctx = cgroup_fc2context(fc);
@@ -1138,6 +1209,7 @@ static int cgroup1_reconfigure(struct kernfs_root *kf_root, struct fs_context *f
 struct kernfs_syscall_ops cgroup1_kf_syscall_ops = {
 	.rename			= cgroup1_rename,
 	.show_options		= cgroup1_show_options,
+	.fsinfo			= cgroup1_fsinfo,
 	.reconfigure		= cgroup1_reconfigure,
 	.mkdir			= cgroup_mkdir,
 	.rmdir			= cgroup_rmdir,

@@ -53,6 +53,7 @@ static const char *param_types[NR__FSINFO_PARAM_SPEC] = {
 	[FSINFO_PARAM_SPEC_IS_U32_OCTAL]	= "octal",
 	[FSINFO_PARAM_SPEC_IS_U32_HEX]		= "hex",
 	[FSINFO_PARAM_SPEC_IS_S32]		= "s32",
+	[FSINFO_PARAM_SPEC_IS_U64]		= "u64",
 	[FSINFO_PARAM_SPEC_IS_ENUM]		= "enum",
 	[FSINFO_PARAM_SPEC_IS_STRING]		= "string",
 	[FSINFO_PARAM_SPEC_IS_BLOB]		= "binary",
