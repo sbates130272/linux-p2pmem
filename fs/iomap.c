@@ -1050,6 +1050,7 @@ iomap_page_mkwrite_actor(struct inode *inode, loff_t pos, loff_t length,
 	} else {
 		WARN_ON_ONCE(!PageUptodate(page));
 		iomap_page_create(inode, page);
+		set_page_dirty(page);
 	}
 
 	return length;
@@ -1089,7 +1090,6 @@ int iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops)
 		length -= ret;
 	}
 
-	set_page_dirty(page);
 	wait_for_stable_page(page);
 	return VM_FAULT_LOCKED;
 out_unlock:
@@ -1794,7 +1794,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		if (pos >= dio->i_size)
 			goto out_free_dio;
 
-		if (iter->type == ITER_IOVEC)
+		if (iter_is_iovec(iter) && iov_iter_rw(iter) == READ)
 			dio->flags |= IOMAP_DIO_DIRTY;
 	} else {
 		flags |= IOMAP_WRITE;

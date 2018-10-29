@@ -588,7 +588,7 @@ cifs_read_from_socket(struct TCP_Server_Info *server, char *buf,
 {
 	struct msghdr smb_msg;
 	struct kvec iov = {.iov_base = buf, .iov_len = to_read};
-	iov_iter_kvec(&smb_msg.msg_iter, READ | ITER_KVEC, &iov, 1, to_read);
+	iov_iter_kvec(&smb_msg.msg_iter, READ, &iov, 1, to_read);
 
 	return cifs_readv_from_socket(server, &smb_msg);
 }
@@ -600,7 +600,7 @@ cifs_read_page_from_socket(struct TCP_Server_Info *server, struct page *page,
 	struct msghdr smb_msg;
 	struct bio_vec bv = {
 		.bv_page = page, .bv_len = to_read, .bv_offset = page_offset};
-	iov_iter_bvec(&smb_msg.msg_iter, READ | ITER_BVEC, &bv, 1, to_read);
+	iov_iter_bvec(&smb_msg.msg_iter, READ, &bv, 1, to_read);
 	return cifs_readv_from_socket(server, &smb_msg);
 }
 
@@ -659,7 +659,15 @@ dequeue_mid(struct mid_q_entry *mid, bool malformed)
 		mid->mid_state = MID_RESPONSE_RECEIVED;
 	else
 		mid->mid_state = MID_RESPONSE_MALFORMED;
-	list_del_init(&mid->qhead);
+	/*
+	 * Trying to handle/dequeue a mid after the send_recv()
+	 * function has finished processing it is a bug.
+	 */
+	if (mid->mid_flags & MID_DELETED)
+		printk_once(KERN_WARNING
+			    "trying to dequeue a deleted mid\n");
+	else
+		list_del_init(&mid->qhead);
 	spin_unlock(&GlobalMid_Lock);
 }
 
@@ -938,8 +946,7 @@ next_pdu:
 		} else {
 			mids[0] = server->ops->find_mid(server, buf);
 			bufs[0] = buf;
-			if (mids[0])
-				num_mids = 1;
+			num_mids = 1;
 
 			if (!mids[0] || !mids[0]->receive)
 				length = standard_receive3(server, mids[0]);

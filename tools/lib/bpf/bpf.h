@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1 */
+/* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */
 
 /*
  * common eBPF ELF operations.
@@ -20,8 +20,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this program; if not,  see <http://www.gnu.org/licenses>
  */
-#ifndef __BPF_BPF_H
-#define __BPF_BPF_H
+#ifndef __LIBBPF_BPF_H
+#define __LIBBPF_BPF_H
 
 #include <linux/bpf.h>
 #include <stdbool.h>
@@ -69,6 +69,9 @@ struct bpf_load_program_attr {
 	__u32 prog_ifindex;
 };
 
+/* Flags to direct loading requirements */
+#define MAPS_RELAX_COMPAT	0x01
+
 /* Recommend log buffer size */
 #define BPF_LOG_BUF_SIZE (256 * 1024)
 int bpf_load_program_xattr(const struct bpf_load_program_attr *load_attr,
@@ -111,4 +114,4 @@ int bpf_load_btf(void *btf, __u32 btf_size, char *log_buf, __u32 log_buf_size,
 int bpf_task_fd_query(int pid, int fd, __u32 flags, char *buf, __u32 *buf_len,
 		      __u32 *prog_id, __u32 *fd_type, __u64 *probe_offset,
 		      __u64 *probe_addr);
-#endif
+#endif /* __LIBBPF_BPF_H */

@@ -112,13 +112,13 @@ static void test_pkt_access(void)
 
 	err = bpf_prog_test_run(prog_fd, 100000, &pkt_v4, sizeof(pkt_v4),
 				NULL, NULL, &retval, &duration);
-	CHECK(err || errno || retval, "ipv4",
+	CHECK(err || retval, "ipv4",
 	      "err %d errno %d retval %d duration %d\n",
 	      err, errno, retval, duration);
 
 	err = bpf_prog_test_run(prog_fd, 100000, &pkt_v6, sizeof(pkt_v6),
 				NULL, NULL, &retval, &duration);
-	CHECK(err || errno || retval, "ipv6",
+	CHECK(err || retval, "ipv6",
 	      "err %d errno %d retval %d duration %d\n",
 	      err, errno, retval, duration);
 	bpf_object__close(obj);
@@ -153,14 +153,14 @@ static void test_xdp(void)
 	err = bpf_prog_test_run(prog_fd, 1, &pkt_v4, sizeof(pkt_v4),
 				buf, &size, &retval, &duration);
 
-	CHECK(err || errno || retval != XDP_TX || size != 74 ||
+	CHECK(err || retval != XDP_TX || size != 74 ||
 	      iph->protocol != IPPROTO_IPIP, "ipv4",
 	      "err %d errno %d retval %d size %d\n",
 	      err, errno, retval, size);
 
 	err = bpf_prog_test_run(prog_fd, 1, &pkt_v6, sizeof(pkt_v6),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != XDP_TX || size != 114 ||
+	CHECK(err || retval != XDP_TX || size != 114 ||
 	      iph6->nexthdr != IPPROTO_IPV6, "ipv6",
 	      "err %d errno %d retval %d size %d\n",
 	      err, errno, retval, size);
@@ -185,13 +185,13 @@ static void test_xdp_adjust_tail(void)
 	err = bpf_prog_test_run(prog_fd, 1, &pkt_v4, sizeof(pkt_v4),
 				buf, &size, &retval, &duration);
 
-	CHECK(err || errno || retval != XDP_DROP,
+	CHECK(err || retval != XDP_DROP,
 	      "ipv4", "err %d errno %d retval %d size %d\n",
 	      err, errno, retval, size);
 
 	err = bpf_prog_test_run(prog_fd, 1, &pkt_v6, sizeof(pkt_v6),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != XDP_TX || size != 54,
+	CHECK(err || retval != XDP_TX || size != 54,
 	      "ipv6", "err %d errno %d retval %d size %d\n",
 	      err, errno, retval, size);
 	bpf_object__close(obj);
@@ -254,14 +254,14 @@ static void test_l4lb(const char *file)
 
 	err = bpf_prog_test_run(prog_fd, NUM_ITER, &pkt_v4, sizeof(pkt_v4),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != 7/*TC_ACT_REDIRECT*/ || size != 54 ||
+	CHECK(err || retval != 7/*TC_ACT_REDIRECT*/ || size != 54 ||
 	      *magic != MAGIC_VAL, "ipv4",
 	      "err %d errno %d retval %d size %d magic %x\n",
 	      err, errno, retval, size, *magic);
 
 	err = bpf_prog_test_run(prog_fd, NUM_ITER, &pkt_v6, sizeof(pkt_v6),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != 7/*TC_ACT_REDIRECT*/ || size != 74 ||
+	CHECK(err || retval != 7/*TC_ACT_REDIRECT*/ || size != 74 ||
 	      *magic != MAGIC_VAL, "ipv6",
 	      "err %d errno %d retval %d size %d magic %x\n",
 	      err, errno, retval, size, *magic);
@@ -343,14 +343,14 @@ static void test_xdp_noinline(void)
 
 	err = bpf_prog_test_run(prog_fd, NUM_ITER, &pkt_v4, sizeof(pkt_v4),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != 1 || size != 54 ||
+	CHECK(err || retval != 1 || size != 54 ||
 	      *magic != MAGIC_VAL, "ipv4",
 	      "err %d errno %d retval %d size %d magic %x\n",
 	      err, errno, retval, size, *magic);
 
 	err = bpf_prog_test_run(prog_fd, NUM_ITER, &pkt_v6, sizeof(pkt_v6),
 				buf, &size, &retval, &duration);
-	CHECK(err || errno || retval != 1 || size != 74 ||
+	CHECK(err || retval != 1 || size != 74 ||
 	      *magic != MAGIC_VAL, "ipv6",
 	      "err %d errno %d retval %d size %d magic %x\n",
 	      err, errno, retval, size, *magic);
@@ -1698,6 +1698,43 @@ static void test_task_fd_query_tp(void)
 				   "sys_enter_read");
 }
 
+static void test_reference_tracking()
+{
+	const char *file = "./test_sk_lookup_kern.o";
+	struct bpf_object *obj;
+	struct bpf_program *prog;
+	__u32 duration;
+	int err = 0;
+
+	obj = bpf_object__open(file);
+	if (IS_ERR(obj)) {
+		error_cnt++;
+		return;
+	}
+
+	bpf_object__for_each_program(prog, obj) {
+		const char *title;
+
+		/* Ignore .text sections */
+		title = bpf_program__title(prog, false);
+		if (strstr(title, ".text") != NULL)
+			continue;
+
+		bpf_program__set_type(prog, BPF_PROG_TYPE_SCHED_CLS);
+
+		/* Expect verifier failure if test name has 'fail' */
+		if (strstr(title, "fail") != NULL) {
+			libbpf_set_print(NULL, NULL, NULL);
+			err = !bpf_program__load(prog, "GPL", 0);
+			libbpf_set_print(printf, printf, NULL);
+		} else {
+			err = bpf_program__load(prog, "GPL", 0);
+		}
+		CHECK(err, title, "\n");
+	}
+	bpf_object__close(obj);
+}
+
 int main(void)
 {
 	jit_enabled = is_jit_enabled();
@@ -1719,6 +1756,7 @@ int main(void)
 	test_get_stack_raw_tp();
 	test_task_fd_query_rawtp();
 	test_task_fd_query_tp();
+	test_reference_tracking();
 
 	printf("Summary: %d PASSED, %d FAILED\n", pass_cnt, error_cnt);
 	return error_cnt ? EXIT_FAILURE : EXIT_SUCCESS;

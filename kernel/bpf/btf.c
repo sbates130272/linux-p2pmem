@@ -1844,7 +1844,7 @@ static int btf_check_all_metas(struct btf_verifier_env *env)
 
 	hdr = &btf->hdr;
 	cur = btf->nohdr_data + hdr->type_off;
-	end = btf->nohdr_data + hdr->type_len;
+	end = cur + hdr->type_len;
 
 	env->log_type_id = 1;
 	while (cur < end) {
@@ -2113,6 +2113,9 @@ static int btf_parse_hdr(struct btf_verifier_env *env, void __user *btf_data,
 		return -EFAULT;
 
 	hdr = &btf->hdr;
+
+	if (hdr->hdr_len != hdr_len)
+		return -EINVAL;
 
 	btf_verifier_log_hdr(env, btf_data_size);
 

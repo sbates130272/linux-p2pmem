@@ -142,7 +142,8 @@ void
 cifs_delete_mid(struct mid_q_entry *mid)
 {
 	spin_lock(&GlobalMid_Lock);
-	list_del(&mid->qhead);
+	list_del_init(&mid->qhead);
+	mid->mid_flags |= MID_DELETED;
 	spin_unlock(&GlobalMid_Lock);
 
 	DeleteMidQEntry(mid);
@@ -306,8 +307,7 @@ __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 			.iov_base = &rfc1002_marker,
 			.iov_len  = 4
 		};
-		iov_iter_kvec(&smb_msg.msg_iter, WRITE | ITER_KVEC, &hiov,
-			      1, 4);
+		iov_iter_kvec(&smb_msg.msg_iter, WRITE, &hiov, 1, 4);
 		rc = smb_send_kvec(server, &smb_msg, &sent);
 		if (rc < 0)
 			goto uncork;
@@ -328,8 +328,7 @@ __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 			size += iov[i].iov_len;
 		}
 
-		iov_iter_kvec(&smb_msg.msg_iter, WRITE | ITER_KVEC,
-			      iov, n_vec, size);
+		iov_iter_kvec(&smb_msg.msg_iter, WRITE, iov, n_vec, size);
 
 		rc = smb_send_kvec(server, &smb_msg, &sent);
 		if (rc < 0)
@@ -345,7 +344,7 @@ __smb_send_rqst(struct TCP_Server_Info *server, int num_rqst,
 			rqst_page_get_length(&rqst[j], i, &bvec.bv_len,
 					     &bvec.bv_offset);
 
-			iov_iter_bvec(&smb_msg.msg_iter, WRITE | ITER_BVEC,
+			iov_iter_bvec(&smb_msg.msg_iter, WRITE,
 				      &bvec, 1, bvec.bv_len);
 			rc = smb_send_kvec(server, &smb_msg, &sent);
 			if (rc < 0)
@@ -772,6 +771,11 @@ cifs_setup_request(struct cifs_ses *ses, struct smb_rqst *rqst)
 	return mid;
 }
 
+static void
+cifs_noop_callback(struct mid_q_entry *mid)
+{
+}
+
 int
 compound_send_recv(const unsigned int xid, struct cifs_ses *ses,
 		   const int flags, const int num_rqst, struct smb_rqst *rqst,
@@ -826,8 +830,13 @@ compound_send_recv(const unsigned int xid, struct cifs_ses *ses,
 		}
 
 		midQ[i]->mid_state = MID_REQUEST_SUBMITTED;
+		/*
+		 * We don't invoke the callback compounds unless it is the last
+		 * request.
+		 */
+		if (i < num_rqst - 1)
+			midQ[i]->callback = cifs_noop_callback;
 	}
-
 	cifs_in_send_inc(ses->server);
 	rc = smb_send_rqst(ses->server, num_rqst, rqst, flags);
 	cifs_in_send_dec(ses->server);
@@ -908,6 +917,12 @@ compound_send_recv(const unsigned int xid, struct cifs_ses *ses,
 			midQ[i]->resp_buf = NULL;
 	}
 out:
+	/*
+	 * This will dequeue all mids. After this it is important that the
+	 * demultiplex_thread will not process any of these mids any futher.
+	 * This is prevented above by using a noop callback that will not
+	 * wake this thread except for the very last PDU.
+	 */
 	for (i = 0; i < num_rqst; i++)
 		cifs_delete_mid(midQ[i]);
 	add_credits(ses->server, credits, optype);
