@@ -34,6 +34,10 @@ enum fsinfo_attribute {
 	FSINFO_ATTR_NAME_ENCODING	= 16,	/* Filename encoding (string) */
 	FSINFO_ATTR_NAME_CODEPAGE	= 17,	/* Filename codepage (string) */
 	FSINFO_ATTR_IO_SIZE		= 18,	/* Optimal I/O sizes */
+	FSINFO_ATTR_PARAM_DESCRIPTION	= 19,	/* General fs parameter description */
+	FSINFO_ATTR_PARAM_SPECIFICATION	= 20,	/* Nth parameter specification */
+	FSINFO_ATTR_PARAM_NAME		= 21,	/* Nth name to param index */
+	FSINFO_ATTR_PARAM_ENUM		= 22,	/* Nth enum-to-val */
 	FSINFO_ATTR__NR
 };
 
@@ -229,6 +233,70 @@ struct fsinfo_io_size {
 struct fsinfo_fsinfo {
 	__u32	max_attr;	/* Number of supported attributes (fsinfo_attr__nr) */
 	__u32	max_cap;	/* Number of supported capabilities (fsinfo_cap__nr) */
+};
+
+/*
+ * Information struct for fsinfo(fsinfo_attr_param_description).
+ *
+ * Query the parameter set for a filesystem.
+ */
+struct fsinfo_param_description {
+	__u32		nr_params;		/* Number of individual parameters */
+	__u32		nr_names;		/* Number of parameter names */
+	__u32		nr_enum_names;		/* Number of enum names  */
+	__u32		source_param;		/* Source parameter index (or UINT_MAX) */
+};
+
+/*
+ * Information struct for fsinfo(fsinfo_attr_param_specification).
+ *
+ * Query the specification of the Nth filesystem parameter.
+ */
+struct fsinfo_param_specification {
+	__u32		type;		/* enum fsinfo_param_specification_type */
+	__u32		flags;		/* Qualifiers */
+};
+
+enum fsinfo_param_specification_type {
+	FSINFO_PARAM_SPEC_NOT_DEFINED,
+	FSINFO_PARAM_SPEC_TAKES_NO_VALUE,
+	FSINFO_PARAM_SPEC_IS_BOOL,
+	FSINFO_PARAM_SPEC_IS_U32,
+	FSINFO_PARAM_SPEC_IS_U32_OCTAL,
+	FSINFO_PARAM_SPEC_IS_U32_HEX,
+	FSINFO_PARAM_SPEC_IS_S32,
+	FSINFO_PARAM_SPEC_IS_ENUM,
+	FSINFO_PARAM_SPEC_IS_STRING,
+	FSINFO_PARAM_SPEC_IS_BLOB,
+	FSINFO_PARAM_SPEC_IS_BLOCKDEV,
+	FSINFO_PARAM_SPEC_IS_PATH,
+	FSINFO_PARAM_SPEC_IS_FD,
+	NR__FSINFO_PARAM_SPEC
+};
+
+#define FSINFO_PARAM_SPEC_VALUE_IS_OPTIONAL	0X00000001
+#define FSINFO_PARAM_SPEC_PREFIX_NO_IS_NEG	0X00000002
+#define FSINFO_PARAM_SPEC_EMPTY_STRING_IS_NEG	0X00000004
+#define FSINFO_PARAM_SPEC_DEPRECATED		0X00000008
+
+/*
+ * Information struct for fsinfo(fsinfo_attr_param_name).
+ *
+ * Query the Nth filesystem parameter name
+ */
+struct fsinfo_param_name {
+	__u32		param_index;	/* Index of the parameter specification */
+	char		name[252];	/* Name of the parameter */
+};
+
+/*
+ * Information struct for fsinfo(fsinfo_attr_param_enum).
+ *
+ * Query the Nth filesystem enum parameter value name.
+ */
+struct fsinfo_param_enum {
+	__u32		param_index;	/* Index of the relevant parameter specification */
+	char		name[252];	/* Name of the enum value */
 };
 
 #endif /* _UAPI_LINUX_FSINFO_H */

@@ -10,6 +10,7 @@
 #include <linux/uaccess.h>
 #include <linux/compat.h>
 #include <linux/fsinfo.h>
+#include <linux/fs_parser.h>
 #include "internal.h"
 
 static int flags_by_mnt(int mnt_flags)
@@ -576,14 +577,90 @@ static int fsinfo_generic_io_size(struct dentry *dentry,
 	return sizeof(*c);
 }
 
+static int fsinfo_generic_param_description(struct file_system_type *f,
+					    struct fsinfo_kparams *params)
+{
+	const struct fs_parameter_description *desc = f->parameters;
+	struct fsinfo_param_description *p = params->buffer;
+
+	if (!desc)
+		return -ENODATA;
+
+	p->nr_params = desc->nr_params;
+	p->nr_names = desc->nr_params + desc->nr_alt_keys;
+	p->nr_enum_names = desc->nr_enums;
+	p->source_param = desc->no_source ? UINT_MAX : desc->source_param;
+	return sizeof(*p);
+}
+
+static int fsinfo_generic_param_specification(struct file_system_type *f,
+					      struct fsinfo_kparams *params)
+{
+	const struct fs_parameter_description *desc = f->parameters;
+	struct fsinfo_param_specification *p = params->buffer;
+
+	if (!desc || !desc->specs || params->Nth >= desc->nr_params)
+		return -ENODATA;
+
+	p->type = desc->specs[params->Nth].type;
+	p->flags = desc->specs[params->Nth].flags;
+	return sizeof(*p);
+}
+
+static int fsinfo_generic_param_name(struct file_system_type *f,
+				     struct fsinfo_kparams *params)
+{
+	const struct fs_parameter_description *desc = f->parameters;
+	struct fsinfo_param_name *p = params->buffer;
+	const char *name;
+	unsigned int n = params->Nth;
+
+	if (!desc || !desc->keys)
+		return -ENODATA;
+
+	if (n < desc->nr_params) {
+		p->param_index = n;
+		name = desc->keys[n];
+		goto out;
+	}
+
+	n -= desc->nr_params;
+	if (n < desc->nr_alt_keys) {
+		p->param_index = desc->alt_keys[n].value;
+		name = desc->alt_keys[n].name;
+		goto out;
+	}
+	return -ENODATA;
+
+out:
+	strcpy(p->name, name);
+	return sizeof(*p);
+}
+
+static int fsinfo_generic_param_enum(struct file_system_type *f,
+				     struct fsinfo_kparams *params)
+{
+	const struct fs_parameter_description *desc = f->parameters;
+	struct fsinfo_param_enum *p = params->buffer;
+
+	if (!desc || !desc->enums || params->Nth >= desc->nr_enums)
+		return -ENODATA;
+
+	p->param_index = desc->enums[params->Nth].param_id;
+	strcpy(p->name, desc->enums[params->Nth].name);
+	return sizeof(*p);
+}
+
 /*
  * Implement some queries generically from stuff in the superblock.
  */
 int generic_fsinfo(struct path *path, struct fsinfo_kparams *params)
 {
 	struct dentry *dentry = path->dentry;
+	struct file_system_type *f = dentry->d_sb->s_type;
 	
 #define _gen(X, Y) FSINFO_ATTR_##X: return fsinfo_generic_##Y(dentry, params->buffer)
+#define _genf(X, Y) FSINFO_ATTR_##X: return fsinfo_generic_##Y(f, params)
 
 	switch (params->request) {
 	case _gen(STATFS,		statfs);
@@ -596,6 +673,10 @@ int generic_fsinfo(struct path *path, struct fsinfo_kparams *params)
 	case _gen(VOLUME_ID,		volume_id);
 	case _gen(NAME_ENCODING,	name_encoding);
 	case _gen(IO_SIZE,		io_size);
+	case _genf(PARAM_DESCRIPTION,	param_description);
+	case _genf(PARAM_SPECIFICATION,	param_specification);
+	case _genf(PARAM_NAME,		param_name);
+	case _genf(PARAM_ENUM,		param_enum);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -681,10 +762,23 @@ out:
 static int vfs_fsinfo_fscontext(struct fs_context *fc,
 				struct fsinfo_kparams *params)
 {
+	struct file_system_type *f = fc->fs_type;
 	int ret;
 
 	if (fc->ops == &legacy_fs_context_ops)
 		return -EOPNOTSUPP;
+
+	/* Filesystem parameter query is static information and doesn't need a
+	 * lock to read it.
+	 */
+	switch (params->request) {
+	case _genf(PARAM_DESCRIPTION,	param_description);
+	case _genf(PARAM_SPECIFICATION,	param_specification);
+	case _genf(PARAM_NAME,		param_name);
+	case _genf(PARAM_ENUM,		param_enum);
+	default:
+		break;
+	}
 
 	ret = mutex_lock_interruptible(&fc->uapi_mutex);
 	if (ret < 0)
@@ -759,6 +853,10 @@ static const u16 fsinfo_buffer_sizes[FSINFO_ATTR__NR] = {
 	FSINFO_STRING		(NAME_ENCODING,		name_encoding),
 	FSINFO_STRING		(NAME_CODEPAGE,		name_codepage),
 	FSINFO_STRUCT		(IO_SIZE,		io_size),
+	FSINFO_STRUCT		(PARAM_DESCRIPTION,	param_description),
+	FSINFO_STRUCT_N		(PARAM_SPECIFICATION,	param_specification),
+	FSINFO_STRUCT_N		(PARAM_NAME,		param_name),
+	FSINFO_STRUCT_N		(PARAM_ENUM,		param_enum),
 };
 
 /**

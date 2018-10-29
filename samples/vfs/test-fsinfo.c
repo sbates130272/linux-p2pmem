@@ -67,6 +67,10 @@ static const __u16 fsinfo_buffer_sizes[FSINFO_ATTR__NR] = {
 	FSINFO_STRING		(NAME_ENCODING,		name_encoding),
 	FSINFO_STRING		(NAME_CODEPAGE,		name_codepage),
 	FSINFO_STRUCT		(IO_SIZE,		io_size),
+	FSINFO_STRUCT		(PARAM_DESCRIPTION,	param_description),
+	FSINFO_STRUCT_N		(PARAM_SPECIFICATION,	param_specification),
+	FSINFO_STRUCT_N		(PARAM_NAME,		param_name),
+	FSINFO_STRUCT_N		(PARAM_ENUM,		param_enum),
 };
 
 #define FSINFO_NAME(X,Y) [FSINFO_ATTR_##X] = #Y
@@ -90,6 +94,10 @@ static const char *fsinfo_attr_names[FSINFO_ATTR__NR] = {
 	FSINFO_NAME		(NAME_ENCODING,		name_encoding),
 	FSINFO_NAME		(NAME_CODEPAGE,		name_codepage),
 	FSINFO_NAME		(IO_SIZE,		io_size),
+	FSINFO_NAME		(PARAM_DESCRIPTION,	param_description),
+	FSINFO_NAME		(PARAM_SPECIFICATION,	param_specification),
+	FSINFO_NAME		(PARAM_NAME,		param_name),
+	FSINFO_NAME		(PARAM_ENUM,		param_enum),
 };
 
 union reply {
@@ -539,6 +547,15 @@ int main(int argc, char **argv)
 	}
 
 	for (attr = 0; attr <= FSINFO_ATTR__NR; attr++) {
+		switch (attr) {
+		case FSINFO_ATTR_PARAM_DESCRIPTION:
+		case FSINFO_ATTR_PARAM_SPECIFICATION:
+		case FSINFO_ATTR_PARAM_NAME:
+		case FSINFO_ATTR_PARAM_ENUM:
+			/* See test-fs-query.c instead */
+			continue;
+		}
+
 		Nth = 0;
 		do {
 			Mth = 0;
