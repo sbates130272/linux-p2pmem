@@ -52,7 +52,7 @@ static int befs_utf2nls(struct super_block *sb, const char *in, int in_len,
 static int befs_nls2utf(struct super_block *sb, const char *in, int in_len,
 			char **out, int *out_len);
 static void befs_put_super(struct super_block *);
-static int befs_remount(struct super_block *, int *, char *);
+static int befs_remount(struct super_block *, int *, char *, size_t);
 static int befs_statfs(struct dentry *, struct kstatfs *);
 static int befs_show_options(struct seq_file *, struct dentry *);
 static int parse_options(char *, struct befs_mount_options *);
@@ -810,7 +810,7 @@ befs_put_super(struct super_block *sb)
  * Load a set of NLS translations if needed.
  */
 static int
-befs_fill_super(struct super_block *sb, void *data, int silent)
+befs_fill_super(struct super_block *sb, void *data, size_t data_size, int silent)
 {
 	struct buffer_head *bh;
 	struct befs_sb_info *befs_sb;
@@ -942,7 +942,7 @@ unacquire_none:
 }
 
 static int
-befs_remount(struct super_block *sb, int *flags, char *data)
+befs_remount(struct super_block *sb, int *flags, char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	if (!(*flags & SB_RDONLY))
@@ -976,9 +976,10 @@ befs_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 static struct dentry *
 befs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,
-	    void *data)
+	   void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, befs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  befs_fill_super);
 }
 
 static struct file_system_type befs_fs_type = {

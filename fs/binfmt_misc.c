@@ -820,7 +820,8 @@ static const struct super_operations s_ops = {
 	.evict_inode	= bm_evict_inode,
 };
 
-static int bm_fill_super(struct super_block *sb, void *data, int silent)
+static int bm_fill_super(struct super_block *sb, void *data, size_t data_size,
+			 int silent)
 {
 	int err;
 	static const struct tree_descr bm_files[] = {
@@ -836,9 +837,9 @@ static int bm_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *bm_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, bm_fill_super);
+	return mount_single(fs_type, flags, data, data_size, bm_fill_super);
 }
 
 static struct linux_binfmt misc_format = {

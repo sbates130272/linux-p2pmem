@@ -42,7 +42,8 @@ static const struct file_operations capabilities_file_ops = {
 	.llseek = default_llseek,
 };
 
-static int xenfs_fill_super(struct super_block *sb, void *data, int silent)
+static int xenfs_fill_super(struct super_block *sb,
+			    void *data, size_t data_size, int silent)
 {
 	static const struct tree_descr xenfs_files[] = {
 		[2] = { "xenbus", &xen_xenbus_fops, S_IRUSR|S_IWUSR },
@@ -69,9 +70,9 @@ static int xenfs_fill_super(struct super_block *sb, void *data, int silent)
 
 static struct dentry *xenfs_mount(struct file_system_type *fs_type,
 				  int flags, const char *dev_name,
-				  void *data)
+				  void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, xenfs_fill_super);
+	return mount_single(fs_type, flags, data, data_size, xenfs_fill_super);
 }
 
 static struct file_system_type xenfs_type = {

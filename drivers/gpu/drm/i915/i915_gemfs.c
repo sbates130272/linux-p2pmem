@@ -57,7 +57,7 @@ int i915_gemfs_init(struct drm_i915_private *i915)
 		int flags = 0;
 		int err;
 
-		err = sb->s_op->remount_fs(sb, &flags, options);
+		err = sb->s_op->remount_fs(sb, &flags, options, sizeof(options));
 		if (err) {
 			kern_unmount(gemfs);
 			return err;

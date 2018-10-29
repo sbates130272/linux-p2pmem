@@ -1,17 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * super.c - NILFS module and super block management.
  *
  * Copyright (C) 2005-2008 Nippon Telegraph and Telephone Corporation.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  *
  * Written by Ryusuke Konishi.
  */
@@ -69,7 +60,8 @@ struct kmem_cache *nilfs_segbuf_cachep;
 struct kmem_cache *nilfs_btree_path_cache;
 
 static int nilfs_setup_super(struct super_block *sb, int is_mount);
-static int nilfs_remount(struct super_block *sb, int *flags, char *data);
+static int nilfs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size);
 
 void __nilfs_msg(struct super_block *sb, const char *level, const char *fmt,
 		 ...)
@@ -1118,7 +1110,8 @@ nilfs_fill_super(struct super_block *sb, void *data, int silent)
 	return err;
 }
 
-static int nilfs_remount(struct super_block *sb, int *flags, char *data)
+static int nilfs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	struct the_nilfs *nilfs = sb->s_fs_info;
 	unsigned long old_sb_flags;
@@ -1278,7 +1271,7 @@ static int nilfs_test_bdev_super(struct super_block *s, void *data)
 
 static struct dentry *
 nilfs_mount(struct file_system_type *fs_type, int flags,
-	     const char *dev_name, void *data)
+	    const char *dev_name, void *data, size_t data_size)
 {
 	struct nilfs_super_data sd;
 	struct super_block *s;
@@ -1346,7 +1339,7 @@ nilfs_mount(struct file_system_type *fs_type, int flags,
 			 * Try remount to setup mount states if the current
 			 * tree is not mounted and only snapshots use this sb.
 			 */
-			err = nilfs_remount(s, &flags, data);
+			err = nilfs_remount(s, &flags, data, data_size);
 			if (err)
 				goto failed_super;
 		}

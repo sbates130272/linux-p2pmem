@@ -22,37 +22,21 @@
 #include <linux/smp.h>
 #include <linux/ioctl.h>
 #include <linux/if.h>
-#include <linux/if_bridge.h>
 #include <linux/raid/md_u.h>
-#include <linux/kd.h>
-#include <linux/route.h>
-#include <linux/in6.h>
-#include <linux/ipv6_route.h>
-#include <linux/skbuff.h>
-#include <linux/netlink.h>
-#include <linux/vt.h>
 #include <linux/falloc.h>
-#include <linux/fs.h>
 #include <linux/file.h>
-#include <linux/ppp_defs.h>
 #include <linux/ppp-ioctl.h>
 #include <linux/if_pppox.h>
 #include <linux/mtio.h>
 #include <linux/tty.h>
 #include <linux/vt_kern.h>
-#include <linux/fb.h>
-#include <linux/videodev2.h>
-#include <linux/netdevice.h>
 #include <linux/raw.h>
 #include <linux/blkdev.h>
-#include <linux/elevator.h>
 #include <linux/rtc.h>
 #include <linux/pci.h>
 #include <linux/serial.h>
-#include <linux/if_tun.h>
 #include <linux/ctype.h>
 #include <linux/syscalls.h>
-#include <linux/atalk.h>
 #include <linux/gfp.h>
 #include <linux/cec.h>
 
@@ -74,32 +58,9 @@
 #endif
 
 #include <linux/uaccess.h>
-#include <linux/ethtool.h>
-#include <linux/mii.h>
-#include <linux/if_bonding.h>
 #include <linux/watchdog.h>
 
 #include <linux/soundcard.h>
-#include <linux/lp.h>
-#include <linux/ppdev.h>
-
-#include <linux/atm.h>
-#include <linux/atmarp.h>
-#include <linux/atmclip.h>
-#include <linux/atmdev.h>
-#include <linux/atmioc.h>
-#include <linux/atmlec.h>
-#include <linux/atmmpc.h>
-#include <linux/atmsvc.h>
-#include <linux/atm_tcp.h>
-#include <linux/sonet.h>
-#include <linux/atm_suni.h>
-
-#include <linux/usb.h>
-#include <linux/usbdevice_fs.h>
-#include <linux/nbd.h>
-#include <linux/random.h>
-#include <linux/filter.h>
 
 #include <linux/hiddev.h>
 
@@ -112,6 +73,7 @@
 #include <linux/sort.h>
 
 #ifdef CONFIG_SPARC
+#include <linux/fb.h>
 #include <asm/fbio.h>
 #endif
 
@@ -536,30 +498,6 @@ static int mt_ioctl_trans(struct file *file,
 }
 
 #endif /* CONFIG_BLOCK */
-
-/* Bluetooth ioctls */
-#define HCIUARTSETPROTO		_IOW('U', 200, int)
-#define HCIUARTGETPROTO		_IOR('U', 201, int)
-#define HCIUARTGETDEVICE	_IOR('U', 202, int)
-#define HCIUARTSETFLAGS		_IOW('U', 203, int)
-#define HCIUARTGETFLAGS		_IOR('U', 204, int)
-
-#define BNEPCONNADD	_IOW('B', 200, int)
-#define BNEPCONNDEL	_IOW('B', 201, int)
-#define BNEPGETCONNLIST	_IOR('B', 210, int)
-#define BNEPGETCONNINFO	_IOR('B', 211, int)
-#define BNEPGETSUPPFEAT	_IOR('B', 212, int)
-
-#define CMTPCONNADD	_IOW('C', 200, int)
-#define CMTPCONNDEL	_IOW('C', 201, int)
-#define CMTPGETCONNLIST	_IOR('C', 210, int)
-#define CMTPGETCONNINFO	_IOR('C', 211, int)
-
-#define HIDPCONNADD	_IOW('H', 200, int)
-#define HIDPCONNDEL	_IOW('H', 201, int)
-#define HIDPGETCONNLIST	_IOR('H', 210, int)
-#define HIDPGETCONNINFO	_IOR('H', 211, int)
-
 
 struct serial_struct32 {
         compat_int_t    type;
@@ -1075,50 +1013,11 @@ COMPATIBLE_IOCTL(RNDADDENTROPY)
 COMPATIBLE_IOCTL(RNDZAPENTCNT)
 COMPATIBLE_IOCTL(RNDCLEARPOOL)
 /* Bluetooth */
-COMPATIBLE_IOCTL(HCIDEVUP)
-COMPATIBLE_IOCTL(HCIDEVDOWN)
-COMPATIBLE_IOCTL(HCIDEVRESET)
-COMPATIBLE_IOCTL(HCIDEVRESTAT)
-COMPATIBLE_IOCTL(HCIGETDEVLIST)
-COMPATIBLE_IOCTL(HCIGETDEVINFO)
-COMPATIBLE_IOCTL(HCIGETCONNLIST)
-COMPATIBLE_IOCTL(HCIGETCONNINFO)
-COMPATIBLE_IOCTL(HCIGETAUTHINFO)
-COMPATIBLE_IOCTL(HCISETRAW)
-COMPATIBLE_IOCTL(HCISETSCAN)
-COMPATIBLE_IOCTL(HCISETAUTH)
-COMPATIBLE_IOCTL(HCISETENCRYPT)
-COMPATIBLE_IOCTL(HCISETPTYPE)
-COMPATIBLE_IOCTL(HCISETLINKPOL)
-COMPATIBLE_IOCTL(HCISETLINKMODE)
-COMPATIBLE_IOCTL(HCISETACLMTU)
-COMPATIBLE_IOCTL(HCISETSCOMTU)
-COMPATIBLE_IOCTL(HCIBLOCKADDR)
-COMPATIBLE_IOCTL(HCIUNBLOCKADDR)
-COMPATIBLE_IOCTL(HCIINQUIRY)
-COMPATIBLE_IOCTL(HCIUARTSETPROTO)
-COMPATIBLE_IOCTL(HCIUARTGETPROTO)
-COMPATIBLE_IOCTL(HCIUARTGETDEVICE)
-COMPATIBLE_IOCTL(HCIUARTSETFLAGS)
-COMPATIBLE_IOCTL(HCIUARTGETFLAGS)
 COMPATIBLE_IOCTL(RFCOMMCREATEDEV)
 COMPATIBLE_IOCTL(RFCOMMRELEASEDEV)
 COMPATIBLE_IOCTL(RFCOMMGETDEVLIST)
 COMPATIBLE_IOCTL(RFCOMMGETDEVINFO)
 COMPATIBLE_IOCTL(RFCOMMSTEALDLC)
-COMPATIBLE_IOCTL(BNEPCONNADD)
-COMPATIBLE_IOCTL(BNEPCONNDEL)
-COMPATIBLE_IOCTL(BNEPGETCONNLIST)
-COMPATIBLE_IOCTL(BNEPGETCONNINFO)
-COMPATIBLE_IOCTL(BNEPGETSUPPFEAT)
-COMPATIBLE_IOCTL(CMTPCONNADD)
-COMPATIBLE_IOCTL(CMTPCONNDEL)
-COMPATIBLE_IOCTL(CMTPGETCONNLIST)
-COMPATIBLE_IOCTL(CMTPGETCONNINFO)
-COMPATIBLE_IOCTL(HIDPCONNADD)
-COMPATIBLE_IOCTL(HIDPCONNDEL)
-COMPATIBLE_IOCTL(HIDPGETCONNLIST)
-COMPATIBLE_IOCTL(HIDPGETCONNINFO)
 /* CAPI */
 COMPATIBLE_IOCTL(CAPI_REGISTER)
 COMPATIBLE_IOCTL(CAPI_GET_MANUFACTURER)

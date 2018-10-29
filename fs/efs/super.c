@@ -19,12 +19,14 @@
 #include <linux/efs_fs_sb.h>
 
 static int efs_statfs(struct dentry *dentry, struct kstatfs *buf);
-static int efs_fill_super(struct super_block *s, void *d, int silent);
+static int efs_fill_super(struct super_block *s, void *d, size_t data_size,
+			  int silent);
 
 static struct dentry *efs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, efs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  efs_fill_super);
 }
 
 static void efs_kill_sb(struct super_block *s)
@@ -113,7 +115,8 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(efs_inode_cachep);
 }
 
-static int efs_remount(struct super_block *sb, int *flags, char *data)
+static int efs_remount(struct super_block *sb, int *flags,
+		       char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_RDONLY;
@@ -253,7 +256,8 @@ static int efs_validate_super(struct efs_sb_info *sb, struct efs_super *super) {
 	return 0;    
 }
 
-static int efs_fill_super(struct super_block *s, void *d, int silent)
+static int efs_fill_super(struct super_block *s, void *d, size_t data_size,
+			  int silent)
 {
 	struct efs_sb_info *sb;
 	struct buffer_head *bh;

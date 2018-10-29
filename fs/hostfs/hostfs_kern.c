@@ -911,7 +911,8 @@ static const struct inode_operations hostfs_link_iops = {
 	.get_link	= hostfs_get_link,
 };
 
-static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
+static int hostfs_fill_sb_common(struct super_block *sb,
+				 void *d, size_t data_size, int silent)
 {
 	struct inode *root_inode;
 	char *host_root_path, *req_root = d;
@@ -971,9 +972,9 @@ out:
 
 static struct dentry *hostfs_read_sb(struct file_system_type *type,
 			  int flags, const char *dev_name,
-			  void *data)
+			  void *data, size_t data_size)
 {
-	return mount_nodev(type, flags, data, hostfs_fill_sb_common);
+	return mount_nodev(type, flags, data, data_size, hostfs_fill_sb_common);
 }
 
 static void hostfs_kill_sb(struct super_block *s)

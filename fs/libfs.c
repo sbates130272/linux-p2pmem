@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/cred.h>
 #include <linux/mount.h>
+#include <linux/fs_context.h>
 #include <linux/vfs.h>
 #include <linux/quotaops.h>
 #include <linux/mutex.h>
@@ -574,13 +575,30 @@ static DEFINE_SPINLOCK(pin_fs_lock);
 
 int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount, int *count)
 {
+	struct fs_context *fc;
 	struct vfsmount *mnt = NULL;
+	int ret;
+
 	spin_lock(&pin_fs_lock);
 	if (unlikely(!*mount)) {
 		spin_unlock(&pin_fs_lock);
-		mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, NULL);
+
+		fc = vfs_new_fs_context(type, NULL, 0, 0,
+					FS_CONTEXT_FOR_KERNEL_MOUNT);
+		if (IS_ERR(fc))
+			return PTR_ERR(fc);
+
+		ret = vfs_get_tree(fc);
+		if (ret < 0) {
+			put_fs_context(fc);
+			return ret;
+		}
+
+		mnt = vfs_create_mount(fc, 0);
+		put_fs_context(fc);
 		if (IS_ERR(mnt))
 			return PTR_ERR(mnt);
+
 		spin_lock(&pin_fs_lock);
 		if (!*mount)
 			*mount = mnt;

@@ -734,7 +734,7 @@ out:
 }
 
 static int
-spufs_fill_super(struct super_block *sb, void *data, int silent)
+spufs_fill_super(struct super_block *sb, void *data, size_t data_size, int silent)
 {
 	struct spufs_sb_info *info;
 	static const struct super_operations s_ops = {
@@ -761,9 +761,9 @@ spufs_fill_super(struct super_block *sb, void *data, int silent)
 
 static struct dentry *
 spufs_mount(struct file_system_type *fstype, int flags,
-		const char *name, void *data)
+		const char *name, void *data, size_t data_size)
 {
-	return mount_single(fstype, flags, data, spufs_fill_super);
+	return mount_single(fstype, flags, data, data_size, spufs_fill_super);
 }
 
 static struct file_system_type spufs_type = {

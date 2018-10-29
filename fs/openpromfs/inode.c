@@ -365,7 +365,8 @@ static struct inode *openprom_iget(struct super_block *sb, ino_t ino)
 	return inode;
 }
 
-static int openprom_remount(struct super_block *sb, int *flags, char *data)
+static int openprom_remount(struct super_block *sb, int *flags,
+			    char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_NOATIME;
@@ -379,7 +380,8 @@ static const struct super_operations openprom_sops = {
 	.remount_fs	= openprom_remount,
 };
 
-static int openprom_fill_super(struct super_block *s, void *data, int silent)
+static int openprom_fill_super(struct super_block *s,
+			       void *data, size_t data_size, int silent)
 {
 	struct inode *root_inode;
 	struct op_inode_info *oi;
@@ -414,9 +416,10 @@ out_no_root:
 }
 
 static struct dentry *openprom_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, openprom_fill_super);
+	return mount_single(fs_type, flags, data, data_size,
+			    openprom_fill_super);
 }
 
 static struct file_system_type openprom_fs_type = {

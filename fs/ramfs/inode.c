@@ -217,7 +217,7 @@ static int ramfs_parse_options(char *data, struct ramfs_mount_opts *opts)
 	return 0;
 }
 
-int ramfs_fill_super(struct super_block *sb, void *data, int silent)
+int ramfs_fill_super(struct super_block *sb, void *data, size_t data_size, int silent)
 {
 	struct ramfs_fs_info *fsi;
 	struct inode *inode;
@@ -248,9 +248,9 @@ int ramfs_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 struct dentry *ramfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_nodev(fs_type, flags, data, ramfs_fill_super);
+	return mount_nodev(fs_type, flags, data, data_size, ramfs_fill_super);
 }
 
 static void ramfs_kill_sb(struct super_block *sb)

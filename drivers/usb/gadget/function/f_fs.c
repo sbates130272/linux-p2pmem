@@ -1376,7 +1376,8 @@ struct ffs_sb_fill_data {
 	struct ffs_data *ffs_data;
 };
 
-static int ffs_sb_fill(struct super_block *sb, void *_data, int silent)
+static int ffs_sb_fill(struct super_block *sb, void *_data, size_t data_size,
+		       int silent)
 {
 	struct ffs_sb_fill_data *data = _data;
 	struct inode	*inode;
@@ -1504,7 +1505,7 @@ invalid:
 
 static struct dentry *
 ffs_fs_mount(struct file_system_type *t, int flags,
-	      const char *dev_name, void *opts)
+	     const char *dev_name, void *opts, size_t data_size)
 {
 	struct ffs_sb_fill_data data = {
 		.perms = {
@@ -1546,7 +1547,7 @@ ffs_fs_mount(struct file_system_type *t, int flags,
 	ffs->private_data = ffs_dev;
 	data.ffs_data = ffs;
 
-	rv = mount_nodev(t, flags, &data, ffs_sb_fill);
+	rv = mount_nodev(t, flags, &data, sizeof(data), ffs_sb_fill);
 	if (IS_ERR(rv) && data.ffs_data) {
 		ffs_release_dev(data.ffs_data);
 		ffs_data_put(data.ffs_data);

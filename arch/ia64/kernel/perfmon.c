@@ -611,7 +611,8 @@ pfm_unprotect_ctx_ctxsw(pfm_context_t *x, unsigned long f)
 static const struct dentry_operations pfmfs_dentry_operations;
 
 static struct dentry *
-pfmfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name, void *data)
+pfmfs_mount(struct file_system_type *fs_type, int flags, const char *dev_name,
+	    void *data, size_t data_size)
 {
 	return mount_pseudo(fs_type, "pfm:", NULL, &pfmfs_dentry_operations,
 			PFMFS_MAGIC);

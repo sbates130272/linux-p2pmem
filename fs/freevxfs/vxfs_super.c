@@ -113,7 +113,8 @@ vxfs_statfs(struct dentry *dentry, struct kstatfs *bufp)
 	return 0;
 }
 
-static int vxfs_remount(struct super_block *sb, int *flags, char *data)
+static int vxfs_remount(struct super_block *sb, int *flags,
+			char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_RDONLY;
@@ -199,6 +200,7 @@ static int vxfs_try_sb_magic(struct super_block *sbp, int silent,
  * vxfs_read_super - read superblock into memory and initialize filesystem
  * @sbp:		VFS superblock (to fill)
  * @dp:			fs private mount data
+ * @data_size:		size of mount data
  * @silent:		do not complain loudly when sth is wrong
  *
  * Description:
@@ -211,7 +213,8 @@ static int vxfs_try_sb_magic(struct super_block *sbp, int silent,
  * Locking:
  *   We are under @sbp->s_lock.
  */
-static int vxfs_fill_super(struct super_block *sbp, void *dp, int silent)
+static int vxfs_fill_super(struct super_block *sbp, void *dp, size_t data_size,
+			   int silent)
 {
 	struct vxfs_sb_info	*infp;
 	struct vxfs_sb		*rsbp;
@@ -312,9 +315,10 @@ out:
  * The usual module blurb.
  */
 static struct dentry *vxfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, vxfs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  vxfs_fill_super);
 }
 
 static struct file_system_type vxfs_fs_type = {

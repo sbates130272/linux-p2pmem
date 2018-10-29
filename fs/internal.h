@@ -52,8 +52,21 @@ int __generic_write_end(struct inode *inode, loff_t pos, unsigned copied,
 extern void __init chrdev_init(void);
 
 /*
+ * fs_context.c
+ */
+extern const struct fs_context_operations legacy_fs_context_ops;
+extern int legacy_init_fs_context(struct fs_context *fc, struct dentry *dentry);
+
+/*
+ * fsopen.c
+ */
+extern void vfs_clean_context(struct fs_context *fc);
+
+/*
  * namei.c
  */
+extern int filename_lookup(int dfd, struct filename *name, unsigned flags,
+			   struct path *path, struct path *root);
 extern int user_path_mountpoint_at(int, const char __user *, unsigned int, struct path *);
 extern int vfs_path_lookup(struct dentry *, struct vfsmount *,
 			   const char *, unsigned int, struct path *);
@@ -72,6 +85,7 @@ int do_linkat(int olddfd, const char __user *oldname, int newdfd,
  */
 extern void *copy_mount_options(const void __user *);
 extern char *copy_mount_string(const void __user *);
+extern int parse_monolithic_mount_data(struct fs_context *, void *, size_t);
 
 extern struct vfsmount *lookup_mnt(const struct path *);
 extern int finish_automount(struct vfsmount *, struct path *);
@@ -85,6 +99,7 @@ extern int __mnt_want_write_file(struct file *);
 extern void __mnt_drop_write(struct vfsmount *);
 extern void __mnt_drop_write_file(struct file *);
 
+extern void dissolve_on_fput(struct vfsmount *);
 /*
  * fs_struct.c
  */
@@ -99,10 +114,8 @@ extern struct file *alloc_empty_file_noaccount(int, const struct cred *);
 /*
  * super.c
  */
-extern int do_remount_sb(struct super_block *, int, void *, int);
+extern int reconfigure_super(struct fs_context *);
 extern bool trylock_super(struct super_block *sb);
-extern struct dentry *mount_fs(struct file_system_type *,
-			       int, const char *, void *);
 extern struct super_block *user_get_super(dev_t);
 
 /*

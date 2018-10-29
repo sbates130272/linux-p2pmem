@@ -24,7 +24,7 @@ static const struct super_operations btrfs_test_super_ops = {
 
 static struct dentry *btrfs_test_mount(struct file_system_type *fs_type,
 				       int flags, const char *dev_name,
-				       void *data)
+				       void *data, size_t data_size)
 {
 	return mount_pseudo(fs_type, "btrfs_test:", &btrfs_test_super_ops,
 			    NULL, BTRFS_TEST_MAGIC);

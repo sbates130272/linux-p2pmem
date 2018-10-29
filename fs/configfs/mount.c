@@ -66,7 +66,8 @@ static struct configfs_dirent configfs_root = {
 	.s_iattr	= NULL,
 };
 
-static int configfs_fill_super(struct super_block *sb, void *data, int silent)
+static int configfs_fill_super(struct super_block *sb,
+			       void *data, size_t data_size, int silent)
 {
 	struct inode *inode;
 	struct dentry *root;
@@ -103,9 +104,9 @@ static int configfs_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *configfs_do_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, configfs_fill_super);
+	return mount_single(fs_type, flags, data, data_size, configfs_fill_super);
 }
 
 static struct file_system_type configfs_fs_type = {

@@ -101,6 +101,7 @@ static int parse_options(char *options, struct exofs_mountopt *opts)
 		token = match_token(p, tokens, args);
 		switch (token) {
 		case Opt_name:
+			kfree(opts->dev_name);
 			opts->dev_name = match_strdup(&args[0]);
 			if (unlikely(!opts->dev_name)) {
 				EXOFS_ERR("Error allocating dev_name");
@@ -117,7 +118,7 @@ static int parse_options(char *options, struct exofs_mountopt *opts)
 					  EXOFS_MIN_PID);
 				return -EINVAL;
 			}
-			s_pid = 1;
+			s_pid = true;
 			break;
 		case Opt_to:
 			if (match_int(&args[0], &option))
@@ -704,7 +705,8 @@ out:
 /*
  * Read the superblock from the OSD and fill in the fields
  */
-static int exofs_fill_super(struct super_block *sb, void *data, int silent)
+static int exofs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			    int silent)
 {
 	struct inode *root;
 	struct exofs_mountopt *opts = data;
@@ -860,18 +862,20 @@ free_sbi:
  */
 static struct dentry *exofs_mount(struct file_system_type *type,
 			  int flags, const char *dev_name,
-			  void *data)
+			  void *data, size_t data_size)
 {
 	struct exofs_mountopt opts;
 	int ret;
 
 	ret = parse_options(data, &opts);
-	if (ret)
+	if (ret) {
+		kfree(opts.dev_name);
 		return ERR_PTR(ret);
+	}
 
 	if (!opts.dev_name)
 		opts.dev_name = dev_name;
-	return mount_nodev(type, flags, &opts, exofs_fill_super);
+	return mount_nodev(type, flags, &opts, 0, exofs_fill_super);
 }
 
 /*

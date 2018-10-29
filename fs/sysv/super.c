@@ -349,7 +349,8 @@ static int complete_read_super(struct super_block *sb, int silent, int size)
 	return 1;
 }
 
-static int sysv_fill_super(struct super_block *sb, void *data, int silent)
+static int sysv_fill_super(struct super_block *sb, void *data, size_t data_size,
+			   int silent)
 {
 	struct buffer_head *bh1, *bh = NULL;
 	struct sysv_sb_info *sbi;
@@ -470,7 +471,8 @@ static int v7_sanity_check(struct super_block *sb, struct buffer_head *bh)
 	return 1;
 }
 
-static int v7_fill_super(struct super_block *sb, void *data, int silent)
+static int v7_fill_super(struct super_block *sb, void *data, size_t data_size,
+			 int silent)
 {
 	struct sysv_sb_info *sbi;
 	struct buffer_head *bh;
@@ -528,15 +530,17 @@ failed:
 /* Every kernel module contains stuff like this. */
 
 static struct dentry *sysv_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, sysv_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  sysv_fill_super);
 }
 
 static struct dentry *v7_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, v7_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  v7_fill_super);
 }
 
 static struct file_system_type sysv_fs_type = {

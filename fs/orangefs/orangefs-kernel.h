@@ -318,7 +318,7 @@ extern uint64_t orangefs_features;
 struct dentry *orangefs_mount(struct file_system_type *fst,
 			   int flags,
 			   const char *devname,
-			   void *data);
+			   void *data, size_t data_size);
 
 void orangefs_kill_sb(struct super_block *sb);
 int orangefs_remount(struct orangefs_sb_info_s *);
