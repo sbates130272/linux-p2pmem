@@ -2400,7 +2400,7 @@ static int do_remount(struct path *path, int ms_flags, int sb_flags,
 				FS_CONTEXT_FOR_RECONFIGURE);
 	err = PTR_ERR(fc);
 	if (IS_ERR(fc))
-		goto err_fc;
+		goto err;
 
 	err = parse_monolithic_mount_data(fc, data, data_size);
 	if (err < 0)
@@ -2426,6 +2426,7 @@ static int do_remount(struct path *path, int ms_flags, int sb_flags,
 	up_write(&sb->s_umount);
 err_fc:
 	put_fs_context(fc);
+err:
 	return err;
 }
 
