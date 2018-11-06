@@ -130,11 +130,13 @@ static void rq_end_stats(struct mapped_device *md, struct request *orig)
  */
 static void rq_completed(struct mapped_device *md, int rw, bool run_queue)
 {
-	atomic_dec(&md->pending[rw]);
+	atomic_dec(&dm_disk(md)->part0.in_flight[rw]);
 
 	/* nudge anyone waiting on suspend queue */
-	if (!md_in_flight(md))
-		wake_up(&md->wait);
+	if (unlikely(waitqueue_active(&md->wait))) {
+		if (!md_in_flight(md))
+			wake_up(&md->wait);
+	}
 
 	/*
 	 * dm_put() must be at the end of this function. See the comment above
@@ -436,7 +438,7 @@ ssize_t dm_attr_rq_based_seq_io_merge_deadline_store(struct mapped_device *md,
 static void dm_start_request(struct mapped_device *md, struct request *orig)
 {
 	blk_mq_start_request(orig);
-	atomic_inc(&md->pending[rq_data_dir(orig)]);
+	atomic_inc(&dm_disk(md)->part0.in_flight[rq_data_dir(orig)]);
 
 	if (unlikely(dm_stats_used(&md->stats))) {
 		struct dm_rq_target_io *tio = tio_from_request(orig);
