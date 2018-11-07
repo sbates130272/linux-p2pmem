@@ -15,6 +15,7 @@ if OF
 config OF_UNITTEST
 	bool "Device Tree runtime unit tests"
 	depends on !SPARC
+	depends on KUNIT
 	select IRQ_DOMAIN
 	select OF_EARLY_FLATTREE
 	select OF_RESOLVE
