@@ -1272,12 +1272,10 @@ static int posix_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 		if (error != FILE_LOCK_DEFERRED)
 			break;
 		error = wait_event_interruptible(fl->fl_wait, !fl->fl_blocker);
-		if (!error)
-			continue;
-
-		locks_delete_block(fl);
-		break;
+		if (error)
+			break;
 	}
+	locks_delete_block(fl);
 	return error;
 }
 
@@ -1368,9 +1366,9 @@ int locks_mandatory_area(struct inode *inode, struct file *filp, loff_t start,
 				continue;
 		}
 
-		locks_delete_block(&fl);
 		break;
 	}
+	locks_delete_block(&fl);
 
 	return error;
 }
@@ -1966,12 +1964,10 @@ static int flock_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 		if (error != FILE_LOCK_DEFERRED)
 			break;
 		error = wait_event_interruptible(fl->fl_wait, !fl->fl_blocker);
-		if (!error)
-			continue;
-
-		locks_delete_block(fl);
-		break;
+		if (error)
+			break;
 	}
+	locks_delete_block(fl);
 	return error;
 }
 
@@ -2245,12 +2241,10 @@ static int do_lock_file_wait(struct file *filp, unsigned int cmd,
 		if (error != FILE_LOCK_DEFERRED)
 			break;
 		error = wait_event_interruptible(fl->fl_wait, !fl->fl_blocker);
-		if (!error)
-			continue;
-
-		locks_delete_block(fl);
-		break;
+		if (error)
+			break;
 	}
+	locks_delete_block(fl);
 
 	return error;
 }
