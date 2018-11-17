@@ -151,6 +151,26 @@ struct kunit_module {
 	struct kunit_case *test_cases;
 };
 
+struct kunit_try_catch_context {
+	struct kunit *test;
+	struct kunit_module *module;
+	struct kunit_case *test_case;
+	struct completion *try_completion;
+	int try_result;
+};
+
+struct kunit_try_catch {
+	void (*run)(struct kunit_try_catch *try_catch);
+	void (*throw)(struct kunit_try_catch *try_catch);
+	struct kunit_try_catch_context context;
+	void (*try)(struct kunit_try_catch_context *context);
+	void (*catch)(struct kunit_try_catch_context *context);
+};
+
+void kunit_try_catch_init(struct kunit_try_catch *try_catch);
+
+void kunit_generic_try_catch_init(struct kunit_try_catch *try_catch);
+
 /**
  * struct kunit - represents a running instance of a test.
  * @priv: for user to store arbitrary data. Commonly used to pass data created
@@ -166,13 +186,17 @@ struct kunit {
 
 	/* private: internal use only. */
 	const char *name; /* Read only after initialization! */
+	struct kunit_try_catch try_catch;
 	spinlock_t lock; /* Gaurds all mutable test state. */
 	bool success; /* Protected by lock. */
+	bool death_test; /* Protected by lock. */
 	struct list_head resources; /* Protected by lock. */
+	void (*set_death_test)(struct kunit *test, bool death_test);
 	void (*vprintk)(const struct kunit *test,
 			const char *level,
 			struct va_format *vaf);
 	void (*fail)(struct kunit *test, struct kunit_stream *stream);
+	void (*abort)(struct kunit *test);
 };
 
 int kunit_init_test(struct kunit *test, const char *name);

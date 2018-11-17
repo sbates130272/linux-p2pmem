@@ -6,9 +6,9 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
-#include <linux/sched.h>
 #include <linux/sched/debug.h>
-#include <os.h>
+#include <linux/completion.h>
+#include <linux/kthread.h>
 #include <kunit/test.h>
 
 static bool kunit_get_success(struct kunit *test)
@@ -29,6 +29,27 @@ static void kunit_set_success(struct kunit *test, bool success)
 
 	spin_lock_irqsave(&test->lock, flags);
 	test->success = success;
+	spin_unlock_irqrestore(&test->lock, flags);
+}
+
+static bool kunit_get_death_test(struct kunit *test)
+{
+	unsigned long flags;
+	bool death_test;
+
+	spin_lock_irqsave(&test->lock, flags);
+	death_test = test->death_test;
+	spin_unlock_irqrestore(&test->lock, flags);
+
+	return death_test;
+}
+
+static void kunit_set_death_test(struct kunit *test, bool death_test)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&test->lock, flags);
+	test->death_test = death_test;
 	spin_unlock_irqrestore(&test->lock, flags);
 }
 
@@ -70,13 +91,29 @@ static void kunit_fail(struct kunit *test, struct kunit_stream *stream)
 	stream->commit(stream);
 }
 
+static void __noreturn kunit_abort(struct kunit *test)
+{
+	kunit_set_death_test(test, true);
+
+	test->try_catch.throw(&test->try_catch);
+
+	/*
+	 * Throw could not abort from test.
+	 */
+	kunit_err(test, "Throw could not abort from test!");
+	show_stack(NULL, NULL);
+	BUG();
+}
+
 int kunit_init_test(struct kunit *test, const char *name)
 {
 	spin_lock_init(&test->lock);
 	INIT_LIST_HEAD(&test->resources);
 	test->name = name;
+	test->set_death_test = kunit_set_death_test;
 	test->vprintk = kunit_vprintk;
 	test->fail = kunit_fail;
+	test->abort = kunit_abort;
 
 	return 0;
 }
@@ -122,16 +159,171 @@ static void kunit_run_case_cleanup(struct kunit *test,
 }
 
 /*
- * Performs all logic to run a test case.
+ * Handles an unexpected crash in a test case.
  */
-static bool kunit_run_case(struct kunit *test,
-			   struct kunit_module *module,
-			   struct kunit_case *test_case)
+static void kunit_handle_test_crash(struct kunit *test,
+				   struct kunit_module *module,
+				   struct kunit_case *test_case)
 {
-	kunit_set_success(test, true);
+	kunit_err(test, "%s crashed", test_case->name);
+	/*
+	 * TODO(brendanhiggins@google.com): This prints the stack trace up
+	 * through this frame, not up to the frame that caused the crash.
+	 */
+	show_stack(NULL, NULL);
 
+	kunit_case_internal_cleanup(test);
+}
+
+static void kunit_generic_throw(struct kunit_try_catch *try_catch)
+{
+	try_catch->context.try_result = -EFAULT;
+	complete_and_exit(try_catch->context.try_completion, -EFAULT);
+}
+
+static int kunit_generic_run_threadfn_adapter(void *data)
+{
+	struct kunit_try_catch *try_catch = data;
+
+	try_catch->try(&try_catch->context);
+
+	complete_and_exit(try_catch->context.try_completion, 0);
+}
+
+static void kunit_generic_run_try_catch(struct kunit_try_catch *try_catch)
+{
+	struct task_struct *task_struct;
+	struct kunit *test = try_catch->context.test;
+	int exit_code, wake_result;
+	DECLARE_COMPLETION(test_case_completion);
+
+	try_catch->context.try_completion = &test_case_completion;
+	try_catch->context.try_result = 0;
+	task_struct = kthread_create(kunit_generic_run_threadfn_adapter,
+					     try_catch,
+					     "kunit_try_catch_thread");
+	if (IS_ERR_OR_NULL(task_struct)) {
+		try_catch->catch(&try_catch->context);
+		return;
+	}
+
+	wake_result = wake_up_process(task_struct);
+	if (wake_result != 0 && wake_result != 1) {
+		kunit_err(test, "task was not woken properly: %d", wake_result);
+		try_catch->catch(&try_catch->context);
+	}
+
+	/*
+	 * TODO(brendanhiggins@google.com): We should probably have some type of
+	 * timeout here. The only question is what that timeout value should be.
+	 *
+	 * The intention has always been, at some point, to be able to label
+	 * tests with some type of size bucket (unit/small, integration/medium,
+	 * large/system/end-to-end, etc), where each size bucket would get a
+	 * default timeout value kind of like what Bazel does:
+	 * https://docs.bazel.build/versions/master/be/common-definitions.html#test.size
+	 * There is still some debate to be had on exactly how we do this. (For
+	 * one, we probably want to have some sort of test runner level
+	 * timeout.)
+	 *
+	 * For more background on this topic, see:
+	 * https://mike-bland.com/2011/11/01/small-medium-large.html
+	 */
+	wait_for_completion(&test_case_completion);
+
+	exit_code = try_catch->context.try_result;
+	if (exit_code == -EFAULT)
+		try_catch->catch(&try_catch->context);
+	else if (exit_code == -EINTR)
+		kunit_err(test, "wake_up_process() was never called.");
+	else if (exit_code)
+		kunit_err(test, "Unknown error: %d", exit_code);
+}
+
+void kunit_generic_try_catch_init(struct kunit_try_catch *try_catch)
+{
+	try_catch->run = kunit_generic_run_try_catch;
+	try_catch->throw = kunit_generic_throw;
+}
+
+void __weak kunit_try_catch_init(struct kunit_try_catch *try_catch)
+{
+	kunit_generic_try_catch_init(try_catch);
+}
+
+static void kunit_try_run_case(struct kunit_try_catch_context *context)
+{
+	struct kunit_try_catch_context *ctx = context;
+	struct kunit *test = ctx->test;
+	struct kunit_module *module = ctx->module;
+	struct kunit_case *test_case = ctx->test_case;
+
+	/*
+	 * kunit_run_case_internal may encounter a fatal error; if it does, we
+	 * will jump to ENTER_HANDLER above instead of continuing normal control
+	 * flow.
+	 */
 	kunit_run_case_internal(test, module, test_case);
+	/* This line may never be reached. */
 	kunit_run_case_cleanup(test, module, test_case);
+}
+
+static void kunit_catch_run_case(struct kunit_try_catch_context *context)
+{
+	struct kunit_try_catch_context *ctx = context;
+	struct kunit *test = ctx->test;
+	struct kunit_module *module = ctx->module;
+	struct kunit_case *test_case = ctx->test_case;
+
+	if (kunit_get_death_test(test)) {
+		/*
+		 * EXPECTED DEATH: kunit_run_case_internal encountered
+		 * anticipated fatal error. Everything should be in a safe
+		 * state.
+		 */
+		kunit_run_case_cleanup(test, module, test_case);
+	} else {
+		/*
+		 * UNEXPECTED DEATH: kunit_run_case_internal encountered an
+		 * unanticipated fatal error. We have no idea what the state of
+		 * the test case is in.
+		 */
+		kunit_handle_test_crash(test, module, test_case);
+		kunit_set_success(test, false);
+	}
+}
+
+/*
+ * Performs all logic to run a test case. It also catches most errors that
+ * occurs in a test case and reports them as failures.
+ *
+ * XXX: THIS DOES NOT FOLLOW NORMAL CONTROL FLOW. READ CAREFULLY!!!
+ */
+static bool kunit_run_case_catch_errors(struct kunit *test,
+				       struct kunit_module *module,
+				       struct kunit_case *test_case)
+{
+	struct kunit_try_catch *try_catch = &test->try_catch;
+	struct kunit_try_catch_context *context = &try_catch->context;
+
+	kunit_try_catch_init(try_catch);
+
+	kunit_set_success(test, true);
+	kunit_set_death_test(test, false);
+
+	/*
+	 * ENTER HANDLER: If a failure occurs, we enter here.
+	 */
+	context->test = test;
+	context->module = module;
+	context->test_case = test_case;
+	try_catch->try = kunit_try_run_case;
+	try_catch->catch = kunit_catch_run_case;
+	try_catch->run(try_catch);
+	/*
+	 * EXIT HANDLER: test case has been run and all possible errors have
+	 * been handled.
+	 */
 
 	return kunit_get_success(test);
 }
@@ -148,7 +340,7 @@ int kunit_run_tests(struct kunit_module *module)
 		return ret;
 
 	for (test_case = module->test_cases; test_case->run_case; test_case++) {
-		success = kunit_run_case(&test, module, test_case);
+		success = kunit_run_case_catch_errors(&test, module, test_case);
 		if (!success)
 			all_passed = false;
 
