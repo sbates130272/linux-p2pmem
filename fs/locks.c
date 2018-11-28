@@ -444,6 +444,13 @@ static void locks_move_blocks(struct file_lock *new, struct file_lock *fl)
 {
 	struct file_lock *f;
 
+	/*
+	 * As ctx->flc_lock is held, new requests cannot be added to
+	 * ->fl_blocked_requests, so we don't need a lock to check if it
+	 * is empty.
+	 */
+	if (list_empty(&fl->fl_blocked_requests))
+		return;
 	spin_lock(&blocked_lock_lock);
 	list_splice_init(&fl->fl_blocked_requests, &new->fl_blocked_requests);
 	list_for_each_entry(f, &fl->fl_blocked_requests, fl_blocked_member)
@@ -749,6 +756,20 @@ int locks_delete_block(struct file_lock *waiter)
 {
 	int status = -ENOENT;
 
+	/*
+	 * If fl_blocker is NULL, it won't be set again as this thread
+	 * "owns" the lock and is the only one that might try to claim
+	 * the lock.  So it is safe to test fl_blocker locklessly.
+	 * Also if fl_blocker is NULL, this waiter is not listed on
+	 * fl_blocked_requests for some lock, so no other request can
+	 * be added to the list of fl_blocked_requests for this
+	 * request.  So if fl_blocker is NULL, it is safe to
+	 * locklessly check if fl_blocked_requests is empty.  If both
+	 * of these checks succeed, there is no need to take the lock.
+	 */
+	if (waiter->fl_blocker == NULL &&
+	    list_empty(&waiter->fl_blocked_requests))
+		return status;
 	spin_lock(&blocked_lock_lock);
 	if (waiter->fl_blocker)
 		status = 0;
