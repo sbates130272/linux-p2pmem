@@ -254,9 +254,13 @@ int autofs_fill_super(struct super_block *s, void *data, int silent)
 		goto fail_free;
 	}
 	root_inode = autofs_get_inode(s, S_IFDIR | 0755);
+	if (!root_inode) {
+		ret = -ENOMEM;
+		goto fail_ino;
+	}
 	root = d_make_root(root_inode);
 	if (!root)
-		goto fail_ino;
+		goto fail_iput;
 	pipe = NULL;
 
 	root->d_fsdata = ino;
@@ -304,8 +308,8 @@ int autofs_fill_super(struct super_block *s, void *data, int silent)
 	root_inode->i_op = &autofs_dir_inode_operations;
 
 	pr_debug("pipe fd = %d, pgrp = %u\n", pipefd, pid_nr(sbi->oz_pgrp));
-	pipe = fget(pipefd);
 
+	pipe = fget(pipefd);
 	if (!pipe) {
 		pr_err("could not open pipe file descriptor\n");
 		goto fail_put_pid;
@@ -334,6 +338,8 @@ fail_put_pid:
 fail_dput:
 	dput(root);
 	goto fail_free;
+fail_iput:
+	iput(root_inode);
 fail_ino:
 	autofs_free_ino(ino);
 fail_free:
