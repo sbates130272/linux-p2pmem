@@ -792,7 +792,8 @@ static void __exit fat_destroy_inodecache(void)
 	kmem_cache_destroy(fat_inode_cachep);
 }
 
-static int fat_remount(struct super_block *sb, int *flags, char *data)
+static int fat_remount(struct super_block *sb, int *flags,
+		       char *data, size_t data_size)
 {
 	bool new_rdonly;
 	struct msdos_sb_info *sbi = MSDOS_SB(sb);

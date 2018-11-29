@@ -136,7 +136,8 @@ static void fuse_evict_inode(struct inode *inode)
 	}
 }
 
-static int fuse_remount_fs(struct super_block *sb, int *flags, char *data)
+static int fuse_remount_fs(struct super_block *sb, int *flags,
+			   char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	if (*flags & SB_MANDLOCK)
@@ -1072,7 +1073,8 @@ void fuse_dev_free(struct fuse_dev *fud)
 }
 EXPORT_SYMBOL_GPL(fuse_dev_free);
 
-static int fuse_fill_super(struct super_block *sb, void *data, int silent)
+static int fuse_fill_super(struct super_block *sb, void *data, size_t data_size,
+			   int silent)
 {
 	struct fuse_dev *fud;
 	struct fuse_conn *fc;
@@ -1229,9 +1231,10 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 
 static struct dentry *fuse_mount(struct file_system_type *fs_type,
 		       int flags, const char *dev_name,
-		       void *raw_data)
+		       void *raw_data, size_t data_size)
 {
-	return mount_nodev(fs_type, flags, raw_data, fuse_fill_super);
+	return mount_nodev(fs_type, flags, raw_data, data_size,
+			   fuse_fill_super);
 }
 
 static void fuse_sb_destroy(struct super_block *sb)
@@ -1268,9 +1271,10 @@ MODULE_ALIAS_FS("fuse");
 #ifdef CONFIG_BLOCK
 static struct dentry *fuse_mount_blk(struct file_system_type *fs_type,
 			   int flags, const char *dev_name,
-			   void *raw_data)
+			   void *raw_data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, raw_data, fuse_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, raw_data, data_size,
+			  fuse_fill_super);
 }
 
 static void fuse_kill_sb_blk(struct super_block *sb)

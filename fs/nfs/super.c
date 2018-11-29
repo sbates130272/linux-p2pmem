@@ -287,7 +287,8 @@ static match_table_t nfs_vers_tokens = {
 };
 
 static struct dentry *nfs_xdev_mount(struct file_system_type *fs_type,
-		int flags, const char *dev_name, void *raw_data);
+				     int flags, const char *dev_name,
+				     void *raw_data, size_t data_size);
 
 struct file_system_type nfs_fs_type = {
 	.owner		= THIS_MODULE,
@@ -1203,7 +1204,7 @@ static int nfs_get_option_ul_bound(substring_t args[], unsigned long *option,
  * skipped as they are encountered.  If there were no errors, return 1;
  * otherwise return 0 (zero).
  */
-static int nfs_parse_mount_options(char *raw,
+static int nfs_parse_mount_options(char *raw, size_t raw_size,
 				   struct nfs_parsed_mount_data *mnt)
 {
 	char *p, *string, *secdata;
@@ -1221,7 +1222,7 @@ static int nfs_parse_mount_options(char *raw,
 	if (!secdata)
 		goto out_nomem;
 
-	rc = security_sb_copy_data(raw, secdata);
+	rc = security_sb_copy_data(raw, raw_size, secdata);
 	if (rc)
 		goto out_security_failure;
 
@@ -2151,7 +2152,7 @@ static int nfs_validate_mount_data(struct file_system_type *fs_type,
 }
 #endif
 
-static int nfs_validate_text_mount_data(void *options,
+static int nfs_validate_text_mount_data(void *options, size_t data_size,
 					struct nfs_parsed_mount_data *args,
 					const char *dev_name)
 {
@@ -2160,7 +2161,7 @@ static int nfs_validate_text_mount_data(void *options,
 	int max_pathlen = NFS_MAXPATHLEN;
 	struct sockaddr *sap = (struct sockaddr *)&args->nfs_server.address;
 
-	if (nfs_parse_mount_options((char *)options, args) == 0)
+	if (nfs_parse_mount_options((char *)options, data_size, args) == 0)
 		return -EINVAL;
 
 	if (!nfs_verify_server_address(sap))
@@ -2243,7 +2244,7 @@ nfs_compare_remount_data(struct nfs_server *nfss,
 }
 
 int
-nfs_remount(struct super_block *sb, int *flags, char *raw_data)
+nfs_remount(struct super_block *sb, int *flags, char *raw_data, size_t data_size)
 {
 	int error;
 	struct nfs_server *nfss = sb->s_fs_info;
@@ -2290,7 +2291,7 @@ nfs_remount(struct super_block *sb, int *flags, char *raw_data)
 
 	/* overwrite those values with any that were specified */
 	error = -EINVAL;
-	if (!nfs_parse_mount_options((char *)options, data))
+	if (!nfs_parse_mount_options((char *)options, data_size, data))
 		goto out;
 
 	/*
@@ -2662,7 +2663,7 @@ error_splat_super:
 EXPORT_SYMBOL_GPL(nfs_fs_mount_common);
 
 struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *raw_data)
+	int flags, const char *dev_name, void *raw_data, size_t data_size)
 {
 	struct nfs_mount_info mount_info = {
 		.fill_super = nfs_fill_super,
@@ -2680,7 +2681,8 @@ struct dentry *nfs_fs_mount(struct file_system_type *fs_type,
 	/* Validate the mount data */
 	error = nfs_validate_mount_data(fs_type, raw_data, mount_info.parsed, mount_info.mntfh, dev_name);
 	if (error == NFS_TEXT_DATA)
-		error = nfs_validate_text_mount_data(raw_data, mount_info.parsed, dev_name);
+		error = nfs_validate_text_mount_data(raw_data, data_size,
+						     mount_info.parsed, dev_name);
 	if (error < 0) {
 		mntroot = ERR_PTR(error);
 		goto out;
@@ -2724,7 +2726,7 @@ EXPORT_SYMBOL_GPL(nfs_kill_super);
  */
 static struct dentry *
 nfs_xdev_mount(struct file_system_type *fs_type, int flags,
-		const char *dev_name, void *raw_data)
+		const char *dev_name, void *raw_data, size_t data_size)
 {
 	struct nfs_clone_mount *data = raw_data;
 	struct nfs_mount_info mount_info = {

@@ -2844,13 +2844,15 @@ static const struct file_operations smk_ptrace_ops = {
  * smk_fill_super - fill the smackfs superblock
  * @sb: the empty superblock
  * @data: unused
+ * @data_size: size of data buffer
  * @silent: unused
  *
  * Fill in the well known entries for the smack filesystem
  *
  * Returns 0 on success, an error code on failure
  */
-static int smk_fill_super(struct super_block *sb, void *data, int silent)
+static int smk_fill_super(struct super_block *sb, void *data, size_t data_size,
+			  int silent)
 {
 	int rc;
 
@@ -2931,9 +2933,10 @@ static int smk_fill_super(struct super_block *sb, void *data, int silent)
  * Returns what the lower level code does.
  */
 static struct dentry *smk_mount(struct file_system_type *fs_type,
-		      int flags, const char *dev_name, void *data)
+				int flags, const char *dev_name,
+				void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, smk_fill_super);
+	return mount_single(fs_type, flags, data, data_size, smk_fill_super);
 }
 
 static struct file_system_type smk_fs_type = {

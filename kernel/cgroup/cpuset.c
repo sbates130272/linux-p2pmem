@@ -38,7 +38,7 @@
 #include <linux/mm.h>
 #include <linux/memory.h>
 #include <linux/export.h>
-#include <linux/mount.h>
+#include <linux/fs_context.h>
 #include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/proc_fs.h>
@@ -315,25 +315,80 @@ static inline bool is_in_v2_mode(void)
  * users. If someone tries to mount the "cpuset" filesystem, we
  * silently switch it to mount "cgroup" instead
  */
-static struct dentry *cpuset_mount(struct file_system_type *fs_type,
-			 int flags, const char *unused_dev_name, void *data)
+static int cpuset_get_tree(struct fs_context *fc)
 {
-	struct file_system_type *cgroup_fs = get_fs_type("cgroup");
-	struct dentry *ret = ERR_PTR(-ENODEV);
-	if (cgroup_fs) {
-		char mountopts[] =
-			"cpuset,noprefix,"
-			"release_agent=/sbin/cpuset_release_agent";
-		ret = cgroup_fs->mount(cgroup_fs, flags,
-					   unused_dev_name, mountopts);
-		put_filesystem(cgroup_fs);
+	static const char opts[] = "cpuset,noprefix,release_agent=/sbin/cpuset_release_agent";
+	struct file_system_type *cgroup_fs;
+	struct fs_context *cg_fc;
+	char *p;
+	int ret = -ENODEV;
+
+	cgroup_fs = get_fs_type("cgroup");
+	if (!cgroup_fs)
+		goto out;
+
+	cg_fc = vfs_new_fs_context(cgroup_fs, NULL, fc->sb_flags, fc->sb_flags,
+				   fc->purpose);
+	put_filesystem(cgroup_fs);
+	if (IS_ERR(cg_fc)) {
+		ret = PTR_ERR(cg_fc);
+		goto out;
 	}
+
+	ret = -ENOMEM;
+	p = kstrdup(opts, GFP_KERNEL);
+	if (!p)
+		goto out_fc;
+
+	ret = generic_parse_monolithic(cg_fc, p, sizeof(opts) - 1);
+	kfree(p);
+	if (ret < 0)
+		goto out_fc;
+
+	/* We can't call vfs_get_tree() as that will do various post-get-tree
+	 * things that we want our caller to do.
+	 */
+	if (cg_fc->ops->validate) {
+		ret = cg_fc->ops->validate(cg_fc);
+		if (ret < 0)
+			goto out_fc;
+	}
+
+	ret = security_fs_context_validate(cg_fc);
+	if (ret < 0)
+		goto out_fc;
+
+	/* Get the mountable root in fc->root, with a ref on the root and a ref
+	 * on the superblock.
+	 */
+	ret = cg_fc->ops->get_tree(cg_fc);
+	if (ret < 0)
+		return ret;
+
+	fc->root = cg_fc->root;
+	cg_fc->root = NULL;
+	ret = 0;
+
+out_fc:
+	put_fs_context(cg_fc);
+out:
 	return ret;
 }
 
+static const struct fs_context_operations cpuset_fs_context_ops = {
+	.get_tree	= cpuset_get_tree,
+};
+
+static int cpuset_init_fs_context(struct fs_context *fc,
+				  struct dentry *reference)
+{
+	fc->ops = &cpuset_fs_context_ops;
+	return 0;
+}
+
 static struct file_system_type cpuset_fs_type = {
-	.name = "cpuset",
-	.mount = cpuset_mount,
+	.name			= "cpuset",
+	.init_fs_context	= cpuset_init_fs_context,
 };
 
 /*

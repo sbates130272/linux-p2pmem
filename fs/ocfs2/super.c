@@ -107,7 +107,8 @@ static int ocfs2_check_set_options(struct super_block *sb,
 static int ocfs2_show_options(struct seq_file *s, struct dentry *root);
 static void ocfs2_put_super(struct super_block *sb);
 static int ocfs2_mount_volume(struct super_block *sb);
-static int ocfs2_remount(struct super_block *sb, int *flags, char *data);
+static int ocfs2_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size);
 static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err);
 static int ocfs2_initialize_mem_caches(void);
 static void ocfs2_free_mem_caches(void);
@@ -633,7 +634,8 @@ static unsigned long long ocfs2_max_file_offset(unsigned int bbits,
 	return (((unsigned long long)bytes) << bitshift) - trim;
 }
 
-static int ocfs2_remount(struct super_block *sb, int *flags, char *data)
+static int ocfs2_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	int incompat_features;
 	int ret = 0;
@@ -999,7 +1001,8 @@ static void ocfs2_disable_quotas(struct ocfs2_super *osb)
 	}
 }
 
-static int ocfs2_fill_super(struct super_block *sb, void *data, int silent)
+static int ocfs2_fill_super(struct super_block *sb, void *data, size_t data_size,
+			    int silent)
 {
 	struct dentry *root;
 	int status, sector_size;
@@ -1236,9 +1239,10 @@ read_super_error:
 static struct dentry *ocfs2_mount(struct file_system_type *fs_type,
 			int flags,
 			const char *dev_name,
-			void *data)
+			void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, ocfs2_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  ocfs2_fill_super);
 }
 
 static struct file_system_type ocfs2_fs_type = {

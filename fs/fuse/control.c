@@ -315,7 +315,8 @@ void fuse_ctl_remove_conn(struct fuse_conn *fc)
 	drop_nlink(d_inode(fuse_control_sb->s_root));
 }
 
-static int fuse_ctl_fill_super(struct super_block *sb, void *data, int silent)
+static int fuse_ctl_fill_super(struct super_block *sb,
+			       void *data, size_t data_size, int silent)
 {
 	static const struct tree_descr empty_descr = {""};
 	struct fuse_conn *fc;
@@ -342,9 +343,11 @@ static int fuse_ctl_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *fuse_ctl_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name, void *raw_data)
+				     int flags, const char *dev_name,
+				     void *raw_data, size_t data_size)
 {
-	return mount_single(fs_type, flags, raw_data, fuse_ctl_fill_super);
+	return mount_single(fs_type, flags, raw_data, data_size,
+			    fuse_ctl_fill_super);
 }
 
 static void fuse_ctl_kill_sb(struct super_block *sb)

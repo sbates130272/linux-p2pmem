@@ -1044,16 +1044,18 @@ static void setup(struct super_block *sb)
 		sb->s_d_op = &vfat_dentry_ops;
 }
 
-static int vfat_fill_super(struct super_block *sb, void *data, int silent)
+static int vfat_fill_super(struct super_block *sb, void *data, size_t data_size,
+			   int silent)
 {
 	return fat_fill_super(sb, data, silent, 1, setup);
 }
 
 static struct dentry *vfat_mount(struct file_system_type *fs_type,
 		       int flags, const char *dev_name,
-		       void *data)
+		       void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, vfat_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  vfat_fill_super);
 }
 
 static struct file_system_type vfat_fs_type = {

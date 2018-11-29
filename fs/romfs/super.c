@@ -430,7 +430,8 @@ static int romfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 /*
  * remounting must involve read-only
  */
-static int romfs_remount(struct super_block *sb, int *flags, char *data)
+static int romfs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_RDONLY;
@@ -464,7 +465,8 @@ static __u32 romfs_checksum(const void *data, int size)
 /*
  * fill in the superblock
  */
-static int romfs_fill_super(struct super_block *sb, void *data, int silent)
+static int romfs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			    int silent)
 {
 	struct romfs_super_block *rsb;
 	struct inode *root;
@@ -557,16 +559,17 @@ error_rsb:
  */
 static struct dentry *romfs_mount(struct file_system_type *fs_type,
 			int flags, const char *dev_name,
-			void *data)
+			void *data, size_t data_size)
 {
 	struct dentry *ret = ERR_PTR(-EINVAL);
 
 #ifdef CONFIG_ROMFS_ON_MTD
-	ret = mount_mtd(fs_type, flags, dev_name, data, romfs_fill_super);
+	ret = mount_mtd(fs_type, flags, dev_name, data, data_size,
+			romfs_fill_super);
 #endif
 #ifdef CONFIG_ROMFS_ON_BLOCK
 	if (ret == ERR_PTR(-EINVAL))
-		ret = mount_bdev(fs_type, flags, dev_name, data,
+		ret = mount_bdev(fs_type, flags, dev_name, data, data_size,
 				  romfs_fill_super);
 #endif
 	return ret;

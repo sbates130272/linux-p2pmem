@@ -27,6 +27,7 @@
 #include <linux/export.h>
 #include <linux/utsname.h>
 #include <linux/sched.h>
+#include <linux/compat.h>
 #include <asm/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -919,7 +920,7 @@ static int hci_sock_blacklist_del(struct hci_dev *hdev, void __user *arg)
 
 /* Ioctls that require bound socket */
 static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
-				unsigned long arg)
+				void __user *argp)
 {
 	struct hci_dev *hdev = hci_pi(sk)->hdev;
 
@@ -942,20 +943,20 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
 		return -EOPNOTSUPP;
 
 	case HCIGETCONNINFO:
-		return hci_get_conn_info(hdev, (void __user *)arg);
+		return hci_get_conn_info(hdev, argp);
 
 	case HCIGETAUTHINFO:
-		return hci_get_auth_info(hdev, (void __user *)arg);
+		return hci_get_auth_info(hdev, argp);
 
 	case HCIBLOCKADDR:
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
-		return hci_sock_blacklist_add(hdev, (void __user *)arg);
+		return hci_sock_blacklist_add(hdev, argp);
 
 	case HCIUNBLOCKADDR:
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
-		return hci_sock_blacklist_del(hdev, (void __user *)arg);
+		return hci_sock_blacklist_del(hdev, argp);
 	}
 
 	return -ENOIOCTLCMD;
@@ -1048,12 +1049,28 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 
 	lock_sock(sk);
 
-	err = hci_sock_bound_ioctl(sk, cmd, arg);
+	err = hci_sock_bound_ioctl(sk, cmd, argp);
 
 done:
 	release_sock(sk);
 	return err;
 }
+
+#ifdef CONFIG_COMPAT
+static int hci_sock_compat_ioctl(struct socket *sock, unsigned int cmd,
+			  unsigned long arg)
+{
+	switch (cmd) {
+	case HCIDEVUP:
+	case HCIDEVDOWN:
+	case HCIDEVRESET:
+	case HCIDEVRESTAT:
+		return hci_sock_ioctl(sock, cmd, arg);
+	default:
+		return hci_sock_ioctl(sock, cmd, (unsigned long)compat_ptr(arg));
+	}
+}
+#endif
 
 static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 			 int addr_len)
@@ -1975,6 +1992,9 @@ static const struct proto_ops hci_sock_ops = {
 	.sendmsg	= hci_sock_sendmsg,
 	.recvmsg	= hci_sock_recvmsg,
 	.ioctl		= hci_sock_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= hci_sock_compat_ioctl,
+#endif
 	.poll		= datagram_poll,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,

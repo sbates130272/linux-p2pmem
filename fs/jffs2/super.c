@@ -238,7 +238,8 @@ static int jffs2_parse_options(struct jffs2_sb_info *c, char *data)
 	return 0;
 }
 
-static int jffs2_remount_fs(struct super_block *sb, int *flags, char *data)
+static int jffs2_remount_fs(struct super_block *sb, int *flags,
+			    char *data, size_t data_size)
 {
 	struct jffs2_sb_info *c = JFFS2_SB_INFO(sb);
 	int err;
@@ -267,7 +268,8 @@ static const struct super_operations jffs2_super_operations =
 /*
  * fill in the superblock
  */
-static int jffs2_fill_super(struct super_block *sb, void *data, int silent)
+static int jffs2_fill_super(struct super_block *sb,
+			    void *data, size_t data_size, int silent)
 {
 	struct jffs2_sb_info *c;
 	int ret;
@@ -310,9 +312,9 @@ static int jffs2_fill_super(struct super_block *sb, void *data, int silent)
 
 static struct dentry *jffs2_mount(struct file_system_type *fs_type,
 			int flags, const char *dev_name,
-			void *data)
+			void *data, size_t data_size)
 {
-	return mount_mtd(fs_type, flags, dev_name, data, jffs2_fill_super);
+	return mount_mtd(fs_type, flags, dev_name, data, data_size, jffs2_fill_super);
 }
 
 static void jffs2_put_super (struct super_block *sb)

@@ -647,16 +647,18 @@ static void setup(struct super_block *sb)
 	sb->s_flags |= SB_NOATIME;
 }
 
-static int msdos_fill_super(struct super_block *sb, void *data, int silent)
+static int msdos_fill_super(struct super_block *sb, void *data, size_t data_size,
+			    int silent)
 {
 	return fat_fill_super(sb, data, silent, 0, setup);
 }
 
 static struct dentry *msdos_mount(struct file_system_type *fs_type,
 			int flags, const char *dev_name,
-			void *data)
+			void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, msdos_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  msdos_fill_super);
 }
 
 static struct file_system_type msdos_fs_type = {

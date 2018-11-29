@@ -191,7 +191,8 @@ static int efivarfs_destroy(struct efivar_entry *entry, void *data)
 	return 0;
 }
 
-static int efivarfs_fill_super(struct super_block *sb, void *data, int silent)
+static int efivarfs_fill_super(struct super_block *sb,
+			       void *data, size_t data_size, int silent)
 {
 	struct inode *inode = NULL;
 	struct dentry *root;
@@ -227,9 +228,11 @@ static int efivarfs_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *efivarfs_mount(struct file_system_type *fs_type,
-				    int flags, const char *dev_name, void *data)
+				     int flags, const char *dev_name,
+				     void *data, size_t data_size)
 {
-	return mount_single(fs_type, flags, data, efivarfs_fill_super);
+	return mount_single(fs_type, flags, data, data_size,
+			    efivarfs_fill_super);
 }
 
 static void efivarfs_kill_sb(struct super_block *sb)

@@ -506,7 +506,8 @@ bail:
  * after device init.  The direct add_cntr_files() call handles adding
  * them from the init code, when the fs is already mounted.
  */
-static int qibfs_fill_super(struct super_block *sb, void *data, int silent)
+static int qibfs_fill_super(struct super_block *sb,
+			    void *data, size_t data_size, int silent)
 {
 	struct qib_devdata *dd, *tmp;
 	unsigned long flags;
@@ -541,11 +542,11 @@ bail:
 }
 
 static struct dentry *qibfs_mount(struct file_system_type *fs_type, int flags,
-			const char *dev_name, void *data)
+			const char *dev_name, void *data, size_t data_size)
 {
 	struct dentry *ret;
 
-	ret = mount_single(fs_type, flags, data, qibfs_fill_super);
+	ret = mount_single(fs_type, flags, data, data_size, qibfs_fill_super);
 	if (!IS_ERR(ret))
 		qib_super = ret->d_sb;
 	return ret;

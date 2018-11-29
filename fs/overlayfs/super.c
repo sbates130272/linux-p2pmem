@@ -365,7 +365,8 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	return 0;
 }
 
-static int ovl_remount(struct super_block *sb, int *flags, char *data)
+static int ovl_remount(struct super_block *sb, int *flags,
+		       char *data, size_t data_size)
 {
 	struct ovl_fs *ofs = sb->s_fs_info;
 
@@ -1418,7 +1419,8 @@ out_err:
 	goto out;
 }
 
-static int ovl_fill_super(struct super_block *sb, void *data, int silent)
+static int ovl_fill_super(struct super_block *sb, void *data, size_t data_size,
+			  int silent)
 {
 	struct path upperpath = { };
 	struct dentry *root_dentry;
@@ -1563,9 +1565,10 @@ out:
 }
 
 static struct dentry *ovl_mount(struct file_system_type *fs_type, int flags,
-				const char *dev_name, void *raw_data)
+				const char *dev_name,
+				void *raw_data, size_t data_size)
 {
-	return mount_nodev(fs_type, flags, raw_data, ovl_fill_super);
+	return mount_nodev(fs_type, flags, raw_data, data_size, ovl_fill_super);
 }
 
 static struct file_system_type ovl_fs_type = {

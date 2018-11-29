@@ -418,7 +418,7 @@ static const struct super_operations dax_sops = {
 };
 
 static struct dentry *dax_mount(struct file_system_type *fs_type,
-		int flags, const char *dev_name, void *data)
+		int flags, const char *dev_name, void *data, size_t data_size)
 {
 	return mount_pseudo(fs_type, "dax:", &dax_sops, NULL, DAXFS_MAGIC);
 }

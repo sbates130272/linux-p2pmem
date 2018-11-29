@@ -18,11 +18,11 @@
 static int nfs4_write_inode(struct inode *inode, struct writeback_control *wbc);
 static void nfs4_evict_inode(struct inode *inode);
 static struct dentry *nfs4_remote_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *raw_data);
+	int flags, const char *dev_name, void *raw_data, size_t data_size);
 static struct dentry *nfs4_referral_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *raw_data);
+	int flags, const char *dev_name, void *raw_data, size_t data_size);
 static struct dentry *nfs4_remote_referral_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *raw_data);
+	int flags, const char *dev_name, void *raw_data, size_t data_size);
 
 static struct file_system_type nfs4_remote_fs_type = {
 	.owner		= THIS_MODULE,
@@ -105,7 +105,7 @@ static void nfs4_evict_inode(struct inode *inode)
  */
 static struct dentry *
 nfs4_remote_mount(struct file_system_type *fs_type, int flags,
-		  const char *dev_name, void *info)
+		  const char *dev_name, void *info, size_t data_size)
 {
 	struct nfs_mount_info *mount_info = info;
 	struct nfs_server *server;
@@ -127,7 +127,7 @@ out:
 }
 
 static struct vfsmount *nfs_do_root_mount(struct file_system_type *fs_type,
-		int flags, void *data, const char *hostname)
+		int flags, void *data, size_t data_size, const char *hostname)
 {
 	struct vfsmount *root_mnt;
 	char *root_devname;
@@ -142,7 +142,8 @@ static struct vfsmount *nfs_do_root_mount(struct file_system_type *fs_type,
 		snprintf(root_devname, len, "[%s]:/", hostname);
 	else
 		snprintf(root_devname, len, "%s:/", hostname);
-	root_mnt = vfs_kern_mount(fs_type, flags, root_devname, data);
+	root_mnt = vfs_kern_mount(fs_type, flags, root_devname,
+				  data, data_size);
 	kfree(root_devname);
 	return root_mnt;
 }
@@ -247,8 +248,8 @@ struct dentry *nfs4_try_mount(int flags, const char *dev_name,
 
 	export_path = data->nfs_server.export_path;
 	data->nfs_server.export_path = "/";
-	root_mnt = nfs_do_root_mount(&nfs4_remote_fs_type, flags, mount_info,
-			data->nfs_server.hostname);
+	root_mnt = nfs_do_root_mount(&nfs4_remote_fs_type, flags, mount_info, 0,
+				     data->nfs_server.hostname);
 	data->nfs_server.export_path = export_path;
 
 	res = nfs_follow_remote_path(root_mnt, export_path);
@@ -261,7 +262,8 @@ struct dentry *nfs4_try_mount(int flags, const char *dev_name,
 
 static struct dentry *
 nfs4_remote_referral_mount(struct file_system_type *fs_type, int flags,
-			   const char *dev_name, void *raw_data)
+			   const char *dev_name,
+			   void *raw_data, size_t data_size)
 {
 	struct nfs_mount_info mount_info = {
 		.fill_super = nfs_fill_super,
@@ -294,7 +296,8 @@ out:
  * Create an NFS4 server record on referral traversal
  */
 static struct dentry *nfs4_referral_mount(struct file_system_type *fs_type,
-		int flags, const char *dev_name, void *raw_data)
+					  int flags, const char *dev_name,
+					  void *raw_data, size_t data_size)
 {
 	struct nfs_clone_mount *data = raw_data;
 	char *export_path;
@@ -306,8 +309,8 @@ static struct dentry *nfs4_referral_mount(struct file_system_type *fs_type,
 	export_path = data->mnt_path;
 	data->mnt_path = "/";
 
-	root_mnt = nfs_do_root_mount(&nfs4_remote_referral_fs_type,
-			flags, data, data->hostname);
+	root_mnt = nfs_do_root_mount(&nfs4_remote_referral_fs_type, flags,
+				     data, 0, data->hostname);
 	data->mnt_path = export_path;
 
 	res = nfs_follow_remote_path(root_mnt, export_path);

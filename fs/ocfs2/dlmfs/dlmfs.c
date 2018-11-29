@@ -568,6 +568,7 @@ bail:
 
 static int dlmfs_fill_super(struct super_block * sb,
 			    void * data,
+			    size_t data_size,
 			    int silent)
 {
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
@@ -617,9 +618,9 @@ static const struct inode_operations dlmfs_file_inode_operations = {
 };
 
 static struct dentry *dlmfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_nodev(fs_type, flags, data, dlmfs_fill_super);
+	return mount_nodev(fs_type, flags, data, data_size, dlmfs_fill_super);
 }
 
 static struct file_system_type dlmfs_fs_type = {

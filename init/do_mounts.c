@@ -22,6 +22,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
+#include <uapi/linux/mount.h>
 
 #include "do_mounts.h"
 
@@ -626,7 +627,7 @@ out:
 
 static bool is_tmpfs;
 static struct dentry *rootfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
 	static unsigned long once;
 	void *fill = ramfs_fill_super;
@@ -637,7 +638,7 @@ static struct dentry *rootfs_mount(struct file_system_type *fs_type,
 	if (IS_ENABLED(CONFIG_TMPFS) && is_tmpfs)
 		fill = shmem_fill_super;
 
-	return mount_nodev(fs_type, flags, data, fill);
+	return mount_nodev(fs_type, flags, data, data_size, fill);
 }
 
 static struct file_system_type rootfs_fs_type = {

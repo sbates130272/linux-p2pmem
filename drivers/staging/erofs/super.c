@@ -518,7 +518,7 @@ struct erofs_mount_private {
 
 /* support mount_bdev() with options */
 static int erofs_fill_super(struct super_block *sb,
-	void *_priv, int silent)
+	void *_priv, size_t data_size, int silent)
 {
 	struct erofs_mount_private *priv = _priv;
 
@@ -526,9 +526,9 @@ static int erofs_fill_super(struct super_block *sb,
 		priv->options, silent);
 }
 
-static struct dentry *erofs_mount(
-	struct file_system_type *fs_type, int flags,
-	const char *dev_name, void *data)
+static struct dentry *erofs_mount(struct file_system_type *fs_type,
+				  int flags, const char *dev_name,
+				  void *data, size_t data_size)
 {
 	struct erofs_mount_private priv = {
 		.dev_name = dev_name,
@@ -536,7 +536,7 @@ static struct dentry *erofs_mount(
 	};
 
 	return mount_bdev(fs_type, flags, dev_name,
-		&priv, erofs_fill_super);
+		&priv, sizeof(priv), erofs_fill_super);
 }
 
 static void erofs_kill_sb(struct super_block *sb)
@@ -648,7 +648,8 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 	return 0;
 }
 
-static int erofs_remount(struct super_block *sb, int *flags, char *data)
+static int erofs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	unsigned int org_mnt_opt = sbi->mount_opt;

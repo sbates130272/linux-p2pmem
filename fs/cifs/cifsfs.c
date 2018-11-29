@@ -605,7 +605,8 @@ static int cifs_show_stats(struct seq_file *s, struct dentry *root)
 }
 #endif
 
-static int cifs_remount(struct super_block *sb, int *flags, char *data)
+static int cifs_remount(struct super_block *sb, int *flags,
+			char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_NODIRATIME;
@@ -708,7 +709,8 @@ static int cifs_set_super(struct super_block *sb, void *data)
 
 static struct dentry *
 cifs_smb3_do_mount(struct file_system_type *fs_type,
-	      int flags, const char *dev_name, void *data, bool is_smb3)
+		   int flags, const char *dev_name, void *data, size_t data_size,
+		   bool is_smb3)
 {
 	int rc;
 	struct super_block *sb;
@@ -736,7 +738,7 @@ cifs_smb3_do_mount(struct file_system_type *fs_type,
 		goto out_nls;
 	}
 
-	cifs_sb->mountdata = kstrndup(data, PAGE_SIZE, GFP_KERNEL);
+	cifs_sb->mountdata = kstrndup(data, data_size, GFP_KERNEL);
 	if (cifs_sb->mountdata == NULL) {
 		root = ERR_PTR(-ENOMEM);
 		goto out_free;
@@ -808,16 +810,18 @@ out_nls:
 
 static struct dentry *
 smb3_do_mount(struct file_system_type *fs_type,
-	      int flags, const char *dev_name, void *data)
+	      int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return cifs_smb3_do_mount(fs_type, flags, dev_name, data, true);
+	return cifs_smb3_do_mount(fs_type, flags, dev_name, data, data_size,
+				  true);
 }
 
 static struct dentry *
 cifs_do_mount(struct file_system_type *fs_type,
-	      int flags, const char *dev_name, void *data)
+	      int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return cifs_smb3_do_mount(fs_type, flags, dev_name, data, false);
+	return cifs_smb3_do_mount(fs_type, flags, dev_name, data, data_size,
+				  false);
 }
 
 static ssize_t

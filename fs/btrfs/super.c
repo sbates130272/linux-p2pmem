@@ -61,7 +61,8 @@ static const struct super_operations btrfs_super_ops;
 static struct file_system_type btrfs_fs_type;
 static struct file_system_type btrfs_root_fs_type;
 
-static int btrfs_remount(struct super_block *sb, int *flags, char *data);
+static int btrfs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size);
 
 const char *btrfs_decode_error(int errno)
 {
@@ -1458,7 +1459,7 @@ out:
 	return root;
 }
 
-static int parse_security_options(char *orig_opts,
+static int parse_security_options(char *orig_opts, size_t data_size,
 				  struct security_mnt_opts *sec_opts)
 {
 	char *secdata = NULL;
@@ -1467,7 +1468,7 @@ static int parse_security_options(char *orig_opts,
 	secdata = alloc_secdata();
 	if (!secdata)
 		return -ENOMEM;
-	ret = security_sb_copy_data(orig_opts, secdata);
+	ret = security_sb_copy_data(orig_opts, data_size, secdata);
 	if (ret) {
 		free_secdata(secdata);
 		return ret;
@@ -1515,7 +1516,8 @@ static int setup_security_options(struct btrfs_fs_info *fs_info,
  *       for multiple device setup.  Make sure to keep it in sync.
  */
 static struct dentry *btrfs_mount_root(struct file_system_type *fs_type,
-		int flags, const char *device_name, void *data)
+				       int flags, const char *device_name,
+				       void *data, size_t data_size)
 {
 	struct block_device *bdev = NULL;
 	struct super_block *s;
@@ -1531,7 +1533,7 @@ static struct dentry *btrfs_mount_root(struct file_system_type *fs_type,
 
 	security_init_mnt_opts(&new_sec_opts);
 	if (data) {
-		error = parse_security_options(data, &new_sec_opts);
+		error = parse_security_options(data, data_size, &new_sec_opts);
 		if (error)
 			return ERR_PTR(error);
 	}
@@ -1647,7 +1649,7 @@ error_sec_opts:
  *      "btrfs subvolume set-default", mount_subvol() is called always.
  */
 static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
-		const char *device_name, void *data)
+		const char *device_name, void *data, size_t data_size)
 {
 	struct vfsmount *mnt_root;
 	struct dentry *root;
@@ -1667,21 +1669,24 @@ static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
 	}
 
 	/* mount device's root (/) */
-	mnt_root = vfs_kern_mount(&btrfs_root_fs_type, flags, device_name, data);
+	mnt_root = vfs_kern_mount(&btrfs_root_fs_type, flags, device_name,
+				  data, data_size);
 	if (PTR_ERR_OR_ZERO(mnt_root) == -EBUSY) {
 		if (flags & SB_RDONLY) {
 			mnt_root = vfs_kern_mount(&btrfs_root_fs_type,
-				flags & ~SB_RDONLY, device_name, data);
+				flags & ~SB_RDONLY, device_name,
+				data, data_size);
 		} else {
 			mnt_root = vfs_kern_mount(&btrfs_root_fs_type,
-				flags | SB_RDONLY, device_name, data);
+				flags | SB_RDONLY, device_name,
+				data, data_size);
 			if (IS_ERR(mnt_root)) {
 				root = ERR_CAST(mnt_root);
 				goto out;
 			}
 
 			down_write(&mnt_root->mnt_sb->s_umount);
-			error = btrfs_remount(mnt_root->mnt_sb, &flags, NULL);
+			error = btrfs_remount(mnt_root->mnt_sb, &flags, NULL, 0);
 			up_write(&mnt_root->mnt_sb->s_umount);
 			if (error < 0) {
 				root = ERR_PTR(error);
@@ -1763,7 +1768,8 @@ static inline void btrfs_remount_cleanup(struct btrfs_fs_info *fs_info,
 	clear_bit(BTRFS_FS_STATE_REMOUNTING, &fs_info->fs_state);
 }
 
-static int btrfs_remount(struct super_block *sb, int *flags, char *data)
+static int btrfs_remount(struct super_block *sb, int *flags,
+			 char *data, size_t data_size)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_root *root = fs_info->tree_root;
@@ -1782,7 +1788,7 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 		struct security_mnt_opts new_sec_opts;
 
 		security_init_mnt_opts(&new_sec_opts);
-		ret = parse_security_options(data, &new_sec_opts);
+		ret = parse_security_options(data, data_size, &new_sec_opts);
 		if (ret)
 			goto restore;
 		ret = setup_security_options(fs_info, sb,

@@ -352,7 +352,8 @@ static const struct xattr_handler *sockfs_xattr_handlers[] = {
 };
 
 static struct dentry *sockfs_mount(struct file_system_type *fs_type,
-			 int flags, const char *dev_name, void *data)
+				   int flags, const char *dev_name,
+				   void *data, size_t data_size)
 {
 	return mount_pseudo_xattr(fs_type, "socket:", &sockfs_ops,
 				  sockfs_xattr_handlers,

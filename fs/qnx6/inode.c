@@ -30,7 +30,8 @@ static const struct super_operations qnx6_sops;
 static void qnx6_put_super(struct super_block *sb);
 static struct inode *qnx6_alloc_inode(struct super_block *sb);
 static void qnx6_destroy_inode(struct inode *inode);
-static int qnx6_remount(struct super_block *sb, int *flags, char *data);
+static int qnx6_remount(struct super_block *sb, int *flags,
+			char *data, size_t data_size);
 static int qnx6_statfs(struct dentry *dentry, struct kstatfs *buf);
 static int qnx6_show_options(struct seq_file *seq, struct dentry *root);
 
@@ -53,7 +54,8 @@ static int qnx6_show_options(struct seq_file *seq, struct dentry *root)
 	return 0;
 }
 
-static int qnx6_remount(struct super_block *sb, int *flags, char *data)
+static int qnx6_remount(struct super_block *sb, int *flags,
+			char *data, size_t data_size)
 {
 	sync_filesystem(sb);
 	*flags |= SB_RDONLY;
@@ -294,7 +296,8 @@ static struct buffer_head *qnx6_check_first_superblock(struct super_block *s,
 static struct inode *qnx6_private_inode(struct super_block *s,
 					struct qnx6_root_node *p);
 
-static int qnx6_fill_super(struct super_block *s, void *data, int silent)
+static int qnx6_fill_super(struct super_block *s, void *data, size_t data_size,
+			   int silent)
 {
 	struct buffer_head *bh1 = NULL, *bh2 = NULL;
 	struct qnx6_super_block *sb1 = NULL, *sb2 = NULL;
@@ -643,9 +646,10 @@ static void destroy_inodecache(void)
 }
 
 static struct dentry *qnx6_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, qnx6_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  qnx6_fill_super);
 }
 
 static struct file_system_type qnx6_fs_type = {

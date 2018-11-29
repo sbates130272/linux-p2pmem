@@ -50,7 +50,7 @@ static const struct dentry_operations ocxlflash_fs_dops = {
  */
 static struct dentry *ocxlflash_fs_mount(struct file_system_type *fs_type,
 					 int flags, const char *dev_name,
-					 void *data)
+					 void *data, size_t data_size)
 {
 	return mount_pseudo(fs_type, "ocxlflash:", NULL, &ocxlflash_fs_dops,
 			    OCXLFLASH_FS_MAGIC);

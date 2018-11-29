@@ -705,7 +705,8 @@ out:
 /*
  * Read the superblock from the OSD and fill in the fields
  */
-static int exofs_fill_super(struct super_block *sb, void *data, int silent)
+static int exofs_fill_super(struct super_block *sb, void *data, size_t data_size,
+			    int silent)
 {
 	struct inode *root;
 	struct exofs_mountopt *opts = data;
@@ -861,7 +862,7 @@ free_sbi:
  */
 static struct dentry *exofs_mount(struct file_system_type *type,
 			  int flags, const char *dev_name,
-			  void *data)
+			  void *data, size_t data_size)
 {
 	struct exofs_mountopt opts;
 	int ret;
@@ -874,7 +875,7 @@ static struct dentry *exofs_mount(struct file_system_type *type,
 
 	if (!opts.dev_name)
 		opts.dev_name = dev_name;
-	return mount_nodev(type, flags, &opts, exofs_fill_super);
+	return mount_nodev(type, flags, &opts, 0, exofs_fill_super);
 }
 
 /*

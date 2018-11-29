@@ -42,7 +42,8 @@ static const struct dentry_operations cxl_fs_dops = {
 };
 
 static struct dentry *cxl_fs_mount(struct file_system_type *fs_type, int flags,
-				const char *dev_name, void *data)
+				   const char *dev_name,
+				   void *data, size_t data_len)
 {
 	return mount_pseudo(fs_type, "cxl:", NULL, &cxl_fs_dops,
 			CXL_PSEUDO_FS_MAGIC);

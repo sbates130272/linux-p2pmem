@@ -266,7 +266,8 @@ static int hypfs_show_options(struct seq_file *s, struct dentry *root)
 	return 0;
 }
 
-static int hypfs_fill_super(struct super_block *sb, void *data, int silent)
+static int hypfs_fill_super(struct super_block *sb,
+			    void *data, size_t data_size, int silent)
 {
 	struct inode *root_inode;
 	struct dentry *root_dentry;
@@ -309,9 +310,9 @@ static int hypfs_fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *hypfs_mount(struct file_system_type *fst, int flags,
-			const char *devname, void *data)
+			const char *devname, void *data, size_t data_size)
 {
-	return mount_single(fst, flags, data, hypfs_fill_super);
+	return mount_single(fst, flags, data, data_size, hypfs_fill_super);
 }
 
 static void hypfs_kill_super(struct super_block *sb)

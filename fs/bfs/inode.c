@@ -317,7 +317,8 @@ void bfs_dump_imap(const char *prefix, struct super_block *s)
 #endif
 }
 
-static int bfs_fill_super(struct super_block *s, void *data, int silent)
+static int bfs_fill_super(struct super_block *s, void *data, size_t data_size,
+			  int silent)
 {
 	struct buffer_head *bh, *sbh;
 	struct bfs_super_block *bfs_sb;
@@ -463,9 +464,10 @@ out:
 }
 
 static struct dentry *bfs_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name, void *data, size_t data_size)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, bfs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, data_size,
+			  bfs_fill_super);
 }
 
 static struct file_system_type bfs_fs_type = {

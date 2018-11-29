@@ -137,7 +137,8 @@ static const struct super_operations aafs_super_ops = {
 	.show_path = aafs_show_path,
 };
 
-static int fill_super(struct super_block *sb, void *data, int silent)
+static int fill_super(struct super_block *sb, void *data, size_t data_size,
+		      int silent)
 {
 	static struct tree_descr files[] = { {""} };
 	int error;
@@ -151,9 +152,10 @@ static int fill_super(struct super_block *sb, void *data, int silent)
 }
 
 static struct dentry *aafs_mount(struct file_system_type *fs_type,
-				 int flags, const char *dev_name, void *data)
+				 int flags, const char *dev_name, void *data,
+				 size_t data_size)
 {
-	return mount_single(fs_type, flags, data, fill_super);
+	return mount_single(fs_type, flags, data, data_size, fill_super);
 }
 
 static struct file_system_type aafs_ops = {

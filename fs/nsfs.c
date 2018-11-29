@@ -263,7 +263,8 @@ static const struct super_operations nsfs_ops = {
 	.show_path = nsfs_show_path,
 };
 static struct dentry *nsfs_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name, void *data)
+				 int flags, const char *dev_name,
+				 void *data, size_t data_size)
 {
 	return mount_pseudo(fs_type, "nsfs:", &nsfs_ops,
 			&ns_dentry_operations, NSFS_MAGIC);
