@@ -86,12 +86,9 @@ copy_literal_run:
 					const unsigned char *ie = ip + t;
 					unsigned char *oe = op + t;
 					do {
-						COPY8(op, ip);
-						op += 8;
-						ip += 8;
-						COPY8(op, ip);
-						op += 8;
-						ip += 8;
+						COPY16(op, ip);
+						op += 16;
+						ip += 16;
 					} while (ip < ie);
 					ip = ie;
 					op = oe;
@@ -187,12 +184,9 @@ copy_literal_run:
 			unsigned char *oe = op + t;
 			if (likely(HAVE_OP(t + 15))) {
 				do {
-					COPY8(op, m_pos);
-					op += 8;
-					m_pos += 8;
-					COPY8(op, m_pos);
-					op += 8;
-					m_pos += 8;
+					COPY16(op, m_pos);
+					op += 16;
+					m_pos += 16;
 				} while (op < oe);
 				op = oe;
 				if (HAVE_IP(6)) {

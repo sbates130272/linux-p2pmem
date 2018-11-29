@@ -60,8 +60,7 @@ next:
 				op += t;
 			} else if (t <= 16) {
 				*op++ = (t - 3);
-				COPY8(op, ii);
-				COPY8(op + 8, ii + 8);
+				COPY16(op, ii);
 				op += t;
 			} else {
 				if (t <= 18) {
@@ -76,8 +75,7 @@ next:
 					*op++ = tt;
 				}
 				do {
-					COPY8(op, ii);
-					COPY8(op + 8, ii + 8);
+					COPY16(op, ii);
 					op += 16;
 					ii += 16;
 					t -= 16;
@@ -255,8 +253,7 @@ int lzo1x_1_compress(const unsigned char *in, size_t in_len,
 			*op++ = tt;
 		}
 		if (t >= 16) do {
-			COPY8(op, ii);
-			COPY8(op + 8, ii + 8);
+			COPY16(op, ii);
 			op += 16;
 			ii += 16;
 			t -= 16;

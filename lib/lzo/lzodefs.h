@@ -23,6 +23,9 @@
 		COPY4(dst, src); COPY4((dst) + 4, (src) + 4)
 #endif
 
+#define COPY16(dst, src) \
+	do { COPY8(dst, src); COPY8((dst) + 8, (src) + 8); } while (0)
+
 #if defined(__BIG_ENDIAN) && defined(__LITTLE_ENDIAN)
 #error "conflicting endian definitions"
 #elif defined(CONFIG_X86_64)
