@@ -107,13 +107,6 @@ static void rsnd_ctu_halt(struct rsnd_mod *mod)
 	rsnd_mod_write(mod, CTU_SWRSR, 0);
 }
 
-int rsnd_ctu_converted_channel(struct rsnd_mod *mod)
-{
-	struct rsnd_ctu *ctu = rsnd_mod_to_ctu(mod);
-
-	return ctu->channels;
-}
-
 static int rsnd_ctu_probe_(struct rsnd_mod *mod,
 			   struct rsnd_dai_stream *io,
 			   struct rsnd_priv *priv)
@@ -233,43 +226,6 @@ static int rsnd_ctu_quit(struct rsnd_mod *mod,
 	return 0;
 }
 
-static int rsnd_ctu_hw_params(struct rsnd_mod *mod,
-			      struct rsnd_dai_stream *io,
-			      struct snd_pcm_substream *substream,
-			      struct snd_pcm_hw_params *fe_params)
-{
-	struct rsnd_ctu *ctu = rsnd_mod_to_ctu(mod);
-	struct snd_soc_pcm_runtime *fe = substream->private_data;
-
-	/*
-	 * CTU assumes that it is used under DPCM if user want to use
-	 * channel transfer. Then, CTU should be FE.
-	 * And then, this function will be called *after* BE settings.
-	 * this means, each BE already has fixuped hw_params.
-	 * see
-	 *	dpcm_fe_dai_hw_params()
-	 *	dpcm_be_dai_hw_params()
-	 */
-	ctu->channels = 0;
-	if (fe->dai_link->dynamic) {
-		struct rsnd_priv *priv = rsnd_mod_to_priv(mod);
-		struct device *dev = rsnd_priv_to_dev(priv);
-		struct snd_soc_dpcm *dpcm;
-		struct snd_pcm_hw_params *be_params;
-		int stream = substream->stream;
-
-		for_each_dpcm_be(fe, stream, dpcm) {
-			be_params = &dpcm->hw_params;
-			if (params_channels(fe_params) != params_channels(be_params))
-				ctu->channels = params_channels(be_params);
-		}
-
-		dev_dbg(dev, "CTU convert channels %d\n", ctu->channels);
-	}
-
-	return 0;
-}
-
 static int rsnd_ctu_pcm_new(struct rsnd_mod *mod,
 			    struct rsnd_dai_stream *io,
 			    struct snd_soc_pcm_runtime *rtd)
@@ -334,13 +290,33 @@ static int rsnd_ctu_pcm_new(struct rsnd_mod *mod,
 	return ret;
 }
 
+static int rsnd_ctu_id(struct rsnd_mod *mod)
+{
+	/*
+	 * ctu00: -> 0, ctu01: -> 0, ctu02: -> 0, ctu03: -> 0
+	 * ctu10: -> 1, ctu11: -> 1, ctu12: -> 1, ctu13: -> 1
+	 */
+	return mod->id / 4;
+}
+
+static int rsnd_ctu_id_sub(struct rsnd_mod *mod)
+{
+	/*
+	 * ctu00: -> 0, ctu01: -> 1, ctu02: -> 2, ctu03: -> 3
+	 * ctu10: -> 0, ctu11: -> 1, ctu12: -> 2, ctu13: -> 3
+	 */
+	return mod->id % 4;
+}
+
 static struct rsnd_mod_ops rsnd_ctu_ops = {
 	.name		= CTU_NAME,
 	.probe		= rsnd_ctu_probe_,
 	.init		= rsnd_ctu_init,
 	.quit		= rsnd_ctu_quit,
-	.hw_params	= rsnd_ctu_hw_params,
 	.pcm_new	= rsnd_ctu_pcm_new,
+	.get_status	= rsnd_mod_get_status,
+	.id		= rsnd_ctu_id,
+	.id_sub		= rsnd_ctu_id_sub,
 };
 
 struct rsnd_mod *rsnd_ctu_mod_get(struct rsnd_priv *priv, int id)
@@ -404,7 +380,7 @@ int rsnd_ctu_probe(struct rsnd_priv *priv)
 		}
 
 		ret = rsnd_mod_init(priv, rsnd_mod_get(ctu), &rsnd_ctu_ops,
-				    clk, rsnd_mod_get_status, RSND_MOD_CTU, i);
+				    clk, RSND_MOD_CTU, i);
 		if (ret) {
 			of_node_put(np);
 			goto rsnd_ctu_probe_done;
