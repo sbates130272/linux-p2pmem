@@ -291,7 +291,17 @@ static int __init do_reset(void)
 	return 1;
 }
 
-static void __init clean_path(char *path, umode_t fmode);
+static void __init clean_path(char *path, umode_t fmode)
+{
+	struct kstat st;
+
+	if (!vfs_lstat(path, &st) && (st.mode ^ fmode) & S_IFMT) {
+		if (S_ISDIR(st.mode))
+			ksys_rmdir(path);
+		else
+			ksys_unlink(path);
+	}
+}
 
 static int __init maybe_link(void)
 {
@@ -303,18 +313,6 @@ static int __init maybe_link(void)
 		}
 	}
 	return 0;
-}
-
-static void __init clean_path(char *path, umode_t fmode)
-{
-	struct kstat st;
-
-	if (!vfs_lstat(path, &st) && (st.mode ^ fmode) & S_IFMT) {
-		if (S_ISDIR(st.mode))
-			ksys_rmdir(path);
-		else
-			ksys_unlink(path);
-	}
 }
 
 static __initdata int wfd;
