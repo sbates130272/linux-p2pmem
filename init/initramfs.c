@@ -291,12 +291,16 @@ static int __init do_reset(void)
 	return 1;
 }
 
+static void __init clean_path(char *path, umode_t fmode);
+
 static int __init maybe_link(void)
 {
 	if (nlink >= 2) {
 		char *old = find_link(major, minor, ino, mode, collected);
-		if (old)
+		if (old) {
+			clean_path(collected, 0);
 			return (ksys_link(old, collected) < 0) ? -1 : 1;
+		}
 	}
 	return 0;
 }
