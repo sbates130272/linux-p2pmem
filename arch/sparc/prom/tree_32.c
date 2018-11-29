@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/ctype.h>
 #include <linux/module.h>
+#include <linux/numa.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -41,11 +42,11 @@ phandle prom_getchild(phandle node)
 {
 	phandle cnode;
 
-	if ((s32)node == -1)
+	if ((s32)node == NUMA_NO_NODE)
 		return 0;
 
 	cnode = __prom_getchild(node);
-	if (cnode == 0 || (s32)cnode == -1)
+	if (cnode == 0 || (s32)cnode == NUMA_NO_NODE)
 		return 0;
 
 	return cnode;
@@ -73,11 +74,11 @@ phandle prom_getsibling(phandle node)
 {
 	phandle sibnode;
 
-	if ((s32)node == -1)
+	if ((s32)node == NUMA_NO_NODE)
 		return 0;
 
 	sibnode = __prom_getsibling(node);
-	if (sibnode == 0 || (s32)sibnode == -1)
+	if (sibnode == 0 || (s32)sibnode == NUMA_NO_NODE)
 		return 0;
 
 	return sibnode;
@@ -220,7 +221,7 @@ static char *__prom_nextprop(phandle node, char * oprop)
  */
 char *prom_nextprop(phandle node, char *oprop, char *buffer)
 {
-	if (node == 0 || (s32)node == -1)
+	if (node == 0 || (s32)node == NUMA_NO_NODE)
 		return "";
 
 	return __prom_nextprop(node, oprop);
@@ -304,7 +305,7 @@ phandle prom_inst2pkg(int inst)
 	node = (*romvec->pv_v2devops.v2_inst2pkg)(inst);
 	restore_current();
 	spin_unlock_irqrestore(&prom_lock, flags);
-	if ((s32)node == -1)
+	if ((s32)node == NUMA_NO_NODE)
 		return 0;
 	return node;
 }
