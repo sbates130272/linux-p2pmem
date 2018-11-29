@@ -395,6 +395,16 @@
 		status = "disabled";
 	};
 
+	rtc: rtc@c2a0000 {
+		compatible = "nvidia,tegra186-rtc", "nvidia,tegra20-rtc";
+		reg = <0 0x0c2a0000 0 0x10000>;
+		interrupt-parent = <&pmc>;
+		interrupts = <73 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bpmp TEGRA186_CLK_CLK_32K>;
+		clock-names = "rtc";
+		status = "disabled";
+	};
+
 	gpio_aon: gpio@c2f0000 {
 		compatible = "nvidia,tegra186-gpio-aon";
 		reg-names = "security", "gpio";
@@ -407,13 +417,16 @@
 		#interrupt-cells = <2>;
 	};
 
-	pmc@c360000 {
+	pmc: pmc@c360000 {
 		compatible = "nvidia,tegra186-pmc";
 		reg = <0 0x0c360000 0 0x10000>,
 		      <0 0x0c370000 0 0x10000>,
 		      <0 0x0c380000 0 0x10000>,
 		      <0 0x0c390000 0 0x10000>;
 		reg-names = "pmc", "wake", "aotag", "scratch";
+
+		#interrupt-cells = <2>;
+		interrupt-controller;
 
 		sdmmc1_3v3: sdmmc1-3v3 {
 			pins = "sdmmc1-hv";
