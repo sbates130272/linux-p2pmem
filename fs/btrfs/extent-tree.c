@@ -4272,8 +4272,9 @@ commit_trans:
 				 * operations. Wait for it to finish so that
 				 * more space is released.
 				 */
-				mutex_lock(&fs_info->cleaner_delayed_iput_mutex);
-				mutex_unlock(&fs_info->cleaner_delayed_iput_mutex);
+				ret = btrfs_wait_on_delayed_iputs(fs_info);
+				if (ret)
+					return ret;
 				goto again;
 			} else {
 				btrfs_end_transaction(trans);
@@ -4832,6 +4833,15 @@ static int may_commit_transaction(struct btrfs_fs_info *fs_info,
 
 	if (!bytes)
 		return 0;
+
+	/*
+	 * If we have pending delayed iputs then we could free up a bunch of
+	 * pinned space, so make sure we run the iputs before we do our pinned
+	 * bytes check below.
+	 */
+	btrfs_run_delayed_iputs(fs_info);
+	wait_event(fs_info->delayed_iputs_wait,
+		   atomic_read(&fs_info->nr_delayed_iputs) == 0);
 
 	trans = btrfs_join_transaction(fs_info->extent_root);
 	if (IS_ERR(trans))
