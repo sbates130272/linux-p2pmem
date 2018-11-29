@@ -1516,6 +1516,14 @@ static void __vunmap(const void *addr, int deallocate_pages)
 	debug_check_no_obj_freed(area->addr, get_vm_area_size(area));
 
 	remove_vm_area(addr);
+
+	/*
+	 * Need to flush the TLB before freeing pages in the case of this flag.
+	 * As long as that's happening, unmap aliases.
+	 */
+	if (area->flags & VM_IMMEDIATE_UNMAP)
+		vm_unmap_aliases();
+
 	if (deallocate_pages) {
 		int i;
 
@@ -1925,8 +1933,9 @@ EXPORT_SYMBOL(vzalloc_node);
 
 void *vmalloc_exec(unsigned long size)
 {
-	return __vmalloc_node(size, 1, GFP_KERNEL, PAGE_KERNEL_EXEC,
-			      NUMA_NO_NODE, __builtin_return_address(0));
+	return __vmalloc_node_range(size, 1, VMALLOC_START, VMALLOC_END,
+			GFP_KERNEL, PAGE_KERNEL_EXEC, VM_IMMEDIATE_UNMAP,
+			NUMA_NO_NODE, __builtin_return_address(0));
 }
 
 #if defined(CONFIG_64BIT) && defined(CONFIG_ZONE_DMA32)
