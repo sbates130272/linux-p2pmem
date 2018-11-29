@@ -1713,7 +1713,7 @@ static unsigned long kvmgt_gfn_to_pfn(unsigned long handle, unsigned long gfn)
 	return pfn;
 }
 
-int kvmgt_dma_map_guest_page(unsigned long handle, unsigned long gfn,
+static int kvmgt_dma_map_guest_page(unsigned long handle, unsigned long gfn,
 		unsigned long size, dma_addr_t *dma_addr)
 {
 	struct kvmgt_guest_info *info;
@@ -1762,7 +1762,7 @@ static void __gvt_dma_release(struct kref *ref)
 	__gvt_cache_remove_entry(entry->vgpu, entry);
 }
 
-void kvmgt_dma_unmap_guest_page(unsigned long handle, dma_addr_t dma_addr)
+static void kvmgt_dma_unmap_guest_page(unsigned long handle, dma_addr_t dma_addr)
 {
 	struct kvmgt_guest_info *info;
 	struct gvt_dma *entry;
@@ -1833,6 +1833,8 @@ static bool kvmgt_is_valid_gfn(unsigned long handle, unsigned long gfn)
 {
 	struct kvmgt_guest_info *info;
 	struct kvm *kvm;
+	int idx;
+	bool ret;
 
 	if (!handle_valid(handle))
 		return false;
@@ -1840,8 +1842,11 @@ static bool kvmgt_is_valid_gfn(unsigned long handle, unsigned long gfn)
 	info = (struct kvmgt_guest_info *)handle;
 	kvm = info->kvm;
 
-	return kvm_is_visible_gfn(kvm, gfn);
+	idx = srcu_read_lock(&kvm->srcu);
+	ret = kvm_is_visible_gfn(kvm, gfn);
+	srcu_read_unlock(&kvm->srcu, idx);
 
+	return ret;
 }
 
 struct intel_gvt_mpt kvmgt_mpt = {
