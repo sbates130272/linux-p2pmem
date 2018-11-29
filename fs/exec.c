@@ -1088,7 +1088,7 @@ static int de_thread(struct task_struct *tsk)
 		__set_current_state(TASK_KILLABLE);
 		spin_unlock_irq(lock);
 		freezable_schedule();
-		if (unlikely(__fatal_signal_pending(tsk)))
+		if (__fatal_signal_pending(tsk))
 			goto killed;
 		spin_lock_irq(lock);
 	}
@@ -1116,7 +1116,7 @@ static int de_thread(struct task_struct *tsk)
 			write_unlock_irq(&tasklist_lock);
 			cgroup_threadgroup_change_end(tsk);
 			freezable_schedule();
-			if (unlikely(__fatal_signal_pending(tsk)))
+			if (__fatal_signal_pending(tsk))
 				goto killed;
 		}
 
