@@ -1013,15 +1013,21 @@ out_add_root:
 		btrfs_abort_transaction(trans, ret);
 		goto out_free_path;
 	}
-	spin_lock(&fs_info->qgroup_lock);
-	fs_info->quota_root = quota_root;
-	set_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags);
-	spin_unlock(&fs_info->qgroup_lock);
 
 	ret = btrfs_commit_transaction(trans);
 	trans = NULL;
 	if (ret)
 		goto out_free_path;
+
+	/*
+	 * Set quota enabled flag after committing the transaction, to avoid
+	 * deadlocks on fs_info->qgroup_ioctl_lock with concurrent snapshot
+	 * creation.
+	 */
+	spin_lock(&fs_info->qgroup_lock);
+	fs_info->quota_root = quota_root;
+	set_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags);
+	spin_unlock(&fs_info->qgroup_lock);
 
 	ret = qgroup_rescan_init(fs_info, 0, 1);
 	if (!ret) {
@@ -3104,9 +3110,6 @@ static int qgroup_rescan_leaf(struct btrfs_trans_handle *trans,
 		mutex_unlock(&fs_info->qgroup_rescan_lock);
 		goto out;
 	}
-	extent_buffer_get(scratch_leaf);
-	btrfs_tree_read_lock(scratch_leaf);
-	btrfs_set_lock_blocking_rw(scratch_leaf, BTRFS_READ_LOCK);
 	slot = path->slots[0];
 	btrfs_release_path(path);
 	mutex_unlock(&fs_info->qgroup_rescan_lock);
@@ -3132,10 +3135,8 @@ static int qgroup_rescan_leaf(struct btrfs_trans_handle *trans,
 			goto out;
 	}
 out:
-	if (scratch_leaf) {
-		btrfs_tree_read_unlock_blocking(scratch_leaf);
+	if (scratch_leaf)
 		free_extent_buffer(scratch_leaf);
-	}
 
 	if (done && !ret) {
 		ret = 1;
