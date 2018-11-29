@@ -290,6 +290,11 @@ static int btrfs_ioctl_setflags(struct file *file, void __user *arg)
 	} else if (fsflags & FS_COMPR_FL) {
 		const char *comp;
 
+		if (IS_SWAPFILE(inode)) {
+			ret = -ETXTBSY;
+			goto out_unlock;
+		}
+
 		binode->flags |= BTRFS_INODE_COMPRESS;
 		binode->flags &= ~BTRFS_INODE_NOCOMPRESS;
 
@@ -754,6 +759,12 @@ static int create_snapshot(struct btrfs_root *root, struct inode *dir,
 	if (!test_bit(BTRFS_ROOT_REF_COWS, &root->state))
 		return -EINVAL;
 
+	if (atomic_read(&root->nr_swapfiles)) {
+		btrfs_warn(fs_info,
+			   "cannot snapshot subvolume with active swapfile");
+		return -ETXTBSY;
+	}
+
 	pending_snapshot = kzalloc(sizeof(*pending_snapshot), GFP_KERNEL);
 	if (!pending_snapshot)
 		return -ENOMEM;
@@ -777,7 +788,7 @@ static int create_snapshot(struct btrfs_root *root, struct inode *dir,
 	wait_event(root->subv_writers->wait,
 		   percpu_counter_sum(&root->subv_writers->counter) == 0);
 
-	ret = btrfs_start_delalloc_inodes(root);
+	ret = btrfs_start_delalloc_snapshot(root);
 	if (ret)
 		goto dec_and_free;
 
@@ -1505,9 +1516,13 @@ int btrfs_defrag_file(struct inode *inode, struct file *file,
 		}
 
 		inode_lock(inode);
-		if (do_compress)
-			BTRFS_I(inode)->defrag_compress = compress_type;
-		ret = cluster_pages_for_defrag(inode, pages, i, cluster);
+		if (IS_SWAPFILE(inode)) {
+			ret = -ETXTBSY;
+		} else {
+			if (do_compress)
+				BTRFS_I(inode)->defrag_compress = compress_type;
+			ret = cluster_pages_for_defrag(inode, pages, i, cluster);
+		}
 		if (ret < 0) {
 			inode_unlock(inode);
 			goto out_ra;
@@ -3135,7 +3150,7 @@ static long btrfs_ioctl_fs_info(struct btrfs_fs_info *fs_info,
 	}
 	rcu_read_unlock();
 
-	memcpy(&fi_args->fsid, fs_info->fsid, sizeof(fi_args->fsid));
+	memcpy(&fi_args->fsid, fs_devices->fsid, sizeof(fi_args->fsid));
 	fi_args->nodesize = fs_info->nodesize;
 	fi_args->sectorsize = fs_info->sectorsize;
 	fi_args->clone_alignment = fs_info->sectorsize;
@@ -3577,6 +3592,11 @@ static int btrfs_extent_same(struct inode *src, u64 loff, u64 olen,
 		goto out_unlock;
 	}
 
+	if (IS_SWAPFILE(src) || IS_SWAPFILE(dst)) {
+		ret = -ETXTBSY;
+		goto out_unlock;
+	}
+
 	tail_len = olen % BTRFS_MAX_DEDUPE_LEN;
 	chunk_count = div_u64(olen, BTRFS_MAX_DEDUPE_LEN);
 	if (chunk_count == 0)
@@ -3629,26 +3649,6 @@ out_unlock:
 		btrfs_double_inode_unlock(src, dst);
 
 	return ret;
-}
-
-int btrfs_dedupe_file_range(struct file *src_file, loff_t src_loff,
-			    struct file *dst_file, loff_t dst_loff,
-			    u64 olen)
-{
-	struct inode *src = file_inode(src_file);
-	struct inode *dst = file_inode(dst_file);
-	u64 bs = BTRFS_I(src)->root->fs_info->sb->s_blocksize;
-
-	if (WARN_ON_ONCE(bs < PAGE_SIZE)) {
-		/*
-		 * Btrfs does not support blocksize < page_size. As a
-		 * result, btrfs_cmp_data() won't correctly handle
-		 * this situation without an update.
-		 */
-		return -EINVAL;
-	}
-
-	return btrfs_extent_same(src, src_loff, olen, dst, dst_loff);
 }
 
 static int clone_finish_inode_update(struct btrfs_trans_handle *trans,
@@ -4273,6 +4273,11 @@ static noinline int btrfs_clone_files(struct file *file, struct file *file_src,
 		goto out_unlock;
 	}
 
+	if (IS_SWAPFILE(src) || IS_SWAPFILE(inode)) {
+		ret = -ETXTBSY;
+		goto out_unlock;
+	}
+
 	/* determine range to clone */
 	ret = -EINVAL;
 	if (off + len > src->i_size || off + len < off)
@@ -4360,10 +4365,34 @@ out_unlock:
 	return ret;
 }
 
-int btrfs_clone_file_range(struct file *src_file, loff_t off,
-		struct file *dst_file, loff_t destoff, u64 len)
+loff_t btrfs_remap_file_range(struct file *src_file, loff_t off,
+		struct file *dst_file, loff_t destoff, loff_t len,
+		unsigned int remap_flags)
 {
-	return btrfs_clone_files(dst_file, src_file, off, len, destoff);
+	int ret;
+
+	if (remap_flags & ~(REMAP_FILE_DEDUP | REMAP_FILE_ADVISORY))
+		return -EINVAL;
+
+	if (remap_flags & REMAP_FILE_DEDUP) {
+		struct inode *src = file_inode(src_file);
+		struct inode *dst = file_inode(dst_file);
+		u64 bs = BTRFS_I(src)->root->fs_info->sb->s_blocksize;
+
+		if (WARN_ON_ONCE(bs < PAGE_SIZE)) {
+			/*
+			 * Btrfs does not support blocksize < page_size. As a
+			 * result, btrfs_cmp_data() won't correctly handle
+			 * this situation without an update.
+			 */
+			return -EINVAL;
+		}
+
+		ret = btrfs_extent_same(src, off, len, dst, destoff);
+	} else {
+		ret = btrfs_clone_files(dst_file, src_file, off, len, destoff);
+	}
+	return ret < 0 ? ret : len;
 }
 
 static long btrfs_ioctl_default_subvol(struct file *file, void __user *argp)
