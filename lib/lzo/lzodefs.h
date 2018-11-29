@@ -33,8 +33,13 @@
 #define LZO_USE_CTZ32	1
 #elif defined(CONFIG_X86) || defined(CONFIG_PPC)
 #define LZO_USE_CTZ32	1
-#elif defined(CONFIG_ARM) && (__LINUX_ARM_ARCH__ >= 5)
+#elif defined(CONFIG_ARM)
+#if (__LINUX_ARM_ARCH__ >= 5)
 #define LZO_USE_CTZ32	1
+#endif
+#if (__LINUX_ARM_ARCH__ >= 6) && defined(CONFIG_THUMB2_KERNEL)
+#define LZO_USE_CTZ64	1
+#endif
 #endif
 
 #define M1_MAX_OFFSET	0x0400
