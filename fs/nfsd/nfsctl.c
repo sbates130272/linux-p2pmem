@@ -1126,7 +1126,13 @@ static ssize_t write_v4_end_grace(struct file *file, char *buf, size_t size)
 		case 'Y':
 		case 'y':
 		case '1':
+			mutex_lock(&nfsd_mutex);
+			if (nn->nfsd_serv) {
+				mutex_unlock(&nfsd_mutex);
+				return -EBUSY;
+			}
 			nfsd4_end_grace(nn);
+			mutex_unlock(&nfsd_mutex);
 			break;
 		default:
 			return -EINVAL;
