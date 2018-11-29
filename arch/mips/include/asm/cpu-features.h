@@ -115,10 +115,15 @@
 #endif
 /* Don't override `cpu_has_fpu' to 1 or the "nofpu" option won't work.  */
 #ifndef cpu_has_fpu
-#define cpu_has_fpu		(current_cpu_data.options & MIPS_CPU_FPU)
-#define raw_cpu_has_fpu		(raw_current_cpu_data.options & MIPS_CPU_FPU)
+# ifdef CONFIG_MIPS_FP_SUPPORT
+#  define cpu_has_fpu		(current_cpu_data.options & MIPS_CPU_FPU)
+#  define raw_cpu_has_fpu	(raw_current_cpu_data.options & MIPS_CPU_FPU)
+# else
+#  define cpu_has_fpu		0
+#  define raw_cpu_has_fpu	0
+# endif
 #else
-#define raw_cpu_has_fpu		cpu_has_fpu
+# define raw_cpu_has_fpu	cpu_has_fpu
 #endif
 #ifndef cpu_has_32fpr
 #define cpu_has_32fpr		__isa_ge_or_opt(1, MIPS_CPU_32FPR)
@@ -195,7 +200,9 @@
 #endif
 
 #ifndef cpu_has_mmips
-# ifdef CONFIG_SYS_SUPPORTS_MICROMIPS
+# if defined(__mips_micromips)
+#  define cpu_has_mmips		1
+# elif defined(CONFIG_SYS_SUPPORTS_MICROMIPS)
 #  define cpu_has_mmips		__opt(MIPS_CPU_MICROMIPS)
 # else
 #  define cpu_has_mmips		0
@@ -244,16 +251,6 @@
 #else
 #define cpu_icache_snoops_remote_store	1
 #endif
-#endif
-
-/* __builtin_constant_p(cpu_has_mips_r) && cpu_has_mips_r */
-#if !((defined(cpu_has_mips32r1) && cpu_has_mips32r1) || \
-	  (defined(cpu_has_mips32r2) && cpu_has_mips32r2) || \
-	  (defined(cpu_has_mips32r6) && cpu_has_mips32r6) || \
-	  (defined(cpu_has_mips64r1) && cpu_has_mips64r1) || \
-	  (defined(cpu_has_mips64r2) && cpu_has_mips64r2) || \
-	  (defined(cpu_has_mips64r6) && cpu_has_mips64r6))
-#define CPU_NO_EFFICIENT_FFS 1
 #endif
 
 #ifndef cpu_has_mips_1

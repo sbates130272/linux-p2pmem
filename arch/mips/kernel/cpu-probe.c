@@ -36,6 +36,8 @@
 unsigned int elf_hwcap __read_mostly;
 EXPORT_SYMBOL_GPL(elf_hwcap);
 
+#ifdef CONFIG_MIPS_FP_SUPPORT
+
 /*
  * Get the FPU Implementation/Revision.
  */
@@ -56,19 +58,6 @@ static inline unsigned long cpu_get_fpu_id(void)
 static inline int __cpu_has_fpu(void)
 {
 	return (cpu_get_fpu_id() & FPIR_IMP_MASK) != FPIR_IMP_NONE;
-}
-
-static inline unsigned long cpu_get_msa_id(void)
-{
-	unsigned long status, msa_id;
-
-	status = read_c0_status();
-	__enable_fpu(FPU_64BIT);
-	enable_msa();
-	msa_id = read_msa_ir();
-	disable_msa();
-	write_c0_status(status);
-	return msa_id;
 }
 
 /*
@@ -325,6 +314,45 @@ static int __init fpu_disable(char *s)
 }
 
 __setup("nofpu", fpu_disable);
+
+#else /* !CONFIG_MIPS_FP_SUPPORT */
+
+#define mips_fpu_disabled 1
+
+static inline unsigned long cpu_get_fpu_id(void)
+{
+	return FPIR_IMP_NONE;
+}
+
+static inline int __cpu_has_fpu(void)
+{
+	return 0;
+}
+
+static void cpu_set_fpu_opts(struct cpuinfo_mips *c)
+{
+	/* no-op */
+}
+
+static void cpu_set_nofpu_opts(struct cpuinfo_mips *c)
+{
+	/* no-op */
+}
+
+#endif /* CONFIG_MIPS_FP_SUPPORT */
+
+static inline unsigned long cpu_get_msa_id(void)
+{
+	unsigned long status, msa_id;
+
+	status = read_c0_status();
+	__enable_fpu(FPU_64BIT);
+	enable_msa();
+	msa_id = read_msa_ir();
+	disable_msa();
+	write_c0_status(status);
+	return msa_id;
+}
 
 static int mips_dsp_disabled;
 
@@ -1843,7 +1871,8 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 	switch (c->processor_id & PRID_IMP_MASK) {
 	case PRID_IMP_LOONGSON_64:  /* Loongson-2/3 */
 		switch (c->processor_id & PRID_REV_MASK) {
-		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R2_0:
+		case PRID_REV_LOONGSON3A_R2_1:
 			c->cputype = CPU_LOONGSON3;
 			__cpu_name[cpu] = "ICT Loongson-3";
 			set_elf_platform(cpu, "loongson3a");
