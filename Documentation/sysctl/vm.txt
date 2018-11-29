@@ -31,6 +31,7 @@ Currently, these files are in /proc/sys/vm:
 - dirty_writeback_centisecs
 - drop_caches
 - extfrag_threshold
+- fragment_stall_order
 - hugetlb_shm_group
 - laptop_mode
 - legacy_va_layout
@@ -272,6 +273,28 @@ storage more effectively. Note this also comes with a risk of pre-mature
 OOM killer because some writers (e.g. direct block device writes) can
 only use the low memory and they can fill it up with dirty data without
 any throttling.
+
+==============================================================
+
+fragment_stall_order
+
+External fragmentation control is managed on a pageblock level where the
+page allocator tries to avoid mixing pages of different mobility within page
+blocks (e.g. order 9 on 64-bit x86). If external fragmentation is perfectly
+controlled then a THP allocation will often succeed up to the number of
+movable pageblocks in the system as reported by /proc/pagetypeinfo.
+
+When memory is low, the system may have to mix pageblocks and will wake
+kswapd to try control future fragmentation. fragment_stall_order controls if
+the allocating task will stall if possible until kswapd makes some progress
+in preference to fragmenting the system. This incurs a small stall penalty
+in exchange for future success at allocating huge pages. If the stalls
+are undesirable and high-order allocations are irrelevant then this can
+be disabled by writing 0 to the tunable. Writing the pageblock order will
+strongly (but not perfectly) control external fragmentation.
+
+The default (4) will stall for fragmenting allocations less than or equal
+to the PAGE_ALLOC_COSTLY_ORDER (defined as order-3 at the time of writing).
 
 ==============================================================
 

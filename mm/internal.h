@@ -500,6 +500,7 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 #define ALLOC_NOFRAGMENT	  0x0
 #endif
 #define ALLOC_KSWAPD		0x200 /* allow waking of kswapd */
+#define ALLOC_FRAGMENT_STALL	0x400 /* stall if fragmenting heavily */
 
 enum ttu_flags;
 struct tlbflush_unmap_batch;

@@ -1211,6 +1211,7 @@ const char * const vmstat_text[] = {
 	"drop_pagecache",
 	"drop_slab",
 	"oom_kill",
+	"fragment_stall",
 
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_pte_updates",

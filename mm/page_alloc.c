@@ -264,6 +264,7 @@ int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 int watermark_boost_factor __read_mostly = 15000;
 int watermark_scale_factor = 10;
+int fragment_stall_order __read_mostly = (PAGE_ALLOC_COSTLY_ORDER + 1);
 
 static unsigned long nr_kernel_pages __meminitdata;
 static unsigned long nr_all_pages __meminitdata;
@@ -2255,9 +2256,10 @@ static bool can_steal_fallback(unsigned int order, int start_mt)
 	return false;
 }
 
-static inline void boost_watermark(struct zone *zone)
+static inline void __boost_watermark(struct zone *zone, bool fast_boost)
 {
 	unsigned long max_boost;
+	unsigned long nr;
 
 	if (!watermark_boost_factor)
 		return;
@@ -2265,9 +2267,45 @@ static inline void boost_watermark(struct zone *zone)
 	max_boost = mult_frac(zone->_watermark[WMARK_HIGH],
 			watermark_boost_factor, 10000);
 	max_boost = max(pageblock_nr_pages, max_boost);
+	nr = pageblock_nr_pages;
 
-	zone->watermark_boost = min(zone->watermark_boost + pageblock_nr_pages,
-		max_boost);
+	/* Scale relative to the MIGRATE_PCPTYPES similar to min_free_kbytes */
+	if (fast_boost)
+		nr += pageblock_nr_pages * (MIGRATE_PCPTYPES << 1);
+
+	zone->watermark_boost = min(zone->watermark_boost + nr, max_boost);
+}
+
+static inline void boost_watermark(struct zone *zone, bool fast_boost)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&zone->lock, flags);
+	__boost_watermark(zone, fast_boost);
+	spin_unlock_irqrestore(&zone->lock, flags);
+}
+
+static void stall_fragmentation(struct zone *pzone)
+{
+	DEFINE_WAIT(wait);
+	long remaining = 0;
+	long timeout = HZ/50;
+	pg_data_t *pgdat = pzone->zone_pgdat;
+
+	if (current->flags & PF_MEMALLOC)
+		return;
+
+	boost_watermark(pzone, true);
+	prepare_to_wait(&pgdat->pfmemalloc_wait, &wait, TASK_INTERRUPTIBLE);
+	if (waitqueue_active(&pgdat->kswapd_wait))
+		wake_up_interruptible(&pgdat->kswapd_wait);
+	remaining = schedule_timeout(timeout);
+	finish_wait(&pgdat->pfmemalloc_wait, &wait);
+	if (remaining != timeout) {
+		trace_mm_fragmentation_stall(pgdat->node_id,
+			jiffies_to_usecs(timeout - remaining));
+		count_vm_event(FRAGMENTSTALL);
+	}
 }
 
 /*
@@ -2278,7 +2316,7 @@ static inline void boost_watermark(struct zone *zone)
  * of pages are free or compatible, we can change migratetype of the pageblock
  * itself, so pages freed in the future will be put on the correct free list.
  */
-static void steal_suitable_fallback(struct zone *zone, struct page *page,
+static bool steal_suitable_fallback(struct zone *zone, struct page *page,
 		unsigned int alloc_flags, int start_type, bool whole_block)
 {
 	unsigned int current_order = page_order(page);
@@ -2306,9 +2344,14 @@ static void steal_suitable_fallback(struct zone *zone, struct page *page,
 	 * likelihood of future fallbacks. Wake kswapd now as the node
 	 * may be balanced overall and kswapd will not wake naturally.
 	 */
-	boost_watermark(zone);
+	__boost_watermark(zone, false);
 	if (alloc_flags & ALLOC_KSWAPD)
 		wakeup_kswapd(zone, 0, 0, zone_idx(zone));
+
+	if ((alloc_flags & ALLOC_FRAGMENT_STALL) &&
+	    current_order < fragment_stall_order) {
+		return false;
+	}
 
 	/* We are not allowed to try stealing from the whole block */
 	if (!whole_block)
@@ -2350,11 +2393,12 @@ static void steal_suitable_fallback(struct zone *zone, struct page *page,
 			page_group_by_mobility_disabled)
 		set_pageblock_migratetype(page, start_type);
 
-	return;
+	return true;
 
 single_page:
 	area = &zone->free_area[current_order];
 	list_move(&page->lru, &area->free_list[start_type]);
+	return true;
 }
 
 /*
@@ -2593,14 +2637,15 @@ do_steal:
 	page = list_first_entry(&area->free_list[fallback_mt],
 							struct page, lru);
 
-	steal_suitable_fallback(zone, page, alloc_flags, start_migratetype,
-								can_steal);
+	if (!steal_suitable_fallback(zone, page, alloc_flags,
+					start_migratetype, can_steal)) {
+		return false;
+	}
 
 	trace_mm_page_alloc_extfrag(page, order, current_order,
 		start_migratetype, fallback_mt);
 
 	return true;
-
 }
 
 /*
@@ -3462,9 +3507,11 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 						const struct alloc_context *ac)
 {
 	struct zoneref *z;
+	struct zone *pzone;
 	struct zone *zone;
 	struct pglist_data *last_pgdat_dirty_limit = NULL;
 	bool no_fallback;
+	bool fragment_stall;
 
 retry:
 	/*
@@ -3472,7 +3519,10 @@ retry:
 	 * See also __cpuset_node_allowed() comment in kernel/cpuset.c.
 	 */
 	no_fallback = alloc_flags & ALLOC_NOFRAGMENT;
+	fragment_stall = alloc_flags & ALLOC_FRAGMENT_STALL;
 	z = ac->preferred_zoneref;
+	pzone = z->zone;
+
 	for_next_zone_zonelist_nodemask(zone, z, ac->zonelist, ac->high_zoneidx,
 								ac->nodemask) {
 		struct page *page;
@@ -3511,7 +3561,7 @@ retry:
 			}
 		}
 
-		if (no_fallback && nr_online_nodes > 1 &&
+		if ((no_fallback || fragment_stall) && nr_online_nodes > 1 &&
 		    zone != ac->preferred_zoneref->zone) {
 			int local_nid;
 
@@ -3520,9 +3570,12 @@ retry:
 			 * fragmenting fallbacks. Locality is more important
 			 * than fragmentation avoidance.
 			 */
-			local_nid = zone_to_nid(ac->preferred_zoneref->zone);
+			local_nid = zone_to_nid(pzone);
 			if (zone_to_nid(zone) != local_nid) {
+				if (fragment_stall)
+					stall_fragmentation(pzone);
 				alloc_flags &= ~ALLOC_NOFRAGMENT;
+				alloc_flags &= ~ALLOC_FRAGMENT_STALL;
 				goto retry;
 			}
 		}
@@ -3598,8 +3651,12 @@ try_this_zone:
 	 * It's possible on a UMA machine to get through all zones that are
 	 * fragmented. If avoiding fragmentation, reset and try again.
 	 */
-	if (no_fallback) {
+	if (no_fallback || fragment_stall) {
+		if (fragment_stall)
+			stall_fragmentation(pzone);
+
 		alloc_flags &= ~ALLOC_NOFRAGMENT;
+		alloc_flags &= ~ALLOC_FRAGMENT_STALL;
 		goto retry;
 	}
 
@@ -4314,6 +4371,17 @@ retry_cpuset:
 	alloc_flags = gfp_to_alloc_flags(gfp_mask);
 
 	/*
+	 * Consider stalling on heavy for movable allocations in preference to
+	 * fragmenting unmovable/reclaimable pageblocks. A caller that is
+	 * willing to direct reclaim is already willing to stall.
+	 * Unmovable/reclaimable allocations do not stall as kswapd is not
+	 * guaranteed to free pages in their respective pageblocks.
+	 */
+	if ((gfp_mask & (__GFP_MOVABLE|__GFP_DIRECT_RECLAIM)) ==
+			(__GFP_MOVABLE|__GFP_DIRECT_RECLAIM))
+		alloc_flags |= ALLOC_FRAGMENT_STALL;
+
+	/*
 	 * We need to recalculate the starting point for the zonelist iterator
 	 * because we might have used different nodemask in the fast path, or
 	 * there was a cpuset modification and we are retrying - otherwise we
@@ -4334,6 +4402,7 @@ retry_cpuset:
 	page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
 	if (page)
 		goto got_pg;
+	alloc_flags &= ~ALLOC_FRAGMENT_STALL;
 
 	/*
 	 * For costly allocations, try direct compaction first, as it's likely
@@ -7694,6 +7763,18 @@ int min_free_kbytes_sysctl_handler(struct ctl_table *table, int write,
 }
 
 int watermark_boost_factor_sysctl_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *length, loff_t *ppos)
+{
+	int rc;
+
+	rc = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
+int fragment_stall_order_sysctl_handler(struct ctl_table *table, int write,
 	void __user *buffer, size_t *length, loff_t *ppos)
 {
 	int rc;

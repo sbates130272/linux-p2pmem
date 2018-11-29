@@ -2299,6 +2299,7 @@ extern void zone_pcp_reset(struct zone *zone);
 extern int min_free_kbytes;
 extern int watermark_boost_factor;
 extern int watermark_scale_factor;
+extern int fragment_stall_order;
 
 /* nommu.c */
 extern atomic_long_t mmap_pages_allocated;

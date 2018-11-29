@@ -126,6 +126,7 @@ static int zero;
 static int __maybe_unused one = 1;
 static int __maybe_unused two = 2;
 static int __maybe_unused four = 4;
+static int __maybe_unused max_order = MAX_ORDER;
 static unsigned long one_ul = 1;
 static int one_hundred = 100;
 static int one_thousand = 1000;
@@ -1478,6 +1479,15 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= watermark_scale_factor_sysctl_handler,
 		.extra1		= &one,
 		.extra2		= &one_thousand,
+	},
+	{
+		.procname	= "fragment_stall_order",
+		.data		= &fragment_stall_order,
+		.maxlen		= sizeof(fragment_stall_order),
+		.mode		= 0644,
+		.proc_handler	= fragment_stall_order_sysctl_handler,
+		.extra1		= &zero,
+		.extra2		= &max_order,
 	},
 	{
 		.procname	= "percpu_pagelist_fraction",

@@ -3704,7 +3704,8 @@ restart:
 		 * able to safely make forward progress. Wake them
 		 */
 		if (waitqueue_active(&pgdat->pfmemalloc_wait) &&
-				allow_direct_reclaim(pgdat))
+				((!raise_priority && nr_boost_reclaim) ||
+				 allow_direct_reclaim(pgdat)))
 			wake_up_all(&pgdat->pfmemalloc_wait);
 
 		/* Check if kswapd should be suspending */
