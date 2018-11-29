@@ -674,6 +674,14 @@ next_mr:
 			goto srcu_unlock;
 		}
 
+		if (!mr->umem->is_odp) {
+			mlx5_ib_dbg(dev, "skipping non ODP MR (lkey=0x%06x) in page fault handler.\n",
+				    key);
+			if (bytes_mapped)
+				*bytes_mapped += bcnt;
+			goto srcu_unlock;
+		}
+
 		ret = pagefault_mr(dev, mr, io_virt, bcnt, bytes_mapped);
 		if (ret < 0)
 			goto srcu_unlock;
@@ -735,6 +743,7 @@ next_mr:
 			head = frame;
 
 			bcnt -= frame->bcnt;
+			offset = 0;
 		}
 		break;
 
