@@ -1355,7 +1355,7 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 	local_irq_restore(flags);
 }
 
-static void __init __free_pages_boot_core(struct page *page, unsigned int order)
+void __free_pages_core(struct page *page, unsigned int order)
 {
 	unsigned int nr_pages = 1 << order;
 	struct page *p = page;
@@ -1420,7 +1420,7 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
 {
 	if (early_page_uninitialised(pfn))
 		return;
-	return __free_pages_boot_core(page, order);
+	return __free_pages_core(page, order);
 }
 
 /*
@@ -1570,10 +1570,10 @@ static void __init deferred_free_pages(unsigned long start_pfn,
 		struct page *page = pfn_to_page(pfn);
 
 		if (count == pageblock_nr_pages) {
-			__free_pages_boot_core(page, pageblock_order);
+			__free_pages_core(page, pageblock_order);
 		} else {
 			while (count--)
-				__free_pages_boot_core(page++, 0);
+				__free_pages_core(page++, 0);
 		}
 
 		touch_nmi_watchdog();
