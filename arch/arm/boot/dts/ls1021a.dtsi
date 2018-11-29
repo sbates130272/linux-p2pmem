@@ -324,6 +324,8 @@
 						trip = <&cpu_alert>;
 						cooling-device =
 							<&cpu0 THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+							<&cpu1 THERMAL_NO_LIMIT
 							THERMAL_NO_LIMIT>;
 					};
 				};
@@ -716,7 +718,7 @@
 		};
 
 		pcie@3400000 {
-			compatible = "fsl,ls1021a-pcie", "snps,dw-pcie";
+			compatible = "fsl,ls1021a-pcie";
 			reg = <0x00 0x03400000 0x0 0x00010000   /* controller registers */
 			       0x40 0x00000000 0x0 0x00002000>; /* configuration space */
 			reg-names = "regs", "config";
@@ -736,10 +738,11 @@
 					<0000 0 0 2 &gic GIC_SPI 188 IRQ_TYPE_LEVEL_HIGH>,
 					<0000 0 0 3 &gic GIC_SPI 190 IRQ_TYPE_LEVEL_HIGH>,
 					<0000 0 0 4 &gic GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH>;
+			status = "disabled";
 		};
 
 		pcie@3500000 {
-			compatible = "fsl,ls1021a-pcie", "snps,dw-pcie";
+			compatible = "fsl,ls1021a-pcie";
 			reg = <0x00 0x03500000 0x0 0x00010000   /* controller registers */
 			       0x48 0x00000000 0x0 0x00002000>; /* configuration space */
 			reg-names = "regs", "config";
@@ -759,6 +762,7 @@
 					<0000 0 0 2 &gic GIC_SPI 189 IRQ_TYPE_LEVEL_HIGH>,
 					<0000 0 0 3 &gic GIC_SPI 191 IRQ_TYPE_LEVEL_HIGH>,
 					<0000 0 0 4 &gic GIC_SPI 193 IRQ_TYPE_LEVEL_HIGH>;
+			status = "disabled";
 		};
 
 		can0: can@2a70000 {
