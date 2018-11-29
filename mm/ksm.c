@@ -1335,6 +1335,23 @@ static struct page *try_to_merge_two_pages(struct rmap_item *rmap_item,
 {
 	int err;
 
+	if (IS_ENABLED(CONFIG_COMPACTION)) {
+		unsigned long pfn;
+
+		/*
+		 * Find neighbour of @page containing 1-order pair in buddy
+		 * allocator and check whether its count is 0. If so, we
+		 * consider the neighbour as a free page (this is more
+		 * probable than it's freezed via page_ref_freeze()), and
+		 * we try to use @tree_page as ksm page and to free @page.
+		 */
+		pfn = page_to_pfn(page) ^ 1;
+		if (pfn_valid(pfn) && page_count(pfn_to_page(pfn)) == 0) {
+			swap(rmap_item, tree_rmap_item);
+			swap(page, tree_page);
+		}
+	}
+
 	err = try_to_merge_with_ksm_page(rmap_item, page, NULL);
 	if (!err) {
 		err = try_to_merge_with_ksm_page(tree_rmap_item,
