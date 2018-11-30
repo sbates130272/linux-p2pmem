@@ -39,6 +39,8 @@
 #define DSI_PIXEL_PLL_CLK		1
 #define NUM_PROVIDED_CLKS		2
 
+#define VCO_REF_CLK_RATE		19200000
+
 struct dsi_pll_regs {
 	u32 pll_prop_gain_rate;
 	u32 pll_lockdet_rate;
@@ -316,7 +318,7 @@ static int dsi_pll_10nm_vco_set_rate(struct clk_hw *hw, unsigned long rate,
 	    parent_rate);
 
 	pll_10nm->vco_current_rate = rate;
-	pll_10nm->vco_ref_clk_rate = parent_rate;
+	pll_10nm->vco_ref_clk_rate = VCO_REF_CLK_RATE;
 
 	dsi_pll_setup_config(pll_10nm);
 
@@ -760,7 +762,7 @@ static int pll_10nm_register(struct dsi_pll_10nm *pll_10nm)
 	ret = of_clk_add_hw_provider(dev->of_node, of_clk_hw_onecell_get,
 				     pll_10nm->hw_data);
 	if (ret) {
-		dev_err(dev, "failed to register clk provider: %d\n", ret);
+		DRM_DEV_ERROR(dev, "failed to register clk provider: %d\n", ret);
 		return ret;
 	}
 
@@ -788,13 +790,13 @@ struct msm_dsi_pll *msm_dsi_pll_10nm_init(struct platform_device *pdev, int id)
 
 	pll_10nm->phy_cmn_mmio = msm_ioremap(pdev, "dsi_phy", "DSI_PHY");
 	if (IS_ERR_OR_NULL(pll_10nm->phy_cmn_mmio)) {
-		dev_err(&pdev->dev, "failed to map CMN PHY base\n");
+		DRM_DEV_ERROR(&pdev->dev, "failed to map CMN PHY base\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
 	pll_10nm->mmio = msm_ioremap(pdev, "dsi_pll", "DSI_PLL");
 	if (IS_ERR_OR_NULL(pll_10nm->mmio)) {
-		dev_err(&pdev->dev, "failed to map PLL base\n");
+		DRM_DEV_ERROR(&pdev->dev, "failed to map PLL base\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -813,7 +815,7 @@ struct msm_dsi_pll *msm_dsi_pll_10nm_init(struct platform_device *pdev, int id)
 
 	ret = pll_10nm_register(pll_10nm);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to register PLL: %d\n", ret);
+		DRM_DEV_ERROR(&pdev->dev, "failed to register PLL: %d\n", ret);
 		return ERR_PTR(ret);
 	}
 

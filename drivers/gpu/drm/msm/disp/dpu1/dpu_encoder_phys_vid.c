@@ -110,7 +110,7 @@ static void drm_mode_to_intf_timing_params(
 	 */
 }
 
-static inline u32 get_horizontal_total(const struct intf_timing_params *timing)
+static u32 get_horizontal_total(const struct intf_timing_params *timing)
 {
 	u32 active = timing->xres;
 	u32 inactive =
@@ -119,7 +119,7 @@ static inline u32 get_horizontal_total(const struct intf_timing_params *timing)
 	return active + inactive;
 }
 
-static inline u32 get_vertical_total(const struct intf_timing_params *timing)
+static u32 get_vertical_total(const struct intf_timing_params *timing)
 {
 	u32 active = timing->yres;
 	u32 inactive =
@@ -766,7 +766,6 @@ static void dpu_encoder_phys_vid_init_ops(struct dpu_encoder_phys_ops *ops)
 	ops->prepare_for_kickoff = dpu_encoder_phys_vid_prepare_for_kickoff;
 	ops->handle_post_kickoff = dpu_encoder_phys_vid_handle_post_kickoff;
 	ops->needs_single_flush = dpu_encoder_phys_vid_needs_single_flush;
-	ops->hw_reset = dpu_encoder_helper_hw_reset;
 	ops->get_line_count = dpu_encoder_phys_vid_get_line_count;
 }
 

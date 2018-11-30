@@ -210,39 +210,6 @@ struct dpu_encoder_virt {
 };
 
 #define to_dpu_encoder_virt(x) container_of(x, struct dpu_encoder_virt, base)
-static inline int _dpu_encoder_power_enable(struct dpu_encoder_virt *dpu_enc,
-								bool enable)
-{
-	struct drm_encoder *drm_enc;
-	struct msm_drm_private *priv;
-	struct dpu_kms *dpu_kms;
-
-	if (!dpu_enc) {
-		DPU_ERROR("invalid dpu enc\n");
-		return -EINVAL;
-	}
-
-	drm_enc = &dpu_enc->base;
-	if (!drm_enc->dev || !drm_enc->dev->dev_private) {
-		DPU_ERROR("drm device invalid\n");
-		return -EINVAL;
-	}
-
-	priv = drm_enc->dev->dev_private;
-	if (!priv->kms) {
-		DPU_ERROR("invalid kms\n");
-		return -EINVAL;
-	}
-
-	dpu_kms = to_dpu_kms(priv->kms);
-
-	if (enable)
-		pm_runtime_get_sync(&dpu_kms->pdev->dev);
-	else
-		pm_runtime_put_sync(&dpu_kms->pdev->dev);
-
-	return 0;
-}
 
 void dpu_encoder_helper_report_irq_timeout(struct dpu_encoder_phys *phys_enc,
 		enum dpu_intr_idx intr_idx)
@@ -488,8 +455,6 @@ static void dpu_encoder_destroy(struct drm_encoder *drm_enc)
 
 	drm_encoder_cleanup(drm_enc);
 	mutex_destroy(&dpu_enc->enc_lock);
-
-	kfree(dpu_enc);
 }
 
 void dpu_encoder_helper_split_config(
@@ -1407,7 +1372,7 @@ static void dpu_encoder_off_work(struct kthread_work *work)
  * phys: Pointer to physical encoder structure
  * extra_flush_bits: Additional bit mask to include in flush trigger
  */
-static inline void _dpu_encoder_trigger_flush(struct drm_encoder *drm_enc,
+static void _dpu_encoder_trigger_flush(struct drm_encoder *drm_enc,
 		struct dpu_encoder_phys *phys, uint32_t extra_flush_bits)
 {
 	struct dpu_hw_ctl *ctl;
@@ -1450,7 +1415,7 @@ static inline void _dpu_encoder_trigger_flush(struct drm_encoder *drm_enc,
  * _dpu_encoder_trigger_start - trigger start for a physical encoder
  * phys: Pointer to physical encoder structure
  */
-static inline void _dpu_encoder_trigger_start(struct dpu_encoder_phys *phys)
+static void _dpu_encoder_trigger_start(struct dpu_encoder_phys *phys)
 {
 	if (!phys) {
 		DPU_ERROR("invalid argument(s)\n");
@@ -1507,7 +1472,7 @@ static int dpu_encoder_helper_wait_event_timeout(
 	return rc;
 }
 
-void dpu_encoder_helper_hw_reset(struct dpu_encoder_phys *phys_enc)
+static void dpu_encoder_helper_hw_reset(struct dpu_encoder_phys *phys_enc)
 {
 	struct dpu_encoder_virt *dpu_enc;
 	struct dpu_hw_ctl *ctl;
@@ -1803,9 +1768,7 @@ void dpu_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 	if (needs_hw_reset) {
 		trace_dpu_enc_prepare_kickoff_reset(DRMID(drm_enc));
 		for (i = 0; i < dpu_enc->num_phys_encs; i++) {
-			phys = dpu_enc->phys_encs[i];
-			if (phys && phys->ops.hw_reset)
-				phys->ops.hw_reset(phys);
+			dpu_encoder_helper_hw_reset(dpu_enc->phys_encs[i]);
 		}
 	}
 }

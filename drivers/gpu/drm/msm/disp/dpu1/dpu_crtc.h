@@ -133,7 +133,6 @@ struct dpu_crtc_frame_event {
  * @play_count    : frame count between crtc enable and disable
  * @vblank_cb_time  : ktime at vblank count reset
  * @vblank_requested : whether the user has requested vblank events
- * @suspend         : whether or not a suspend operation is in progress
  * @enabled       : whether the DPU CRTC is currently enabled. updated in the
  *                  commit-thread, not state-swap time which is earlier, so
  *                  safe to make decisions on during VBLANK on/off work
@@ -169,7 +168,6 @@ struct dpu_crtc {
 	u64 play_count;
 	ktime_t vblank_cb_time;
 	bool vblank_requested;
-	bool suspend;
 	bool enabled;
 
 	struct list_head feature_list;
@@ -266,13 +264,7 @@ static inline int dpu_crtc_get_mixer_height(struct dpu_crtc *dpu_crtc,
  */
 static inline int dpu_crtc_frame_pending(struct drm_crtc *crtc)
 {
-	struct dpu_crtc *dpu_crtc;
-
-	if (!crtc)
-		return -EINVAL;
-
-	dpu_crtc = to_dpu_crtc(crtc);
-	return atomic_read(&dpu_crtc->frame_pending);
+	return crtc ? atomic_read(&to_dpu_crtc(crtc)->frame_pending) : -EINVAL;
 }
 
 /**
@@ -329,13 +321,7 @@ enum dpu_intf_mode dpu_crtc_get_intf_mode(struct drm_crtc *crtc);
 static inline enum dpu_crtc_client_type dpu_crtc_get_client_type(
 						struct drm_crtc *crtc)
 {
-	struct dpu_crtc_state *cstate =
-			crtc ? to_dpu_crtc_state(crtc->state) : NULL;
-
-	if (!cstate)
-		return NRT_CLIENT;
-
-	return RT_CLIENT;
+	return crtc && crtc->state ? RT_CLIENT : NRT_CLIENT;
 }
 
 /**

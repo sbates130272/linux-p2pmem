@@ -170,7 +170,7 @@ void __iomem *msm_ioremap(struct platform_device *pdev, const char *name,
 		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	if (!res) {
-		dev_err(&pdev->dev, "failed to get memory resource: %s\n", name);
+		DRM_DEV_ERROR(&pdev->dev, "failed to get memory resource: %s\n", name);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -178,7 +178,7 @@ void __iomem *msm_ioremap(struct platform_device *pdev, const char *name,
 
 	ptr = devm_ioremap_nocache(&pdev->dev, res->start, size);
 	if (!ptr) {
-		dev_err(&pdev->dev, "failed to ioremap: %s\n", name);
+		DRM_DEV_ERROR(&pdev->dev, "failed to ioremap: %s\n", name);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -419,12 +419,12 @@ static int msm_init_vram(struct drm_device *dev)
 		p = dma_alloc_attrs(dev->dev, size,
 				&priv->vram.paddr, GFP_KERNEL, attrs);
 		if (!p) {
-			dev_err(dev->dev, "failed to allocate VRAM\n");
+			DRM_DEV_ERROR(dev->dev, "failed to allocate VRAM\n");
 			priv->vram.paddr = 0;
 			return -ENOMEM;
 		}
 
-		dev_info(dev->dev, "VRAM: %08x->%08x\n",
+		DRM_DEV_INFO(dev->dev, "VRAM: %08x->%08x\n",
 				(uint32_t)priv->vram.paddr,
 				(uint32_t)(priv->vram.paddr + size));
 	}
@@ -444,7 +444,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 
 	ddev = drm_dev_alloc(drv, dev);
 	if (IS_ERR(ddev)) {
-		dev_err(dev, "failed to allocate drm_device\n");
+		DRM_DEV_ERROR(dev, "failed to allocate drm_device\n");
 		return PTR_ERR(ddev);
 	}
 
@@ -519,7 +519,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		 * and (for example) use dmabuf/prime to share buffers with
 		 * imx drm driver on iMX5
 		 */
-		dev_err(dev, "failed to load kms\n");
+		DRM_DEV_ERROR(dev, "failed to load kms\n");
 		ret = PTR_ERR(kms);
 		goto err_msm_uninit;
 	}
@@ -530,7 +530,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 	if (kms) {
 		ret = kms->funcs->hw_init(kms);
 		if (ret) {
-			dev_err(dev, "kms hw init failed: %d\n", ret);
+			DRM_DEV_ERROR(dev, "kms hw init failed: %d\n", ret);
 			goto err_msm_uninit;
 		}
 	}
@@ -554,16 +554,17 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 			kthread_run(kthread_worker_fn,
 				&priv->disp_thread[i].worker,
 				"crtc_commit:%d", priv->disp_thread[i].crtc_id);
-		ret = sched_setscheduler(priv->disp_thread[i].thread,
-							SCHED_FIFO, &param);
-		if (ret)
-			pr_warn("display thread priority update failed: %d\n",
-									ret);
-
 		if (IS_ERR(priv->disp_thread[i].thread)) {
-			dev_err(dev, "failed to create crtc_commit kthread\n");
+			DRM_DEV_ERROR(dev, "failed to create crtc_commit kthread\n");
 			priv->disp_thread[i].thread = NULL;
+			goto err_msm_uninit;
 		}
+
+		ret = sched_setscheduler(priv->disp_thread[i].thread,
+					 SCHED_FIFO, &param);
+		if (ret)
+			dev_warn(dev, "disp_thread set priority failed: %d\n",
+				 ret);
 
 		/* initialize event thread */
 		priv->event_thread[i].crtc_id = priv->crtcs[i]->base.id;
@@ -573,6 +574,12 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 			kthread_run(kthread_worker_fn,
 				&priv->event_thread[i].worker,
 				"crtc_event:%d", priv->event_thread[i].crtc_id);
+		if (IS_ERR(priv->event_thread[i].thread)) {
+			DRM_DEV_ERROR(dev, "failed to create crtc_event kthread\n");
+			priv->event_thread[i].thread = NULL;
+			goto err_msm_uninit;
+		}
+
 		/**
 		 * event thread should also run at same priority as disp_thread
 		 * because it is handling frame_done events. A lower priority
@@ -581,39 +588,15 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		 * failure at crtc commit level.
 		 */
 		ret = sched_setscheduler(priv->event_thread[i].thread,
-							SCHED_FIFO, &param);
+					 SCHED_FIFO, &param);
 		if (ret)
-			pr_warn("display event thread priority update failed: %d\n",
-									ret);
-
-		if (IS_ERR(priv->event_thread[i].thread)) {
-			dev_err(dev, "failed to create crtc_event kthread\n");
-			priv->event_thread[i].thread = NULL;
-		}
-
-		if ((!priv->disp_thread[i].thread) ||
-				!priv->event_thread[i].thread) {
-			/* clean up previously created threads if any */
-			for ( ; i >= 0; i--) {
-				if (priv->disp_thread[i].thread) {
-					kthread_stop(
-						priv->disp_thread[i].thread);
-					priv->disp_thread[i].thread = NULL;
-				}
-
-				if (priv->event_thread[i].thread) {
-					kthread_stop(
-						priv->event_thread[i].thread);
-					priv->event_thread[i].thread = NULL;
-				}
-			}
-			goto err_msm_uninit;
-		}
+			dev_warn(dev, "event_thread set priority failed:%d\n",
+				 ret);
 	}
 
 	ret = drm_vblank_init(ddev, priv->num_crtcs);
 	if (ret < 0) {
-		dev_err(dev, "failed to initialize vblank\n");
+		DRM_DEV_ERROR(dev, "failed to initialize vblank\n");
 		goto err_msm_uninit;
 	}
 
@@ -622,7 +605,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		ret = drm_irq_install(ddev, kms->irq);
 		pm_runtime_put_sync(dev);
 		if (ret < 0) {
-			dev_err(dev, "failed to install IRQ handler\n");
+			DRM_DEV_ERROR(dev, "failed to install IRQ handler\n");
 			goto err_msm_uninit;
 		}
 	}
@@ -1070,18 +1053,15 @@ static int msm_pm_suspend(struct device *dev)
 {
 	struct drm_device *ddev = dev_get_drvdata(dev);
 	struct msm_drm_private *priv = ddev->dev_private;
-	struct msm_kms *kms = priv->kms;
 
-	/* TODO: Use atomic helper suspend/resume */
-	if (kms && kms->funcs && kms->funcs->pm_suspend)
-		return kms->funcs->pm_suspend(dev);
-
-	drm_kms_helper_poll_disable(ddev);
+	if (WARN_ON(priv->pm_state))
+		drm_atomic_state_put(priv->pm_state);
 
 	priv->pm_state = drm_atomic_helper_suspend(ddev);
 	if (IS_ERR(priv->pm_state)) {
-		drm_kms_helper_poll_enable(ddev);
-		return PTR_ERR(priv->pm_state);
+		int ret = PTR_ERR(priv->pm_state);
+		DRM_ERROR("Failed to suspend dpu, %d\n", ret);
+		return ret;
 	}
 
 	return 0;
@@ -1091,16 +1071,16 @@ static int msm_pm_resume(struct device *dev)
 {
 	struct drm_device *ddev = dev_get_drvdata(dev);
 	struct msm_drm_private *priv = ddev->dev_private;
-	struct msm_kms *kms = priv->kms;
+	int ret;
 
-	/* TODO: Use atomic helper suspend/resume */
-	if (kms && kms->funcs && kms->funcs->pm_resume)
-		return kms->funcs->pm_resume(dev);
+	if (WARN_ON(!priv->pm_state))
+		return -ENOENT;
 
-	drm_atomic_helper_resume(ddev, priv->pm_state);
-	drm_kms_helper_poll_enable(ddev);
+	ret = drm_atomic_helper_resume(ddev, priv->pm_state);
+	if (!ret)
+		priv->pm_state = NULL;
 
-	return 0;
+	return ret;
 }
 #endif
 
@@ -1185,7 +1165,7 @@ static int add_components_mdp(struct device *mdp_dev,
 
 		ret = of_graph_parse_endpoint(ep_node, &ep);
 		if (ret) {
-			dev_err(mdp_dev, "unable to parse port endpoint\n");
+			DRM_DEV_ERROR(mdp_dev, "unable to parse port endpoint\n");
 			of_node_put(ep_node);
 			return ret;
 		}
@@ -1236,13 +1216,13 @@ static int add_display_components(struct device *dev,
 	    of_device_is_compatible(dev->of_node, "qcom,sdm845-mdss")) {
 		ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
 		if (ret) {
-			dev_err(dev, "failed to populate children devices\n");
+			DRM_DEV_ERROR(dev, "failed to populate children devices\n");
 			return ret;
 		}
 
 		mdp_dev = device_find_child(dev, NULL, compare_name_mdp);
 		if (!mdp_dev) {
-			dev_err(dev, "failed to find MDSS MDP node\n");
+			DRM_DEV_ERROR(dev, "failed to find MDSS MDP node\n");
 			of_platform_depopulate(dev);
 			return -ENODEV;
 		}

@@ -53,7 +53,7 @@ static inline int _dpu_crtc_get_mixer_width(struct dpu_crtc_state *cstate,
 	return mode->hdisplay / cstate->num_mixers;
 }
 
-static inline struct dpu_kms *_dpu_crtc_get_kms(struct drm_crtc *crtc)
+static struct dpu_kms *_dpu_crtc_get_kms(struct drm_crtc *crtc)
 {
 	struct msm_drm_private *priv = crtc->dev->dev_private;
 
@@ -816,35 +816,6 @@ static void _dpu_crtc_vblank_enable_no_lock(
 }
 
 /**
- * _dpu_crtc_set_suspend - notify crtc of suspend enable/disable
- * @crtc: Pointer to drm crtc object
- * @enable: true to enable suspend, false to indicate resume
- */
-static void _dpu_crtc_set_suspend(struct drm_crtc *crtc, bool enable)
-{
-	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
-
-	DRM_DEBUG_KMS("crtc%d suspend = %d\n", crtc->base.id, enable);
-
-	mutex_lock(&dpu_crtc->crtc_lock);
-
-	/*
-	 * If the vblank is enabled, release a power reference on suspend
-	 * and take it back during resume (if it is still enabled).
-	 */
-	trace_dpu_crtc_set_suspend(DRMID(&dpu_crtc->base), enable, dpu_crtc);
-	if (dpu_crtc->suspend == enable)
-		DPU_DEBUG("crtc%d suspend already set to %d, ignoring update\n",
-				crtc->base.id, enable);
-	else if (dpu_crtc->enabled && dpu_crtc->vblank_requested) {
-		_dpu_crtc_vblank_enable_no_lock(dpu_crtc, !enable);
-	}
-
-	dpu_crtc->suspend = enable;
-	mutex_unlock(&dpu_crtc->crtc_lock);
-}
-
-/**
  * dpu_crtc_duplicate_state - state duplicate hook
  * @crtc: Pointer to drm crtc structure
  * @Returns: Pointer to new drm_crtc_state structure
@@ -871,43 +842,6 @@ static struct drm_crtc_state *dpu_crtc_duplicate_state(struct drm_crtc *crtc)
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &cstate->base);
 
 	return &cstate->base;
-}
-
-/**
- * dpu_crtc_reset - reset hook for CRTCs
- * Resets the atomic state for @crtc by freeing the state pointer (which might
- * be NULL, e.g. at driver load time) and allocating a new empty state object.
- * @crtc: Pointer to drm crtc structure
- */
-static void dpu_crtc_reset(struct drm_crtc *crtc)
-{
-	struct dpu_crtc *dpu_crtc;
-	struct dpu_crtc_state *cstate;
-
-	if (!crtc) {
-		DPU_ERROR("invalid crtc\n");
-		return;
-	}
-
-	/* revert suspend actions, if necessary */
-	if (dpu_kms_is_suspend_state(crtc->dev))
-		_dpu_crtc_set_suspend(crtc, false);
-
-	/* remove previous state, if present */
-	if (crtc->state) {
-		dpu_crtc_destroy_state(crtc, crtc->state);
-		crtc->state = 0;
-	}
-
-	dpu_crtc = to_dpu_crtc(crtc);
-	cstate = kzalloc(sizeof(*cstate), GFP_KERNEL);
-	if (!cstate) {
-		DPU_ERROR("failed to allocate state\n");
-		return;
-	}
-
-	cstate->base.crtc = crtc;
-	crtc->state = &cstate->base;
 }
 
 static void dpu_crtc_handle_power_event(u32 event_type, void *arg)
@@ -951,9 +885,6 @@ static void dpu_crtc_disable(struct drm_crtc *crtc)
 
 	DRM_DEBUG_KMS("crtc%d\n", crtc->base.id);
 
-	if (dpu_kms_is_suspend_state(crtc->dev))
-		_dpu_crtc_set_suspend(crtc, true);
-
 	/* Disable/save vblank irq handling */
 	drm_crtc_vblank_off(crtc);
 
@@ -966,8 +897,7 @@ static void dpu_crtc_disable(struct drm_crtc *crtc)
 				atomic_read(&dpu_crtc->frame_pending));
 
 	trace_dpu_crtc_disable(DRMID(crtc), false, dpu_crtc);
-	if (dpu_crtc->enabled && !dpu_crtc->suspend &&
-			dpu_crtc->vblank_requested) {
+	if (dpu_crtc->enabled && dpu_crtc->vblank_requested) {
 		_dpu_crtc_vblank_enable_no_lock(dpu_crtc, false);
 	}
 	dpu_crtc->enabled = false;
@@ -1033,8 +963,7 @@ static void dpu_crtc_enable(struct drm_crtc *crtc,
 
 	mutex_lock(&dpu_crtc->crtc_lock);
 	trace_dpu_crtc_enable(DRMID(crtc), true, dpu_crtc);
-	if (!dpu_crtc->enabled && !dpu_crtc->suspend &&
-			dpu_crtc->vblank_requested) {
+	if (!dpu_crtc->enabled && dpu_crtc->vblank_requested) {
 		_dpu_crtc_vblank_enable_no_lock(dpu_crtc, true);
 	}
 	dpu_crtc->enabled = true;
@@ -1289,17 +1218,11 @@ end:
 
 int dpu_crtc_vblank(struct drm_crtc *crtc, bool en)
 {
-	struct dpu_crtc *dpu_crtc;
-
-	if (!crtc) {
-		DPU_ERROR("invalid crtc\n");
-		return -EINVAL;
-	}
-	dpu_crtc = to_dpu_crtc(crtc);
+	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 
 	mutex_lock(&dpu_crtc->crtc_lock);
 	trace_dpu_crtc_vblank(DRMID(&dpu_crtc->base), en, dpu_crtc);
-	if (dpu_crtc->enabled && !dpu_crtc->suspend) {
+	if (dpu_crtc->enabled) {
 		_dpu_crtc_vblank_enable_no_lock(dpu_crtc, en);
 	}
 	dpu_crtc->vblank_requested = en;
@@ -1539,7 +1462,7 @@ static const struct drm_crtc_funcs dpu_crtc_funcs = {
 	.set_config = drm_atomic_helper_set_config,
 	.destroy = dpu_crtc_destroy,
 	.page_flip = drm_atomic_helper_page_flip,
-	.reset = dpu_crtc_reset,
+	.reset = drm_atomic_helper_crtc_reset,
 	.atomic_duplicate_state = dpu_crtc_duplicate_state,
 	.atomic_destroy_state = dpu_crtc_destroy_state,
 	.late_register = dpu_crtc_late_register,
@@ -1594,7 +1517,6 @@ struct drm_crtc *dpu_crtc_init(struct drm_device *dev, struct drm_plane *plane,
 				NULL);
 
 	drm_crtc_helper_add(crtc, &dpu_crtc_helper_funcs);
-	plane->crtc = crtc;
 
 	/* save user friendly CRTC name for later */
 	snprintf(dpu_crtc->name, DPU_CRTC_NAME_SIZE, "crtc%u", crtc->base.id);
