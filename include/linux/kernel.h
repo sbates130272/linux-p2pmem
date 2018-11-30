@@ -527,6 +527,7 @@ static inline u32 int_sqrt64(u64 x)
 extern void bust_spinlocks(int yes);
 extern int oops_in_progress;		/* If set, an oops, panic(), BUG() or die() is in progress */
 extern int panic_timeout;
+extern unsigned long panic_print;
 extern int panic_on_oops;
 extern int panic_on_unrecovered_nmi;
 extern int panic_on_io_nmi;
@@ -985,6 +986,21 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
 #define __CONCAT(a, b) a ## b
 #define CONCATENATE(a, b) __CONCAT(a, b)
 
+/*
+ * TODO:
+ * Sparse emits "unknown expression" warnings.
+ * It was fixed by commit 0eb8175d3e9c0d20354763d07ce3d4c0e543d988 in Sparse.
+ * Remove the following workaround when the fixed Sparse is widely available.
+ */
+#ifdef __CHECKER__
+#define TYPE_CHECK_CONTAINER_OF(ptr, type, member)	do {} while (0)
+#else
+#define TYPE_CHECK_CONTAINER_OF(ptr, type, member) \
+	BUILD_BUG_ON_MSG(!__same_type(*(ptr), ((type *)0)->member) &&	\
+			 !__same_type(*(ptr), void),			\
+			 "pointer type mismatch in container_of()")
+#endif
+
 /**
  * container_of - cast a member of a structure out to the containing structure
  * @ptr:	the pointer to the member.
@@ -994,9 +1010,7 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
  */
 #define container_of(ptr, type, member) ({				\
 	void *__mptr = (void *)(ptr);					\
-	BUILD_BUG_ON_MSG(!__same_type(*(ptr), ((type *)0)->member) &&	\
-			 !__same_type(*(ptr), void),			\
-			 "pointer type mismatch in container_of()");	\
+	TYPE_CHECK_CONTAINER_OF(ptr, type, member);			\
 	((type *)(__mptr - offsetof(type, member))); })
 
 /**
@@ -1009,9 +1023,7 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
  */
 #define container_of_safe(ptr, type, member) ({				\
 	void *__mptr = (void *)(ptr);					\
-	BUILD_BUG_ON_MSG(!__same_type(*(ptr), ((type *)0)->member) &&	\
-			 !__same_type(*(ptr), void),			\
-			 "pointer type mismatch in container_of()");	\
+	TYPE_CHECK_CONTAINER_OF(ptr, type, member);			\
 	IS_ERR_OR_NULL(__mptr) ? ERR_CAST(__mptr) :			\
 		((type *)(__mptr - offsetof(type, member))); })
 

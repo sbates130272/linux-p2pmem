@@ -25,7 +25,7 @@
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
 #include <linux/spinlock.h>
-#include <linux/jhash.h>
+#include <linux/xxhash.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/wait.h>
@@ -667,7 +667,7 @@ static void remove_node_from_stable_tree(struct stable_node *stable_node)
 }
 
 /*
- * get_ksm_page: checks if the page indicated by the stable node
+ * __get_ksm_page: checks if the page indicated by the stable node
  * is still its ksm page, despite having held no reference to it.
  * In which case we can trust the content of the page, and it
  * returns the gotten page; but if the page has now been zapped,
@@ -685,7 +685,8 @@ static void remove_node_from_stable_tree(struct stable_node *stable_node)
  * a page to put something that might look like our key in page->mapping.
  * is on its way to being freed; but it is an anomaly to bear in mind.
  */
-static struct page *get_ksm_page(struct stable_node *stable_node, bool lock_it)
+static struct page *__get_ksm_page(struct stable_node *stable_node,
+				   bool lock_it, bool async)
 {
 	struct page *page;
 	void *expected_mapping;
@@ -728,7 +729,15 @@ again:
 	}
 
 	if (lock_it) {
-		lock_page(page);
+		if (async) {
+			if (!trylock_page(page)) {
+				put_page(page);
+				return ERR_PTR(-EBUSY);
+			}
+		} else {
+			lock_page(page);
+		}
+
 		if (READ_ONCE(page->mapping) != expected_mapping) {
 			unlock_page(page);
 			put_page(page);
@@ -749,6 +758,11 @@ stale:
 		goto again;
 	remove_node_from_stable_tree(stable_node);
 	return NULL;
+}
+
+static struct page *get_ksm_page(struct stable_node *stable_node, bool lock_it)
+{
+	return __get_ksm_page(stable_node, lock_it, false);
 }
 
 /*
@@ -1009,7 +1023,7 @@ static u32 calc_checksum(struct page *page)
 {
 	u32 checksum;
 	void *addr = kmap_atomic(page);
-	checksum = jhash2(addr, PAGE_SIZE / 4, 17);
+	checksum = xxhash(addr, PAGE_SIZE, 0);
 	kunmap_atomic(addr);
 	return checksum;
 }
@@ -1320,6 +1334,23 @@ static struct page *try_to_merge_two_pages(struct rmap_item *rmap_item,
 					   struct page *tree_page)
 {
 	int err;
+
+	if (IS_ENABLED(CONFIG_COMPACTION)) {
+		unsigned long pfn;
+
+		/*
+		 * Find neighbour of @page containing 1-order pair in buddy
+		 * allocator and check whether its count is 0. If so, we
+		 * consider the neighbour as a free page (this is more
+		 * probable than it's freezed via page_ref_freeze()), and
+		 * we try to use @tree_page as ksm page and to free @page.
+		 */
+		pfn = page_to_pfn(page) ^ 1;
+		if (pfn_valid(pfn) && page_count(pfn_to_page(pfn)) == 0) {
+			swap(rmap_item, tree_rmap_item);
+			swap(page, tree_page);
+		}
+	}
 
 	err = try_to_merge_with_ksm_page(rmap_item, page, NULL);
 	if (!err) {
@@ -1675,7 +1706,11 @@ again:
 			 * It would be more elegant to return stable_node
 			 * than kpage, but that involves more changes.
 			 */
-			tree_page = get_ksm_page(stable_node_dup, true);
+			tree_page = __get_ksm_page(stable_node_dup, true, true);
+
+			if (PTR_ERR(tree_page) == -EBUSY)
+				return ERR_PTR(-EBUSY);
+
 			if (unlikely(!tree_page))
 				/*
 				 * The tree may have been rebalanced,
@@ -2062,6 +2097,10 @@ static void cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item)
 
 	/* We first start with searching the page inside the stable tree */
 	kpage = stable_tree_search(page);
+
+	if (PTR_ERR(kpage) == -EBUSY)
+		return;
+
 	if (kpage == page && rmap_item->head == stable_node) {
 		put_page(kpage);
 		return;

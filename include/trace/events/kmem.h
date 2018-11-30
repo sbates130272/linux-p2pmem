@@ -315,6 +315,27 @@ TRACE_EVENT(mm_page_alloc_extfrag,
 		__entry->change_ownership)
 );
 
+TRACE_EVENT(mm_fragmentation_stall,
+
+	TP_PROTO(int nid, unsigned long duration),
+
+	TP_ARGS(nid, duration),
+
+	TP_STRUCT__entry(
+		__field(	int,		nid		)
+		__field(	unsigned long,	duration	)
+	),
+
+	TP_fast_assign(
+		__entry->nid		= nid;
+		__entry->duration	= duration
+	),
+
+	TP_printk("nid=%d duration=%lu",
+		__entry->nid,
+		__entry->duration)
+);
+
 #endif /* _TRACE_KMEM_H */
 
 /* This part must be outside protection */
