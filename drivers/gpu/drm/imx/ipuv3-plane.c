@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * i.MX IPUv3 DP Overlay Planes
  *
  * Copyright (C) 2013 Philipp Zabel, Pengutronix
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <drm/drmP.h>
@@ -236,9 +228,15 @@ static void ipu_plane_enable(struct ipu_plane *ipu_plane)
 
 void ipu_plane_disable(struct ipu_plane *ipu_plane, bool disable_dp_channel)
 {
+	int ret;
+
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	ipu_idmac_wait_busy(ipu_plane->ipu_ch, 50);
+	ret = ipu_idmac_wait_busy(ipu_plane->ipu_ch, 50);
+	if (ret == -ETIMEDOUT) {
+		DRM_ERROR("[PLANE:%d] IDMAC timeout\n",
+			  ipu_plane->base.base.id);
+	}
 
 	if (ipu_plane->dp && disable_dp_channel)
 		ipu_dp_disable_channel(ipu_plane->dp, false);
@@ -584,6 +582,7 @@ static void ipu_plane_atomic_update(struct drm_plane *plane,
 		active = ipu_idmac_get_current_buffer(ipu_plane->ipu_ch);
 		ipu_cpmem_set_buffer(ipu_plane->ipu_ch, !active, eba);
 		ipu_idmac_select_buffer(ipu_plane->ipu_ch, !active);
+		ipu_plane->next_buf = !active;
 		if (ipu_plane_separate_alpha(ipu_plane)) {
 			active = ipu_idmac_get_current_buffer(ipu_plane->alpha_ch);
 			ipu_cpmem_set_buffer(ipu_plane->alpha_ch, !active,
@@ -711,6 +710,7 @@ static void ipu_plane_atomic_update(struct drm_plane *plane,
 	ipu_cpmem_set_buffer(ipu_plane->ipu_ch, 1, eba);
 	ipu_idmac_lock_enable(ipu_plane->ipu_ch, num_bursts);
 	ipu_plane_enable(ipu_plane);
+	ipu_plane->next_buf = -1;
 }
 
 static const struct drm_plane_helper_funcs ipu_plane_helper_funcs = {
@@ -720,6 +720,24 @@ static const struct drm_plane_helper_funcs ipu_plane_helper_funcs = {
 	.atomic_update = ipu_plane_atomic_update,
 };
 
+bool ipu_plane_atomic_update_pending(struct drm_plane *plane)
+{
+	struct ipu_plane *ipu_plane = to_ipu_plane(plane);
+	struct drm_plane_state *state = plane->state;
+	struct ipu_plane_state *ipu_state = to_ipu_plane_state(state);
+
+	/* disabled crtcs must not block the update */
+	if (!state->crtc)
+		return false;
+
+	if (ipu_state->use_pre)
+		return ipu_prg_channel_configure_pending(ipu_plane->ipu_ch);
+	else if (ipu_plane->next_buf >= 0)
+		return ipu_idmac_get_current_buffer(ipu_plane->ipu_ch) !=
+		       ipu_plane->next_buf;
+
+	return false;
+}
 int ipu_planes_assign_pre(struct drm_device *dev,
 			  struct drm_atomic_state *state)
 {
