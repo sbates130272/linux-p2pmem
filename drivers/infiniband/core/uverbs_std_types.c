@@ -210,8 +210,7 @@ static int uverbs_hot_unplug_completion_event_file(struct ib_uobject *uobj,
 	return 0;
 };
 
-int uverbs_destroy_def_handler(struct ib_uverbs_file *file,
-			       struct uverbs_attr_bundle *attrs)
+int uverbs_destroy_def_handler(struct uverbs_attr_bundle *attrs)
 {
 	return 0;
 }
@@ -262,25 +261,28 @@ DECLARE_UVERBS_NAMED_OBJECT(UVERBS_OBJECT_PD,
 
 DECLARE_UVERBS_GLOBAL_METHODS(UVERBS_OBJECT_DEVICE);
 
-DECLARE_UVERBS_OBJECT_TREE(uverbs_default_objects,
-			   &UVERBS_OBJECT(UVERBS_OBJECT_DEVICE),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_PD),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_MR),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_COMP_CHANNEL),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_CQ),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_QP),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_AH),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_MW),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_SRQ),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_FLOW),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_WQ),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_RWQ_IND_TBL),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_XRCD),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_FLOW_ACTION),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_DM),
-			   &UVERBS_OBJECT(UVERBS_OBJECT_COUNTERS));
-
-const struct uverbs_object_tree_def *uverbs_default_get_objects(void)
-{
-	return &uverbs_default_objects;
-}
+const struct uapi_definition uverbs_def_obj_intf[] = {
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_DEVICE),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_PD,
+				      UAPI_DEF_OBJ_NEEDS_FN(dealloc_pd)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_COMP_CHANNEL,
+				      UAPI_DEF_OBJ_NEEDS_FN(dealloc_pd)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_QP,
+				      UAPI_DEF_OBJ_NEEDS_FN(destroy_qp)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_AH,
+				      UAPI_DEF_OBJ_NEEDS_FN(destroy_ah)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_MW,
+				      UAPI_DEF_OBJ_NEEDS_FN(dealloc_mw)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_SRQ,
+				      UAPI_DEF_OBJ_NEEDS_FN(destroy_srq)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_FLOW,
+				      UAPI_DEF_OBJ_NEEDS_FN(destroy_flow)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_WQ,
+				      UAPI_DEF_OBJ_NEEDS_FN(destroy_wq)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(
+		UVERBS_OBJECT_RWQ_IND_TBL,
+		UAPI_DEF_OBJ_NEEDS_FN(destroy_rwq_ind_table)),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_XRCD,
+				      UAPI_DEF_OBJ_NEEDS_FN(dealloc_xrcd)),
+	{}
+};

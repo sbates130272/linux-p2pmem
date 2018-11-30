@@ -71,6 +71,14 @@ static int rxe_query_port(struct ib_device *dev,
 	mutex_lock(&rxe->usdev_lock);
 	rc = ib_get_eth_speed(dev, port_num, &attr->active_speed,
 			      &attr->active_width);
+
+	if (attr->state == IB_PORT_ACTIVE)
+		attr->phys_state = RDMA_LINK_PHYS_STATE_LINK_UP;
+	else if (dev_get_flags(rxe->ndev) & IFF_UP)
+		attr->phys_state = RDMA_LINK_PHYS_STATE_POLLING;
+	else
+		attr->phys_state = RDMA_LINK_PHYS_STATE_DISABLED;
+
 	mutex_unlock(&rxe->usdev_lock);
 
 out:
@@ -1279,11 +1287,9 @@ err1:
 	return err;
 }
 
-int rxe_unregister_device(struct rxe_dev *rxe)
+void rxe_unregister_device(struct rxe_dev *rxe)
 {
 	struct ib_device *dev = &rxe->ib_dev;
 
 	ib_unregister_device(dev);
-
-	return 0;
 }

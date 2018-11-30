@@ -46,9 +46,8 @@ static int uverbs_free_dm(struct ib_uobject *uobject,
 	return dm->device->dealloc_dm(dm);
 }
 
-static int
-UVERBS_HANDLER(UVERBS_METHOD_DM_ALLOC)(struct ib_uverbs_file *file,
-				       struct uverbs_attr_bundle *attrs)
+static int UVERBS_HANDLER(UVERBS_METHOD_DM_ALLOC)(
+	struct uverbs_attr_bundle *attrs)
 {
 	struct ib_dm_alloc_attr attr = {};
 	struct ib_uobject *uobj =
@@ -109,3 +108,9 @@ DECLARE_UVERBS_NAMED_OBJECT(UVERBS_OBJECT_DM,
 			    UVERBS_TYPE_ALLOC_IDR(uverbs_free_dm),
 			    &UVERBS_METHOD(UVERBS_METHOD_DM_ALLOC),
 			    &UVERBS_METHOD(UVERBS_METHOD_DM_FREE));
+
+const struct uapi_definition uverbs_def_obj_dm[] = {
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_DM,
+				      UAPI_DEF_OBJ_NEEDS_FN(dealloc_dm)),
+	{}
+};

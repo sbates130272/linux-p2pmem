@@ -40,7 +40,7 @@ static int uverbs_free_mr(struct ib_uobject *uobject,
 }
 
 static int UVERBS_HANDLER(UVERBS_METHOD_DM_MR_REG)(
-	struct ib_uverbs_file *file, struct uverbs_attr_bundle *attrs)
+	struct uverbs_attr_bundle *attrs)
 {
 	struct ib_dm_mr_attr attr = {};
 	struct ib_uobject *uobj =
@@ -147,3 +147,9 @@ DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_MR,
 	UVERBS_TYPE_ALLOC_IDR(uverbs_free_mr),
 	&UVERBS_METHOD(UVERBS_METHOD_DM_MR_REG));
+
+const struct uapi_definition uverbs_def_obj_mr[] = {
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(UVERBS_OBJECT_MR,
+				      UAPI_DEF_OBJ_NEEDS_FN(dereg_mr)),
+	{}
+};
