@@ -1607,7 +1607,7 @@ static const struct v4l2_m2m_ops m2m_ops = {
 	.job_abort	= pxp_job_abort,
 };
 
-static void pxp_soft_reset(struct pxp_dev *dev)
+static int pxp_soft_reset(struct pxp_dev *dev)
 {
 	int ret;
 	u32 val;
@@ -1620,10 +1620,12 @@ static void pxp_soft_reset(struct pxp_dev *dev)
 	ret = readl_poll_timeout(dev->mmio + HW_PXP_CTRL, val,
 				 val & BM_PXP_CTRL_CLKGATE, 0, 100);
 	if (ret < 0)
-		pr_err("PXP reset timeout\n");
+		return ret;
 
 	writel(BM_PXP_CTRL_SFTRST, dev->mmio + HW_PXP_CTRL_CLR);
 	writel(BM_PXP_CTRL_CLKGATE, dev->mmio + HW_PXP_CTRL_CLR);
+
+	return 0;
 }
 
 static int pxp_probe(struct platform_device *pdev)
@@ -1666,8 +1668,15 @@ static int pxp_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	clk_prepare_enable(dev->clk);
-	pxp_soft_reset(dev);
+	ret = clk_prepare_enable(dev->clk);
+	if (ret < 0)
+		return ret;
+
+	ret = pxp_soft_reset(dev);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "PXP reset timeout: %d\n", ret);
+		goto err_clk;
+	}
 
 	spin_lock_init(&dev->irqlock);
 
