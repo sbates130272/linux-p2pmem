@@ -994,7 +994,6 @@ void etnaviv_gpu_recover_hang(struct etnaviv_gpu *gpu)
 		complete(&gpu->event_free);
 	bitmap_zero(gpu->event_bitmap, ETNA_NR_EVENTS);
 	spin_unlock_irqrestore(&gpu->event_spinlock, flags);
-	gpu->completed_fence = gpu->active_fence;
 
 	etnaviv_gpu_hw_init(gpu);
 	gpu->lastctx = NULL;
@@ -1032,7 +1031,7 @@ static bool etnaviv_fence_signaled(struct dma_fence *fence)
 {
 	struct etnaviv_fence *f = to_etnaviv_fence(fence);
 
-	return fence_completed(f->gpu, f->base.seqno);
+	return (s32)(f->gpu->completed_fence - f->base.seqno) >= 0;
 }
 
 static void etnaviv_fence_release(struct dma_fence *fence)
@@ -1069,6 +1068,12 @@ static struct dma_fence *etnaviv_gpu_fence_alloc(struct etnaviv_gpu *gpu)
 		       gpu->fence_context, ++gpu->next_fence);
 
 	return &f->base;
+}
+
+/* returns true if fence a comes after fence b */
+static inline bool fence_after(u32 a, u32 b)
+{
+	return (s32)(a - b) > 0;
 }
 
 /*
@@ -1305,8 +1310,6 @@ struct dma_fence *etnaviv_gpu_submit(struct etnaviv_gem_submit *submit)
 
 		goto out_unlock;
 	}
-
-	gpu->active_fence = gpu_fence->seqno;
 
 	if (submit->nr_pmrs) {
 		gpu->event[event[1]].sync_point = &sync_point_perfmon_sample_pre;
@@ -1806,8 +1809,8 @@ static int etnaviv_gpu_rpm_suspend(struct device *dev)
 	struct etnaviv_gpu *gpu = dev_get_drvdata(dev);
 	u32 idle, mask;
 
-	/* If we have outstanding fences, we're not idle */
-	if (gpu->completed_fence != gpu->active_fence)
+	/* If there are any jobs in the HW queue, we're not idle */
+	if (atomic_read(&gpu->sched.hw_rq_count))
 		return -EBUSY;
 
 	/* Check whether the hardware (except FE) is idle */
