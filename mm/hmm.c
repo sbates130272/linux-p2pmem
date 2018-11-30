@@ -980,22 +980,14 @@ static void hmm_devmem_ref_release(struct percpu_ref *ref)
 	complete(&devmem->completion);
 }
 
-static void hmm_devmem_ref_exit(void *data)
-{
-	struct percpu_ref *ref = data;
-	struct hmm_devmem *devmem;
-
-	devmem = container_of(ref, struct hmm_devmem, ref);
-	wait_for_completion(&devmem->completion);
-	percpu_ref_exit(ref);
-}
-
 static void hmm_devmem_ref_kill(struct percpu_ref *ref)
 {
 	struct hmm_devmem *devmem;
 
 	devmem = container_of(ref, struct hmm_devmem, ref);
 	percpu_ref_kill(ref);
+	wait_for_completion(&devmem->completion);
+	percpu_ref_exit(ref);
 }
 
 static int hmm_devmem_fault(struct vm_area_struct *vma,
@@ -1059,10 +1051,6 @@ struct hmm_devmem *hmm_devmem_add(const struct hmm_devmem_ops *ops,
 
 	ret = percpu_ref_init(&devmem->ref, &hmm_devmem_ref_release,
 			      0, GFP_KERNEL);
-	if (ret)
-		return ERR_PTR(ret);
-
-	ret = devm_add_action_or_reset(device, hmm_devmem_ref_exit, &devmem->ref);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -1138,11 +1126,6 @@ struct hmm_devmem *hmm_devmem_add_resource(const struct hmm_devmem_ops *ops,
 
 	ret = percpu_ref_init(&devmem->ref, &hmm_devmem_ref_release,
 			      0, GFP_KERNEL);
-	if (ret)
-		return ERR_PTR(ret);
-
-	ret = devm_add_action_or_reset(device, hmm_devmem_ref_exit,
-			&devmem->ref);
 	if (ret)
 		return ERR_PTR(ret);
 
