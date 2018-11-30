@@ -34,8 +34,6 @@
 #ifndef VCHIQ_IF_H
 #define VCHIQ_IF_H
 
-#include "interface/vchi/vchi_mh.h"
-
 #define VCHIQ_SERVICE_HANDLE_INVALID 0
 
 #define VCHIQ_SLOT_SIZE     4096
@@ -156,16 +154,15 @@ extern VCHIQ_STATUS_T vchiq_bulk_receive(VCHIQ_SERVICE_HANDLE_T service,
 	void *data, unsigned int size, void *userdata,
 	VCHIQ_BULK_MODE_T mode);
 extern VCHIQ_STATUS_T vchiq_bulk_transmit_handle(VCHIQ_SERVICE_HANDLE_T service,
-	VCHI_MEM_HANDLE_T handle, const void *offset, unsigned int size,
+	const void *offset, unsigned int size,
 	void *userdata,	VCHIQ_BULK_MODE_T mode);
 extern VCHIQ_STATUS_T vchiq_bulk_receive_handle(VCHIQ_SERVICE_HANDLE_T service,
-	VCHI_MEM_HANDLE_T handle, void *offset, unsigned int size,
-	void *userdata, VCHIQ_BULK_MODE_T mode);
+	void *offset, unsigned int size, void *userdata,
+	VCHIQ_BULK_MODE_T mode);
 extern int   vchiq_get_client_id(VCHIQ_SERVICE_HANDLE_T service);
 extern void *vchiq_get_service_userdata(VCHIQ_SERVICE_HANDLE_T service);
 extern int   vchiq_get_service_fourcc(VCHIQ_SERVICE_HANDLE_T service);
-extern VCHIQ_STATUS_T vchiq_get_config(VCHIQ_INSTANCE_T instance,
-	int config_size, VCHIQ_CONFIG_T *pconfig);
+extern void vchiq_get_config(VCHIQ_CONFIG_T *config);
 extern VCHIQ_STATUS_T vchiq_set_service_option(VCHIQ_SERVICE_HANDLE_T service,
 	VCHIQ_SERVICE_OPTION_T option, int value);
 

@@ -7,54 +7,98 @@
 #ifndef HOST_INT_H
 #define HOST_INT_H
 #include <linux/ieee80211.h>
-#include "coreconfigurator.h"
+#include "wilc_wlan_if.h"
 
-#define IDLE_MODE	0x00
-#define AP_MODE		0x01
-#define STATION_MODE	0x02
-#define GO_MODE		0x03
-#define CLIENT_MODE	0x04
-#define ACTION		0xD0
-#define PROBE_REQ	0x40
-#define PROBE_RESP	0x50
+enum {
+	WILC_IDLE_MODE = 0x0,
+	WILC_AP_MODE = 0x1,
+	WILC_STATION_MODE = 0x2,
+	WILC_GO_MODE = 0x3,
+	WILC_CLIENT_MODE = 0x4
+};
 
-#define ACTION_FRM_IDX				0
-#define PROBE_REQ_IDX				1
-#define MAX_NUM_STA				9
-#define ACTIVE_SCAN_TIME			10
-#define PASSIVE_SCAN_TIME			1200
-#define MIN_SCAN_TIME				10
-#define MAX_SCAN_TIME				1200
-#define DEFAULT_SCAN				0
-#define USER_SCAN				BIT(0)
-#define OBSS_PERIODIC_SCAN			BIT(1)
-#define OBSS_ONETIME_SCAN			BIT(2)
-#define GTK_RX_KEY_BUFF_LEN			24
-#define ADDKEY					0x1
-#define REMOVEKEY				0x2
-#define DEFAULTKEY				0x4
-#define ADDKEY_AP				0x8
+enum {
+	WILC_ADD_KEY = 0x1,
+	WILC_REMOVE_KEY = 0x2,
+	WILC_DEFAULT_KEY = 0x4,
+	WILC_ADD_KEY_AP = 0x8
+};
+
+#define WILC_MAX_NUM_STA			9
 #define MAX_NUM_SCANNED_NETWORKS		100
 #define MAX_NUM_SCANNED_NETWORKS_SHADOW		130
-#define MAX_NUM_PROBED_SSID			10
-#define CHANNEL_SCAN_TIME			250
+#define WILC_MAX_NUM_PROBED_SSID		10
 
 #define TX_MIC_KEY_LEN				8
 #define RX_MIC_KEY_LEN				8
 #define PTK_KEY_LEN				16
 
-#define TX_MIC_KEY_MSG_LEN			26
 #define RX_MIC_KEY_MSG_LEN			48
 #define PTK_KEY_MSG_LEN				39
 
 #define PMKSA_KEY_LEN				22
-#define ETH_ALEN				6
-#define PMKID_LEN				16
 #define WILC_MAX_NUM_PMKIDS			16
 #define WILC_ADD_STA_LENGTH			40
-#define NUM_CONCURRENT_IFC			2
-#define DRV_HANDLER_SIZE			5
+#define WILC_NUM_CONCURRENT_IFC			2
+#define WILC_DRV_HANDLER_SIZE			5
 #define DRV_HANDLER_MASK			0x000000FF
+
+#define NUM_RSSI                5
+
+enum {
+	WILC_SET_CFG = 0,
+	WILC_GET_CFG
+};
+
+#define WILC_MAX_ASSOC_RESP_FRAME_SIZE   256
+
+struct rssi_history_buffer {
+	bool full;
+	u8 index;
+	s8 samples[NUM_RSSI];
+};
+
+struct network_info {
+	s8 rssi;
+	u16 cap_info;
+	u8 ssid[MAX_SSID_LEN];
+	u8 ssid_len;
+	u8 bssid[6];
+	u16 beacon_period;
+	u8 dtim_period;
+	u8 ch;
+	unsigned long time_scan_cached;
+	unsigned long time_scan;
+	bool new_network;
+	u8 found;
+	u32 tsf_lo;
+	u8 *ies;
+	u16 ies_len;
+	void *join_params;
+	struct rssi_history_buffer rssi_history;
+	u64 tsf;
+};
+
+struct connect_info {
+	u8 bssid[6];
+	u8 *req_ies;
+	size_t req_ies_len;
+	u8 *resp_ies;
+	u16 resp_ies_len;
+	u16 status;
+};
+
+struct disconnect_info {
+	u16 reason;
+	u8 *ie;
+	size_t ie_len;
+};
+
+struct assoc_resp {
+	__le16 capab_info;
+	__le16 status_code;
+	__le16 aid;
+} __packed;
 
 struct rf_info {
 	u8 link_speed;
@@ -76,7 +120,7 @@ enum host_if_state {
 
 struct host_if_pmkid {
 	u8 bssid[ETH_ALEN];
-	u8 pmkid[PMKID_LEN];
+	u8 pmkid[WLAN_PMKID_LEN];
 };
 
 struct host_if_pmkid_attr {
@@ -84,67 +128,19 @@ struct host_if_pmkid_attr {
 	struct host_if_pmkid pmkidlist[WILC_MAX_NUM_PMKIDS];
 };
 
-enum current_tx_rate {
-	AUTORATE	= 0,
-	MBPS_1		= 1,
-	MBPS_2		= 2,
-	MBPS_5_5	= 5,
-	MBPS_11		= 11,
-	MBPS_6		= 6,
-	MBPS_9		= 9,
-	MBPS_12		= 12,
-	MBPS_18		= 18,
-	MBPS_24		= 24,
-	MBPS_36		= 36,
-	MBPS_48		= 48,
-	MBPS_54		= 54
-};
-
 struct cfg_param_attr {
 	u32 flag;
-	u8 ht_enable;
-	u8 bss_type;
-	u8 auth_type;
-	u16 auth_timeout;
-	u8 power_mgmt_mode;
 	u16 short_retry_limit;
 	u16 long_retry_limit;
 	u16 frag_threshold;
 	u16 rts_threshold;
-	u16 preamble_type;
-	u8 short_slot_allowed;
-	u8 txop_prot_disabled;
-	u16 beacon_interval;
-	u16 dtim_period;
-	enum site_survey site_survey_enabled;
-	u16 site_survey_scan_time;
-	u8 scan_source;
-	u16 active_scan_time;
-	u16 passive_scan_time;
-	enum current_tx_rate curr_tx_rate;
-
 };
 
 enum cfg_param {
-	RETRY_SHORT		= BIT(0),
-	RETRY_LONG		= BIT(1),
-	FRAG_THRESHOLD		= BIT(2),
-	RTS_THRESHOLD		= BIT(3),
-	BSS_TYPE		= BIT(4),
-	AUTH_TYPE		= BIT(5),
-	AUTHEN_TIMEOUT		= BIT(6),
-	POWER_MANAGEMENT	= BIT(7),
-	PREAMBLE		= BIT(8),
-	SHORT_SLOT_ALLOWED	= BIT(9),
-	TXOP_PROT_DISABLE	= BIT(10),
-	BEACON_INTERVAL		= BIT(11),
-	DTIM_PERIOD		= BIT(12),
-	SITE_SURVEY		= BIT(13),
-	SITE_SURVEY_SCAN_TIME	= BIT(14),
-	ACTIVE_SCANTIME		= BIT(15),
-	PASSIVE_SCANTIME	= BIT(16),
-	CURRENT_TX_RATE		= BIT(17),
-	HT_ENABLE		= BIT(18),
+	WILC_CFG_PARAM_RETRY_SHORT = BIT(0),
+	WILC_CFG_PARAM_RETRY_LONG = BIT(1),
+	WILC_CFG_PARAM_FRAG_THRESHOLD = BIT(2),
+	WILC_CFG_PARAM_RTS_THRESHOLD = BIT(3)
 };
 
 struct found_net_info {
@@ -166,10 +162,10 @@ enum conn_event {
 };
 
 enum KEY_TYPE {
-	WEP,
-	WPA_RX_GTK,
-	WPA_PTK,
-	PMKSA,
+	WILC_KEY_TYPE_WEP,
+	WILC_KEY_TYPE_WPA_RX_GTK,
+	WILC_KEY_TYPE_WPA_PTK,
+	WILC_KEY_TYPE_PMKSA,
 };
 
 typedef void (*wilc_scan_result)(enum scan_event, struct network_info *,
@@ -267,9 +263,6 @@ struct host_if_drv {
 	enum host_if_state hif_state;
 
 	u8 assoc_bssid[ETH_ALEN];
-	struct cfg_param_attr cfg_values;
-	/*lock to protect concurrent setting of cfg params*/
-	struct mutex cfg_values_lock;
 
 	struct timer_list scan_timer;
 	struct wilc_vif *scan_timer_vif;
@@ -282,7 +275,7 @@ struct host_if_drv {
 
 	bool ifc_up;
 	int driver_handler_id;
-	u8 assoc_resp[MAX_ASSOC_RESP_FRAME_SIZE];
+	u8 assoc_resp[WILC_MAX_ASSOC_RESP_FRAME_SIZE];
 };
 
 struct add_sta_param {
@@ -358,5 +351,7 @@ void wilc_resolve_disconnect_aberration(struct wilc_vif *vif);
 int wilc_get_vif_idx(struct wilc_vif *vif);
 int wilc_set_tx_power(struct wilc_vif *vif, u8 tx_power);
 int wilc_get_tx_power(struct wilc_vif *vif, u8 *tx_power);
-
+void wilc_scan_complete_received(struct wilc *wilc, u8 *buffer, u32 length);
+void wilc_network_info_received(struct wilc *wilc, u8 *buffer, u32 length);
+void wilc_gnrl_async_info_received(struct wilc *wilc, u8 *buffer, u32 length);
 #endif

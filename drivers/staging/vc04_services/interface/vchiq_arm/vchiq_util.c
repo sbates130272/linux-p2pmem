@@ -48,8 +48,8 @@ int vchiu_queue_init(VCHIU_QUEUE_T *queue, int size)
 	queue->write = 0;
 	queue->initialized = 1;
 
-	sema_init(&queue->pop, 0);
-	sema_init(&queue->push, 0);
+	init_completion(&queue->pop);
+	init_completion(&queue->push);
 
 	queue->storage = kcalloc(size, sizeof(VCHIQ_HEADER_T *), GFP_KERNEL);
 	if (!queue->storage) {
@@ -80,43 +80,24 @@ void vchiu_queue_push(VCHIU_QUEUE_T *queue, VCHIQ_HEADER_T *header)
 		return;
 
 	while (queue->write == queue->read + queue->size) {
-		if (down_interruptible(&queue->pop) != 0)
+		if (wait_for_completion_interruptible(&queue->pop))
 			flush_signals(current);
 	}
 
-	/*
-	 * Write to queue->storage must be visible after read from
-	 * queue->read
-	 */
-	smp_mb();
-
 	queue->storage[queue->write & (queue->size - 1)] = header;
-
-	/*
-	 * Write to queue->storage must be visible before write to
-	 * queue->write
-	 */
-	smp_wmb();
-
 	queue->write++;
 
-	up(&queue->push);
+	complete(&queue->push);
 }
 
 VCHIQ_HEADER_T *vchiu_queue_peek(VCHIU_QUEUE_T *queue)
 {
 	while (queue->write == queue->read) {
-		if (down_interruptible(&queue->push) != 0)
+		if (wait_for_completion_interruptible(&queue->push))
 			flush_signals(current);
 	}
 
-	up(&queue->push); // We haven't removed anything from the queue.
-
-	/*
-	 * Read from queue->storage must be visible after read from
-	 * queue->write
-	 */
-	smp_rmb();
+	complete(&queue->push); // We haven't removed anything from the queue.
 
 	return queue->storage[queue->read & (queue->size - 1)];
 }
@@ -126,27 +107,14 @@ VCHIQ_HEADER_T *vchiu_queue_pop(VCHIU_QUEUE_T *queue)
 	VCHIQ_HEADER_T *header;
 
 	while (queue->write == queue->read) {
-		if (down_interruptible(&queue->push) != 0)
+		if (wait_for_completion_interruptible(&queue->push))
 			flush_signals(current);
 	}
 
-	/*
-	 * Read from queue->storage must be visible after read from
-	 * queue->write
-	 */
-	smp_rmb();
-
 	header = queue->storage[queue->read & (queue->size - 1)];
-
-	/*
-	 * Read from queue->storage must be visible before write to
-	 * queue->read
-	 */
-	smp_mb();
-
 	queue->read++;
 
-	up(&queue->pop);
+	complete(&queue->pop);
 
 	return header;
 }

@@ -35,7 +35,7 @@
 #define VCHIQ_CORE_H
 
 #include <linux/mutex.h>
-#include <linux/semaphore.h>
+#include <linux/completion.h>
 #include <linux/kthread.h>
 
 #include "vchiq_cfg.h"
@@ -242,7 +242,6 @@ typedef struct vchiq_bulk_struct {
 	short mode;
 	short dir;
 	void *userdata;
-	VCHI_MEM_HANDLE_T handle;
 	void *data;
 	int size;
 	void *remote_data;
@@ -308,8 +307,8 @@ typedef struct vchiq_service_struct {
 	VCHIQ_BULK_QUEUE_T bulk_tx;
 	VCHIQ_BULK_QUEUE_T bulk_rx;
 
-	struct semaphore remove_event;
-	struct semaphore bulk_remove_event;
+	struct completion remove_event;
+	struct completion bulk_remove_event;
 	struct mutex bulk_mutex;
 
 	struct service_stats_struct {
@@ -338,7 +337,7 @@ typedef struct vchiq_service_quota_struct {
 	unsigned short slot_use_count;
 	unsigned short message_quota;
 	unsigned short message_use_count;
-	struct semaphore quota_event;
+	struct completion quota_event;
 	int previous_tx_index;
 } VCHIQ_SERVICE_QUOTA_T;
 
@@ -401,7 +400,6 @@ struct vchiq_state_struct {
 	int id;
 	int initialised;
 	VCHIQ_CONNSTATE_T conn_state;
-	int is_master;
 	short version_common;
 
 	VCHIQ_SHARED_STATE_T *local;
@@ -412,7 +410,7 @@ struct vchiq_state_struct {
 	unsigned short default_message_quota;
 
 	/* Event indicating connect message received */
-	struct semaphore connect;
+	struct completion connect;
 
 	/* Mutex protecting services */
 	struct mutex mutex;
@@ -428,16 +426,16 @@ struct vchiq_state_struct {
 	struct task_struct *sync_thread;
 
 	/* Local implementation of the trigger remote event */
-	struct semaphore trigger_event;
+	struct completion trigger_event;
 
 	/* Local implementation of the recycle remote event */
-	struct semaphore recycle_event;
+	struct completion recycle_event;
 
 	/* Local implementation of the sync trigger remote event */
-	struct semaphore sync_trigger_event;
+	struct completion sync_trigger_event;
 
 	/* Local implementation of the sync release remote event */
-	struct semaphore sync_release_event;
+	struct completion sync_release_event;
 
 	char *tx_data;
 	char *rx_data;
@@ -483,16 +481,12 @@ struct vchiq_state_struct {
 	int unused_service;
 
 	/* Signalled when a free slot becomes available. */
-	struct semaphore slot_available_event;
+	struct completion slot_available_event;
 
-	struct semaphore slot_remove_event;
+	struct completion slot_remove_event;
 
 	/* Signalled when a free data slot becomes available. */
-	struct semaphore data_quota_event;
-
-	/* Incremented when there are bulk transfers which cannot be processed
-	 * whilst paused and must be processed on resume */
-	int deferred_bulks;
+	struct completion data_quota_event;
 
 	struct state_stats_struct {
 		int slot_stalls;
@@ -511,7 +505,7 @@ struct vchiq_state_struct {
 
 struct bulk_waiter {
 	VCHIQ_BULK_T *bulk;
-	struct semaphore event;
+	struct completion event;
 	int actual;
 };
 
@@ -530,8 +524,7 @@ extern VCHIQ_SLOT_ZERO_T *
 vchiq_init_slots(void *mem_base, int mem_size);
 
 extern VCHIQ_STATUS_T
-vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero,
-	int is_master);
+vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero);
 
 extern VCHIQ_STATUS_T
 vchiq_connect_internal(VCHIQ_STATE_T *state, VCHIQ_INSTANCE_T instance);
@@ -566,9 +559,9 @@ extern void
 remote_event_pollall(VCHIQ_STATE_T *state);
 
 extern VCHIQ_STATUS_T
-vchiq_bulk_transfer(VCHIQ_SERVICE_HANDLE_T handle,
-	VCHI_MEM_HANDLE_T memhandle, void *offset, int size, void *userdata,
-	VCHIQ_BULK_MODE_T mode, VCHIQ_BULK_DIR_T dir);
+vchiq_bulk_transfer(VCHIQ_SERVICE_HANDLE_T handle, void *offset, int size,
+		    void *userdata, VCHIQ_BULK_MODE_T mode,
+		    VCHIQ_BULK_DIR_T dir);
 
 extern void
 vchiq_dump_state(void *dump_context, VCHIQ_STATE_T *state);
@@ -624,11 +617,7 @@ unlock_service(VCHIQ_SERVICE_T *service);
 ** implementations must be provided. */
 
 extern VCHIQ_STATUS_T
-vchiq_prepare_bulk_data(VCHIQ_BULK_T *bulk,
-	VCHI_MEM_HANDLE_T memhandle, void *offset, int size, int dir);
-
-extern void
-vchiq_transfer_bulk(VCHIQ_BULK_T *bulk);
+vchiq_prepare_bulk_data(VCHIQ_BULK_T *bulk, void *offset, int size, int dir);
 
 extern void
 vchiq_complete_bulk(VCHIQ_BULK_T *bulk);

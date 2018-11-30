@@ -36,7 +36,6 @@
 
 #include "interface/vchi/vchi_cfg.h"
 #include "interface/vchi/vchi_common.h"
-#include "vchi_mh.h"
 
 /******************************************************************************
  Global defs
@@ -113,11 +112,6 @@ extern uint32_t vchi_current_time(VCHI_INSTANCE_T instance_handle);
 /******************************************************************************
  Global service API
  *****************************************************************************/
-// Routine to create a named service
-extern int32_t vchi_service_create(VCHI_INSTANCE_T instance_handle,
-				   SERVICE_CREATION_T *setup,
-				   VCHI_SERVICE_HANDLE_T *handle);
-
 // Routine to destroy a service
 extern int32_t vchi_service_destroy(const VCHI_SERVICE_HANDLE_T handle);
 
@@ -244,7 +238,6 @@ extern int32_t vchi_bulk_queue_receive(VCHI_SERVICE_HANDLE_T handle,
 
 // Prepare interface for a transfer from the other side into relocatable memory.
 int32_t vchi_bulk_queue_receive_reloc(const VCHI_SERVICE_HANDLE_T handle,
-				      VCHI_MEM_HANDLE_T h_dst,
 				      uint32_t offset,
 				      uint32_t data_size,
 				      const VCHI_FLAGS_T flags,
@@ -266,7 +259,6 @@ extern int32_t vchi_bulk_queue_transmit(VCHI_SERVICE_HANDLE_T handle,
 #endif
 
 extern int32_t vchi_bulk_queue_transmit_reloc(VCHI_SERVICE_HANDLE_T handle,
-					      VCHI_MEM_HANDLE_T h_src,
 					      uint32_t offset,
 					      uint32_t data_size,
 					      VCHI_FLAGS_T flags,
