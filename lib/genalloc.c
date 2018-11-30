@@ -229,6 +229,51 @@ phys_addr_t gen_pool_virt_to_phys(struct gen_pool *pool, unsigned long addr)
 }
 EXPORT_SYMBOL(gen_pool_virt_to_phys);
 
+static void remove_chunk(struct gen_pool_chunk *chunk, int order)
+{
+	int bit, end_bit;
+
+	end_bit = chunk_size(chunk) >> order;
+	bit = find_next_bit(chunk->bits, end_bit, 0);
+	WARN_ON(bit < end_bit);
+
+	kfree(chunk);
+}
+
+/**
+ * gen_pool_remove_chunk - remove a chunk of memory added with
+ *		gen_pool_add{_virt}()
+ * @pool: pool to remove the memory from
+ * @virt: virtual address of memory to remove
+ *
+ * Remove a specific chunk of memory. Caller is responsible for ensuring
+ * no users of that chunk are left. It is not necessary to remove
+ * the all chunks of memory before calling gen_pool_destroy.
+ */
+void gen_pool_remove_chunk(struct gen_pool *pool, unsigned long virt)
+{
+	struct list_head *_chunk, *_next_chunk;
+	struct gen_pool_chunk *chunk = NULL;
+
+	spin_lock(&pool->lock);
+	list_for_each_safe(_chunk, _next_chunk, &pool->chunks) {
+		chunk = list_entry(_chunk, struct gen_pool_chunk, next_chunk);
+		if (chunk->start_addr == virt) {
+			list_del_rcu(&chunk->next_chunk);
+			break;
+		}
+	}
+	spin_unlock(&pool->lock);
+
+	if (!chunk)
+		return;
+
+	synchronize_rcu();
+
+	remove_chunk(chunk, pool->min_alloc_order);
+}
+EXPORT_SYMBOL(gen_pool_remove_chunk);
+
 /**
  * gen_pool_destroy - destroy a special memory pool
  * @pool: pool to destroy
@@ -240,18 +285,11 @@ void gen_pool_destroy(struct gen_pool *pool)
 {
 	struct list_head *_chunk, *_next_chunk;
 	struct gen_pool_chunk *chunk;
-	int order = pool->min_alloc_order;
-	int bit, end_bit;
 
 	list_for_each_safe(_chunk, _next_chunk, &pool->chunks) {
 		chunk = list_entry(_chunk, struct gen_pool_chunk, next_chunk);
 		list_del(&chunk->next_chunk);
-
-		end_bit = chunk_size(chunk) >> order;
-		bit = find_next_bit(chunk->bits, end_bit, 0);
-		BUG_ON(bit < end_bit);
-
-		kfree(chunk);
+		remove_chunk(chunk, pool->min_alloc_order);
 	}
 	kfree_const(pool->name);
 	kfree(pool);

@@ -114,6 +114,7 @@ static inline int gen_pool_add(struct gen_pool *pool, unsigned long addr,
 {
 	return gen_pool_add_virt(pool, addr, -1, size, nid);
 }
+extern void gen_pool_remove_chunk(struct gen_pool *pool, unsigned long virt);
 extern void gen_pool_destroy(struct gen_pool *);
 extern unsigned long gen_pool_alloc(struct gen_pool *, size_t);
 extern unsigned long gen_pool_alloc_algo(struct gen_pool *, size_t,
