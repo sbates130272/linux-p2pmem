@@ -315,6 +315,7 @@ static void pmem_freeze_queue(struct percpu_ref *ref)
 
 	q = container_of(ref, typeof(*q), q_usage_counter);
 	blk_freeze_queue_start(q);
+	blk_mq_freeze_queue_wait(q);
 }
 
 static void pmem_release_disk(void *__pmem)
