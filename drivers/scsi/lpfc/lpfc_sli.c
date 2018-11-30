@@ -6228,7 +6228,7 @@ lpfc_sli4_ras_dma_alloc(struct lpfc_hba *phba,
 			goto free_mem;
 		}
 
-		dmabuf->virt = dma_alloc_coherent(&phba->pcidev->dev,
+		dmabuf->virt = dma_zalloc_coherent(&phba->pcidev->dev,
 						  LPFC_RAS_MAX_ENTRY_SIZE,
 						  &dmabuf->phys,
 						  GFP_KERNEL);
@@ -6239,7 +6239,6 @@ lpfc_sli4_ras_dma_alloc(struct lpfc_hba *phba,
 					"6187 DMA Alloc Failed FW logging");
 			goto free_mem;
 		}
-		memset(dmabuf->virt, 0, LPFC_RAS_MAX_ENTRY_SIZE);
 		dmabuf->buffer_tag = i;
 		list_add_tail(&dmabuf->list, &ras_fwlog->fwlog_buff_list);
 	}
@@ -7635,7 +7634,18 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 	 */
 	spin_lock_irq(&phba->hbalock);
 	phba->link_state = LPFC_LINK_DOWN;
+
+	/* Check if physical ports are trunked */
+	if (bf_get(lpfc_conf_trunk_port0, &phba->sli4_hba))
+		phba->trunk_link.link0.state = LPFC_LINK_DOWN;
+	if (bf_get(lpfc_conf_trunk_port1, &phba->sli4_hba))
+		phba->trunk_link.link1.state = LPFC_LINK_DOWN;
+	if (bf_get(lpfc_conf_trunk_port2, &phba->sli4_hba))
+		phba->trunk_link.link2.state = LPFC_LINK_DOWN;
+	if (bf_get(lpfc_conf_trunk_port3, &phba->sli4_hba))
+		phba->trunk_link.link3.state = LPFC_LINK_DOWN;
 	spin_unlock_irq(&phba->hbalock);
+
 	if (!(phba->hba_flag & HBA_FCOE_MODE) &&
 	    (phba->hba_flag & LINK_DISABLED)) {
 		lpfc_printf_log(phba, KERN_ERR, LOG_INIT | LOG_SLI,
@@ -18711,15 +18721,8 @@ next_priority:
 			goto initial_priority;
 		lpfc_printf_log(phba, KERN_WARNING, LOG_FIP,
 				"2844 No roundrobin failover FCF available\n");
-		if (next_fcf_index >= LPFC_SLI4_FCF_TBL_INDX_MAX)
-			return LPFC_FCOE_FCF_NEXT_NONE;
-		else {
-			lpfc_printf_log(phba, KERN_WARNING, LOG_FIP,
-				"3063 Only FCF available idx %d, flag %x\n",
-				next_fcf_index,
-			phba->fcf.fcf_pri[next_fcf_index].fcf_rec.flag);
-			return next_fcf_index;
-		}
+
+		return LPFC_FCOE_FCF_NEXT_NONE;
 	}
 
 	if (next_fcf_index < LPFC_SLI4_FCF_TBL_INDX_MAX &&
