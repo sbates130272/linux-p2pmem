@@ -20,10 +20,16 @@
 #include <linux/seq_buf.h>
 
 struct pci_p2pdma {
-	struct percpu_ref devmap_ref;
-	struct completion devmap_ref_done;
 	struct gen_pool *pool;
 	bool p2pmem_published;
+};
+
+struct pci_p2pdma_pagemap {
+	struct dev_pagemap pgmap;
+	struct percpu_ref ref;
+	struct completion ref_released;
+	struct gen_pool *pool;
+	void *virt;
 };
 
 static ssize_t size_show(struct device *dev, struct device_attribute *attr,
@@ -76,24 +82,21 @@ static const struct attribute_group p2pmem_group = {
 
 static void pci_p2pdma_percpu_release(struct percpu_ref *ref)
 {
-	struct pci_p2pdma *p2p =
-		container_of(ref, struct pci_p2pdma, devmap_ref);
+	struct pci_p2pdma_pagemap *pgmap =
+		container_of(ref, struct pci_p2pdma_pagemap, ref);
 
-	complete_all(&p2p->devmap_ref_done);
+	complete_all(&pgmap->ref_released);
 }
 
 static void pci_p2pdma_percpu_kill(struct percpu_ref *ref)
 {
-	/*
-	 * pci_p2pdma_add_resource() may be called multiple times
-	 * by a driver and may register the percpu_kill devm action multiple
-	 * times. We only want the first action to actually kill the
-	 * percpu_ref.
-	 */
-	if (percpu_ref_is_dying(ref))
-		return;
+	struct pci_p2pdma_pagemap *pgmap =
+		container_of(ref, struct pci_p2pdma_pagemap, ref);
 
 	percpu_ref_kill(ref);
+	wait_for_completion(&pgmap->ref_released);
+	gen_pool_remove_chunk(pgmap->pool, (unsigned long)pgmap->virt);
+	percpu_ref_exit(&pgmap->ref);
 }
 
 static void pci_p2pdma_release(void *data)
@@ -102,9 +105,6 @@ static void pci_p2pdma_release(void *data)
 
 	if (!pdev->p2pdma)
 		return;
-
-	wait_for_completion(&pdev->p2pdma->devmap_ref_done);
-	percpu_ref_exit(&pdev->p2pdma->devmap_ref);
 
 	gen_pool_destroy(pdev->p2pdma->pool);
 	sysfs_remove_group(&pdev->dev.kobj, &p2pmem_group);
@@ -123,12 +123,6 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 	p2p->pool = gen_pool_create(PAGE_SHIFT, dev_to_node(&pdev->dev));
 	if (!p2p->pool)
 		goto out;
-
-	init_completion(&p2p->devmap_ref_done);
-	error = percpu_ref_init(&p2p->devmap_ref,
-			pci_p2pdma_percpu_release, 0, GFP_KERNEL);
-	if (error)
-		goto out_pool_destroy;
 
 	error = devm_add_action_or_reset(&pdev->dev, pci_p2pdma_release, pdev);
 	if (error)
@@ -163,7 +157,7 @@ out:
 int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset)
 {
-	struct dev_pagemap *pgmap;
+	struct pci_p2pdma_pagemap *pgmap;
 	void *addr;
 	int error;
 
@@ -189,29 +183,40 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	if (!pgmap)
 		return -ENOMEM;
 
-	pgmap->res.start = pci_resource_start(pdev, bar) + offset;
-	pgmap->res.end = pgmap->res.start + size - 1;
-	pgmap->res.flags = pci_resource_flags(pdev, bar);
-	pgmap->ref = &pdev->p2pdma->devmap_ref;
-	pgmap->type = MEMORY_DEVICE_PCI_P2PDMA;
-	pgmap->pci_p2pdma_bus_offset = pci_bus_address(pdev, bar) -
-		pci_resource_start(pdev, bar);
-	pgmap->kill = pci_p2pdma_percpu_kill;
+	pgmap->pool = pdev->p2pdma->pool;
 
-	addr = devm_memremap_pages(&pdev->dev, pgmap);
+	init_completion(&pgmap->ref_released);
+	error = percpu_ref_init(&pgmap->ref, pci_p2pdma_percpu_release,
+				0, GFP_KERNEL);
+	if (error)
+		goto pgmap_free;
+
+	pgmap->pgmap.res.start = pci_resource_start(pdev, bar) + offset;
+	pgmap->pgmap.res.end = pgmap->pgmap.res.start + size - 1;
+	pgmap->pgmap.res.flags = pci_resource_flags(pdev, bar);
+	pgmap->pgmap.ref = &pgmap->ref;
+	pgmap->pgmap.type = MEMORY_DEVICE_PCI_P2PDMA;
+	pgmap->pgmap.pci_p2pdma_bus_offset = pci_bus_address(pdev, bar) -
+		pci_resource_start(pdev, bar);
+	pgmap->pgmap.kill = pci_p2pdma_percpu_kill;
+
+	addr = devm_memremap_pages(&pdev->dev, &pgmap->pgmap);
 	if (IS_ERR(addr)) {
 		error = PTR_ERR(addr);
 		goto pgmap_free;
 	}
 
+	pgmap->virt = addr;
+
 	error = gen_pool_add_virt(pdev->p2pdma->pool, (unsigned long)addr,
 			pci_bus_address(pdev, bar) + offset,
-			resource_size(&pgmap->res), dev_to_node(&pdev->dev));
+			resource_size(&pgmap->pgmap.res),
+			dev_to_node(&pdev->dev));
 	if (error)
 		goto pgmap_free;
 
 	pci_info(pdev, "added peer-to-peer DMA memory %pR\n",
-		 &pgmap->res);
+		 &pgmap->pgmap.res);
 
 	return 0;
 
@@ -558,13 +563,14 @@ void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size)
 	if (unlikely(!pdev->p2pdma))
 		return NULL;
 
-	if (unlikely(!percpu_ref_tryget_live(&pdev->p2pdma->devmap_ref)))
+	ret = (void *)gen_pool_alloc(pdev->p2pdma->pool, size);
+	if (unlikely(!ret))
 		return NULL;
 
-	ret = (void *)gen_pool_alloc(pdev->p2pdma->pool, size);
-
-	if (unlikely(!ret))
-		percpu_ref_put(&pdev->p2pdma->devmap_ref);
+	if (unlikely(!percpu_ref_tryget_live(virt_to_page(ret)->pgmap->ref))) {
+		gen_pool_free(pdev->p2pdma->pool, (uintptr_t)ret, size);
+		return NULL;
+	}
 
 	return ret;
 }
@@ -579,7 +585,7 @@ EXPORT_SYMBOL_GPL(pci_alloc_p2pmem);
 void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size)
 {
 	gen_pool_free(pdev->p2pdma->pool, (uintptr_t)addr, size);
-	percpu_ref_put(&pdev->p2pdma->devmap_ref);
+	percpu_ref_put(virt_to_page(addr)->pgmap->ref);
 }
 EXPORT_SYMBOL_GPL(pci_free_p2pmem);
 
