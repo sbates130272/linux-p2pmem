@@ -25,12 +25,13 @@ CTRINC:	.octa 0x00000003000000020000000100000000
 
 ENTRY(chacha20_block_xor_ssse3)
 	# %rdi: Input state matrix, s
-	# %rsi: 1 data block output, o
-	# %rdx: 1 data block input, i
+	# %rsi: up to 1 data block output, o
+	# %rdx: up to 1 data block input, i
+	# %rcx: input/output length in bytes
 
 	# This function encrypts one ChaCha20 block by loading the state matrix
 	# in four SSE registers. It performs matrix operation on four words in
-	# parallel, but requireds shuffling to rearrange the words after each
+	# parallel, but requires shuffling to rearrange the words after each
 	# round. 8/16-bit word rotation is done with the slightly better
 	# performing SSSE3 byte shuffling, 7/12-bit word rotation uses
 	# traditional shift+OR.
@@ -48,7 +49,8 @@ ENTRY(chacha20_block_xor_ssse3)
 	movdqa		ROT8(%rip),%xmm4
 	movdqa		ROT16(%rip),%xmm5
 
-	mov	$10,%ecx
+	mov		%rcx,%rax
+	mov		$10,%ecx
 
 .Ldoubleround:
 
@@ -122,33 +124,76 @@ ENTRY(chacha20_block_xor_ssse3)
 	jnz		.Ldoubleround
 
 	# o0 = i0 ^ (x0 + s0)
-	movdqu		0x00(%rdx),%xmm4
 	paddd		%xmm8,%xmm0
+	cmp		$0x10,%rax
+	jl		.Lxorpart
+	movdqu		0x00(%rdx),%xmm4
 	pxor		%xmm4,%xmm0
 	movdqu		%xmm0,0x00(%rsi)
 	# o1 = i1 ^ (x1 + s1)
-	movdqu		0x10(%rdx),%xmm5
 	paddd		%xmm9,%xmm1
-	pxor		%xmm5,%xmm1
-	movdqu		%xmm1,0x10(%rsi)
+	movdqa		%xmm1,%xmm0
+	cmp		$0x20,%rax
+	jl		.Lxorpart
+	movdqu		0x10(%rdx),%xmm0
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x10(%rsi)
 	# o2 = i2 ^ (x2 + s2)
-	movdqu		0x20(%rdx),%xmm6
 	paddd		%xmm10,%xmm2
-	pxor		%xmm6,%xmm2
-	movdqu		%xmm2,0x20(%rsi)
+	movdqa		%xmm2,%xmm0
+	cmp		$0x30,%rax
+	jl		.Lxorpart
+	movdqu		0x20(%rdx),%xmm0
+	pxor		%xmm2,%xmm0
+	movdqu		%xmm0,0x20(%rsi)
 	# o3 = i3 ^ (x3 + s3)
-	movdqu		0x30(%rdx),%xmm7
 	paddd		%xmm11,%xmm3
-	pxor		%xmm7,%xmm3
-	movdqu		%xmm3,0x30(%rsi)
+	movdqa		%xmm3,%xmm0
+	cmp		$0x40,%rax
+	jl		.Lxorpart
+	movdqu		0x30(%rdx),%xmm0
+	pxor		%xmm3,%xmm0
+	movdqu		%xmm0,0x30(%rsi)
 
+.Ldone:
 	ret
+
+.Lxorpart:
+	# xor remaining bytes from partial register into output
+	mov		%rax,%r9
+	and		$0x0f,%r9
+	jz		.Ldone
+	and		$~0x0f,%rax
+
+	mov		%rsi,%r11
+
+	lea		8(%rsp),%r10
+	sub		$0x10,%rsp
+	and		$~31,%rsp
+
+	lea		(%rdx,%rax),%rsi
+	mov		%rsp,%rdi
+	mov		%r9,%rcx
+	rep movsb
+
+	pxor		0x00(%rsp),%xmm0
+	movdqa		%xmm0,0x00(%rsp)
+
+	mov		%rsp,%rsi
+	lea		(%r11,%rax),%rdi
+	mov		%r9,%rcx
+	rep movsb
+
+	lea		-8(%r10),%rsp
+	jmp		.Ldone
+
 ENDPROC(chacha20_block_xor_ssse3)
 
 ENTRY(chacha20_4block_xor_ssse3)
 	# %rdi: Input state matrix, s
-	# %rsi: 4 data blocks output, o
-	# %rdx: 4 data blocks input, i
+	# %rsi: up to 4 data blocks output, o
+	# %rdx: up to 4 data blocks input, i
+	# %rcx: input/output length in bytes
 
 	# This function encrypts four consecutive ChaCha20 blocks by loading the
 	# the state matrix in SSE registers four times. As we need some scratch
@@ -163,6 +208,7 @@ ENTRY(chacha20_4block_xor_ssse3)
 	lea		8(%rsp),%r10
 	sub		$0x80,%rsp
 	and		$~63,%rsp
+	mov		%rcx,%rax
 
 	# x0..15[0-3] = s0..3[0..3]
 	movq		0x00(%rdi),%xmm1
@@ -573,58 +619,143 @@ ENTRY(chacha20_4block_xor_ssse3)
 
 	# xor with corresponding input, write to output
 	movdqa		0x00(%rsp),%xmm0
+	cmp		$0x10,%rax
+	jl		.Lxorpart4
 	movdqu		0x00(%rdx),%xmm1
 	pxor		%xmm1,%xmm0
 	movdqu		%xmm0,0x00(%rsi)
-	movdqa		0x10(%rsp),%xmm0
-	movdqu		0x80(%rdx),%xmm1
+
+	movdqu		%xmm4,%xmm0
+	cmp		$0x20,%rax
+	jl		.Lxorpart4
+	movdqu		0x10(%rdx),%xmm1
 	pxor		%xmm1,%xmm0
-	movdqu		%xmm0,0x80(%rsi)
+	movdqu		%xmm0,0x10(%rsi)
+
+	movdqu		%xmm8,%xmm0
+	cmp		$0x30,%rax
+	jl		.Lxorpart4
+	movdqu		0x20(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x20(%rsi)
+
+	movdqu		%xmm12,%xmm0
+	cmp		$0x40,%rax
+	jl		.Lxorpart4
+	movdqu		0x30(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x30(%rsi)
+
 	movdqa		0x20(%rsp),%xmm0
+	cmp		$0x50,%rax
+	jl		.Lxorpart4
 	movdqu		0x40(%rdx),%xmm1
 	pxor		%xmm1,%xmm0
 	movdqu		%xmm0,0x40(%rsi)
+
+	movdqu		%xmm6,%xmm0
+	cmp		$0x60,%rax
+	jl		.Lxorpart4
+	movdqu		0x50(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x50(%rsi)
+
+	movdqu		%xmm10,%xmm0
+	cmp		$0x70,%rax
+	jl		.Lxorpart4
+	movdqu		0x60(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x60(%rsi)
+
+	movdqu		%xmm14,%xmm0
+	cmp		$0x80,%rax
+	jl		.Lxorpart4
+	movdqu		0x70(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x70(%rsi)
+
+	movdqa		0x10(%rsp),%xmm0
+	cmp		$0x90,%rax
+	jl		.Lxorpart4
+	movdqu		0x80(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x80(%rsi)
+
+	movdqu		%xmm5,%xmm0
+	cmp		$0xa0,%rax
+	jl		.Lxorpart4
+	movdqu		0x90(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0x90(%rsi)
+
+	movdqu		%xmm9,%xmm0
+	cmp		$0xb0,%rax
+	jl		.Lxorpart4
+	movdqu		0xa0(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0xa0(%rsi)
+
+	movdqu		%xmm13,%xmm0
+	cmp		$0xc0,%rax
+	jl		.Lxorpart4
+	movdqu		0xb0(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0xb0(%rsi)
+
 	movdqa		0x30(%rsp),%xmm0
+	cmp		$0xd0,%rax
+	jl		.Lxorpart4
 	movdqu		0xc0(%rdx),%xmm1
 	pxor		%xmm1,%xmm0
 	movdqu		%xmm0,0xc0(%rsi)
-	movdqu		0x10(%rdx),%xmm1
-	pxor		%xmm1,%xmm4
-	movdqu		%xmm4,0x10(%rsi)
-	movdqu		0x90(%rdx),%xmm1
-	pxor		%xmm1,%xmm5
-	movdqu		%xmm5,0x90(%rsi)
-	movdqu		0x50(%rdx),%xmm1
-	pxor		%xmm1,%xmm6
-	movdqu		%xmm6,0x50(%rsi)
-	movdqu		0xd0(%rdx),%xmm1
-	pxor		%xmm1,%xmm7
-	movdqu		%xmm7,0xd0(%rsi)
-	movdqu		0x20(%rdx),%xmm1
-	pxor		%xmm1,%xmm8
-	movdqu		%xmm8,0x20(%rsi)
-	movdqu		0xa0(%rdx),%xmm1
-	pxor		%xmm1,%xmm9
-	movdqu		%xmm9,0xa0(%rsi)
-	movdqu		0x60(%rdx),%xmm1
-	pxor		%xmm1,%xmm10
-	movdqu		%xmm10,0x60(%rsi)
-	movdqu		0xe0(%rdx),%xmm1
-	pxor		%xmm1,%xmm11
-	movdqu		%xmm11,0xe0(%rsi)
-	movdqu		0x30(%rdx),%xmm1
-	pxor		%xmm1,%xmm12
-	movdqu		%xmm12,0x30(%rsi)
-	movdqu		0xb0(%rdx),%xmm1
-	pxor		%xmm1,%xmm13
-	movdqu		%xmm13,0xb0(%rsi)
-	movdqu		0x70(%rdx),%xmm1
-	pxor		%xmm1,%xmm14
-	movdqu		%xmm14,0x70(%rsi)
-	movdqu		0xf0(%rdx),%xmm1
-	pxor		%xmm1,%xmm15
-	movdqu		%xmm15,0xf0(%rsi)
 
+	movdqu		%xmm7,%xmm0
+	cmp		$0xe0,%rax
+	jl		.Lxorpart4
+	movdqu		0xd0(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0xd0(%rsi)
+
+	movdqu		%xmm11,%xmm0
+	cmp		$0xf0,%rax
+	jl		.Lxorpart4
+	movdqu		0xe0(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0xe0(%rsi)
+
+	movdqu		%xmm15,%xmm0
+	cmp		$0x100,%rax
+	jl		.Lxorpart4
+	movdqu		0xf0(%rdx),%xmm1
+	pxor		%xmm1,%xmm0
+	movdqu		%xmm0,0xf0(%rsi)
+
+.Ldone4:
 	lea		-8(%r10),%rsp
 	ret
+
+.Lxorpart4:
+	# xor remaining bytes from partial register into output
+	mov		%rax,%r9
+	and		$0x0f,%r9
+	jz		.Ldone4
+	and		$~0x0f,%rax
+
+	mov		%rsi,%r11
+
+	lea		(%rdx,%rax),%rsi
+	mov		%rsp,%rdi
+	mov		%r9,%rcx
+	rep movsb
+
+	pxor		0x00(%rsp),%xmm0
+	movdqa		%xmm0,0x00(%rsp)
+
+	mov		%rsp,%rsi
+	lea		(%r11,%rax),%rdi
+	mov		%r9,%rcx
+	rep movsb
+
+	jmp		.Ldone4
+
 ENDPROC(chacha20_4block_xor_ssse3)

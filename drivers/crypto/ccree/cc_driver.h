@@ -36,12 +36,13 @@
 extern bool cc_dump_desc;
 extern bool cc_dump_bytes;
 
-#define DRV_MODULE_VERSION "4.0"
+#define DRV_MODULE_VERSION "5.0"
 
 enum cc_hw_rev {
 	CC_HW_REV_630 = 630,
 	CC_HW_REV_710 = 710,
-	CC_HW_REV_712 = 712
+	CC_HW_REV_712 = 712,
+	CC_HW_REV_713 = 713
 };
 
 #define CC_COHERENT_CACHE_PARAMS 0xEEE
@@ -127,7 +128,6 @@ struct cc_drvdata {
 	bool coherent;
 	char *hw_rev_name;
 	enum cc_hw_rev hw_rev;
-	u32 hash_len_sz;
 	u32 axim_mon_offset;
 	u32 sig_offset;
 	u32 ver_offset;
@@ -182,6 +182,7 @@ int init_cc_regs(struct cc_drvdata *drvdata, bool is_probe);
 void fini_cc_regs(struct cc_drvdata *drvdata);
 int cc_clk_on(struct cc_drvdata *drvdata);
 void cc_clk_off(struct cc_drvdata *drvdata);
+unsigned int cc_get_default_hash_len(struct cc_drvdata *drvdata);
 
 static inline void cc_iowrite(struct cc_drvdata *drvdata, u32 reg, u32 val)
 {
