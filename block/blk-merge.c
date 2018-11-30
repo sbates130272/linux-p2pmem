@@ -596,17 +596,6 @@ int ll_front_merge_fn(struct request_queue *q, struct request *req,
 	return ll_new_hw_segment(q, req, bio);
 }
 
-/*
- * blk-mq uses req->special to carry normal driver per-request payload, it
- * does not indicate a prepared command that we cannot merge with.
- */
-static bool req_no_special_merge(struct request *req)
-{
-	struct request_queue *q = req->q;
-
-	return !q->mq_ops && req->special;
-}
-
 static bool req_attempt_discard_merge(struct request_queue *q, struct request *req,
 		struct request *next)
 {
@@ -631,13 +620,6 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 	int total_phys_segments;
 	unsigned int seg_size =
 		req->biotail->bi_seg_back_size + next->bio->bi_seg_front_size;
-
-	/*
-	 * First check if the either of the requests are re-queued
-	 * requests.  Can't merge them if they are.
-	 */
-	if (req_no_special_merge(req) || req_no_special_merge(next))
-		return 0;
 
 	if (req_gap_back_merge(req, next->bio))
 		return 0;
@@ -731,7 +713,8 @@ static inline bool blk_discard_mergable(struct request *req)
 	return false;
 }
 
-enum elv_merge blk_try_req_merge(struct request *req, struct request *next)
+static enum elv_merge blk_try_req_merge(struct request *req,
+					struct request *next)
 {
 	if (blk_discard_mergable(req))
 		return ELEVATOR_DISCARD_MERGE;
@@ -748,9 +731,6 @@ enum elv_merge blk_try_req_merge(struct request *req, struct request *next)
 static struct request *attempt_merge(struct request_queue *q,
 				     struct request *req, struct request *next)
 {
-	if (!q->mq_ops)
-		lockdep_assert_held(q->queue_lock);
-
 	if (!rq_mergeable(req) || !rq_mergeable(next))
 		return NULL;
 
@@ -758,8 +738,7 @@ static struct request *attempt_merge(struct request_queue *q,
 		return NULL;
 
 	if (rq_data_dir(req) != rq_data_dir(next)
-	    || req->rq_disk != next->rq_disk
-	    || req_no_special_merge(next))
+	    || req->rq_disk != next->rq_disk)
 		return NULL;
 
 	if (req_op(req) == REQ_OP_WRITE_SAME &&
@@ -771,6 +750,9 @@ static struct request *attempt_merge(struct request_queue *q,
 	 * non-hint IO.
 	 */
 	if (req->write_hint != next->write_hint)
+		return NULL;
+
+	if (req->ioprio != next->ioprio)
 		return NULL;
 
 	/*
@@ -828,10 +810,6 @@ static struct request *attempt_merge(struct request_queue *q,
 	 */
 	blk_account_io_merge(next);
 
-	req->ioprio = ioprio_best(req->ioprio, next->ioprio);
-	if (blk_rq_cpu_valid(next))
-		req->cpu = next->cpu;
-
 	/*
 	 * ownership of bio passed from next to req, return 'next' for
 	 * the caller to free
@@ -863,16 +841,11 @@ struct request *attempt_front_merge(struct request_queue *q, struct request *rq)
 int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 			  struct request *next)
 {
-	struct elevator_queue *e = q->elevator;
 	struct request *free;
-
-	if (!e->uses_mq && e->type->ops.sq.elevator_allow_rq_merge_fn)
-		if (!e->type->ops.sq.elevator_allow_rq_merge_fn(q, rq, next))
-			return 0;
 
 	free = attempt_merge(q, rq, next);
 	if (free) {
-		__blk_put_request(q, free);
+		blk_put_request(free);
 		return 1;
 	}
 
@@ -891,8 +864,8 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	if (bio_data_dir(bio) != rq_data_dir(rq))
 		return false;
 
-	/* must be same device and not a special request */
-	if (rq->rq_disk != bio->bi_disk || req_no_special_merge(rq))
+	/* must be same device */
+	if (rq->rq_disk != bio->bi_disk)
 		return false;
 
 	/* only merge integrity protected bio into ditto rq */
@@ -909,6 +882,9 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	 * non-hint IO.
 	 */
 	if (rq->write_hint != bio->bi_write_hint)
+		return false;
+
+	if (rq->ioprio != bio_prio(bio))
 		return false;
 
 	return true;
