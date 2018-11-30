@@ -128,13 +128,13 @@ static void rq_end_stats(struct mapped_device *md, struct request *orig)
  * the md may be freed in dm_put() at the end of this function.
  * Or do dm_get() before calling this function and dm_put() later.
  */
-static void rq_completed(struct mapped_device *md, int rw, bool run_queue)
+static void rq_completed(struct mapped_device *md)
 {
-	atomic_dec(&md->pending[rw]);
-
 	/* nudge anyone waiting on suspend queue */
-	if (!md_in_flight(md))
-		wake_up(&md->wait);
+	if (unlikely(waitqueue_active(&md->wait))) {
+		if (!blk_mq_queue_busy(md->queue))
+			wake_up(&md->wait);
+	}
 
 	/*
 	 * dm_put() must be at the end of this function. See the comment above
@@ -149,7 +149,6 @@ static void rq_completed(struct mapped_device *md, int rw, bool run_queue)
  */
 static void dm_end_request(struct request *clone, blk_status_t error)
 {
-	int rw = rq_data_dir(clone);
 	struct dm_rq_target_io *tio = clone->end_io_data;
 	struct mapped_device *md = tio->md;
 	struct request *rq = tio->orig;
@@ -159,7 +158,7 @@ static void dm_end_request(struct request *clone, blk_status_t error)
 
 	rq_end_stats(md, rq);
 	blk_mq_end_request(rq, error);
-	rq_completed(md, rw, true);
+	rq_completed(md);
 }
 
 static void __dm_mq_kick_requeue_list(struct request_queue *q, unsigned long msecs)
@@ -183,7 +182,6 @@ static void dm_requeue_original_request(struct dm_rq_target_io *tio, bool delay_
 {
 	struct mapped_device *md = tio->md;
 	struct request *rq = tio->orig;
-	int rw = rq_data_dir(rq);
 	unsigned long delay_ms = delay_requeue ? 100 : 0;
 
 	rq_end_stats(md, rq);
@@ -193,7 +191,7 @@ static void dm_requeue_original_request(struct dm_rq_target_io *tio, bool delay_
 	}
 
 	dm_mq_delay_requeue_request(rq, delay_ms);
-	rq_completed(md, rw, false);
+	rq_completed(md);
 }
 
 static void dm_done(struct request *clone, blk_status_t error, bool mapped)
@@ -248,15 +246,13 @@ static void dm_softirq_done(struct request *rq)
 	bool mapped = true;
 	struct dm_rq_target_io *tio = tio_from_request(rq);
 	struct request *clone = tio->clone;
-	int rw;
 
 	if (!clone) {
 		struct mapped_device *md = tio->md;
 
 		rq_end_stats(md, rq);
-		rw = rq_data_dir(rq);
 		blk_mq_end_request(rq, tio->error);
-		rq_completed(md, rw, false);
+		rq_completed(md);
 		return;
 	}
 
@@ -436,7 +432,6 @@ ssize_t dm_attr_rq_based_seq_io_merge_deadline_store(struct mapped_device *md,
 static void dm_start_request(struct mapped_device *md, struct request *orig)
 {
 	blk_mq_start_request(orig);
-	atomic_inc(&md->pending[rq_data_dir(orig)]);
 
 	if (unlikely(dm_stats_used(&md->stats))) {
 		struct dm_rq_target_io *tio = tio_from_request(orig);
@@ -510,7 +505,7 @@ static blk_status_t dm_mq_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (map_request(tio) == DM_MAPIO_REQUEUE) {
 		/* Undo dm_start_request() before requeuing */
 		rq_end_stats(md, rq);
-		rq_completed(md, rq_data_dir(rq), false);
+		rq_completed(md);
 		return BLK_STS_RESOURCE;
 	}
 

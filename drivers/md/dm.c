@@ -648,23 +648,19 @@ static void free_tio(struct dm_target_io *tio)
 
 int md_in_flight(struct mapped_device *md)
 {
-	return atomic_read(&md->pending[READ]) +
-	       atomic_read(&md->pending[WRITE]);
+	return atomic_read(&dm_disk(md)->part0.in_flight[READ]) +
+	       atomic_read(&dm_disk(md)->part0.in_flight[WRITE]);
 }
 
 static void start_io_acct(struct dm_io *io)
 {
 	struct mapped_device *md = io->md;
 	struct bio *bio = io->orig_bio;
-	int rw = bio_data_dir(bio);
 
 	io->start_time = jiffies;
 
 	generic_start_io_acct(md->queue, bio_op(bio), bio_sectors(bio),
 			      &dm_disk(md)->part0);
-
-	atomic_set(&dm_disk(md)->part0.in_flight[rw],
-		   atomic_inc_return(&md->pending[rw]));
 
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
@@ -677,28 +673,30 @@ static void end_io_acct(struct dm_io *io)
 	struct mapped_device *md = io->md;
 	struct bio *bio = io->orig_bio;
 	unsigned long duration = jiffies - io->start_time;
-	int pending;
-	int rw = bio_data_dir(bio);
 
+	/*
+	 * make sure that atomic_dec in generic_end_io_acct is not reordered
+	 * with previous writes
+	 */
+	smp_mb__before_atomic();
 	generic_end_io_acct(md->queue, bio_op(bio), &dm_disk(md)->part0,
 			    io->start_time);
+	/*
+	 * generic_end_io_acct does atomic_dec, this barrier makes sure that
+	 * atomic_dec is not reordered with waitqueue_active
+	 */
+	smp_mb__after_atomic();
 
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
 				    bio->bi_iter.bi_sector, bio_sectors(bio),
 				    true, duration, &io->stats_aux);
 
-	/*
-	 * After this is decremented the bio must not be touched if it is
-	 * a flush.
-	 */
-	pending = atomic_dec_return(&md->pending[rw]);
-	atomic_set(&dm_disk(md)->part0.in_flight[rw], pending);
-	pending += atomic_read(&md->pending[rw^0x1]);
-
 	/* nudge anyone waiting on suspend queue */
-	if (!pending)
-		wake_up(&md->wait);
+	if (unlikely(waitqueue_active(&md->wait))) {
+		if (!md_in_flight(md))
+			wake_up(&md->wait);
+	}
 }
 
 /*
@@ -1685,8 +1683,7 @@ out:
 
 typedef blk_qc_t (process_bio_fn)(struct mapped_device *, struct dm_table *, struct bio *);
 
-static blk_qc_t __dm_make_request(struct request_queue *q, struct bio *bio,
-				  process_bio_fn process_bio)
+static blk_qc_t dm_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct mapped_device *md = q->queuedata;
 	blk_qc_t ret = BLK_QC_T_NONE;
@@ -1706,24 +1703,13 @@ static blk_qc_t __dm_make_request(struct request_queue *q, struct bio *bio,
 		return ret;
 	}
 
-	ret = process_bio(md, map, bio);
+	if (dm_get_md_type(md) == DM_TYPE_NVME_BIO_BASED)
+		ret = __process_bio(md, map, bio);
+	else
+		ret = __split_and_process_bio(md, map, bio);
 
 	dm_put_live_table(md, srcu_idx);
 	return ret;
-}
-
-/*
- * The request function that remaps the bio to one target and
- * splits off any remainder.
- */
-static blk_qc_t dm_make_request(struct request_queue *q, struct bio *bio)
-{
-	return __dm_make_request(q, bio, __split_and_process_bio);
-}
-
-static blk_qc_t dm_make_request_nvme(struct request_queue *q, struct bio *bio)
-{
-	return __dm_make_request(q, bio, __process_bio);
 }
 
 static int dm_any_congested(void *congested_data, int bdi_bits)
@@ -1906,8 +1892,6 @@ static struct mapped_device *alloc_dev(int minor)
 	if (!md->disk)
 		goto bad;
 
-	atomic_set(&md->pending[0], 0);
-	atomic_set(&md->pending[1], 0);
 	init_waitqueue_head(&md->wait);
 	INIT_WORK(&md->work, dm_wq_work);
 	init_waitqueue_head(&md->eventq);
@@ -2219,12 +2203,9 @@ int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 		break;
 	case DM_TYPE_BIO_BASED:
 	case DM_TYPE_DAX_BIO_BASED:
-		dm_init_normal_md_queue(md);
-		blk_queue_make_request(md->queue, dm_make_request);
-		break;
 	case DM_TYPE_NVME_BIO_BASED:
 		dm_init_normal_md_queue(md);
-		blk_queue_make_request(md->queue, dm_make_request_nvme);
+		blk_queue_make_request(md->queue, dm_make_request);
 		break;
 	case DM_TYPE_NONE:
 		WARN_ON_ONCE(true);
