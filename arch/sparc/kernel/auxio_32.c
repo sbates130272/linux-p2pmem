@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/export.h>
+#include <linux/numa.h>
 
 #include <asm/oplib.h>
 #include <asm/io.h>
@@ -120,7 +121,7 @@ void __init auxio_power_probe(void)
 	node = prom_searchsiblings(node, "obio");
 	node = prom_getchild(node);
 	node = prom_searchsiblings(node, "power");
-	if (node == 0 || (s32)node == -1)
+	if (node == 0 || (s32)node == NUMA_NO_NODE)
 		return;
 
 	/* Map the power control register. */

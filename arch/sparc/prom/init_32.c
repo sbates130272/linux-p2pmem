@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/numa.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -58,7 +59,7 @@ void __init prom_init(struct linux_romvec *rp)
 	prom_nodeops = romvec->pv_nodeops;
 
 	prom_root_node = prom_getsibling(0);
-	if ((prom_root_node == 0) || ((s32)prom_root_node == -1))
+	if ((prom_root_node == 0) || ((s32)prom_root_node == NUMA_NO_NODE))
 		prom_halt();
 
 	if((((unsigned long) prom_nodeops) == 0) || 

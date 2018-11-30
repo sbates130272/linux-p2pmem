@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/numa.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -36,13 +37,13 @@ void __init prom_init(void *cif_handler)
 	prom_cif_init(cif_handler);
 
 	prom_chosen_node = prom_finddevice(prom_chosen_path);
-	if (!prom_chosen_node || (s32)prom_chosen_node == -1)
+	if (!prom_chosen_node || (s32)prom_chosen_node == NUMA_NO_NODE)
 		prom_halt();
 
 	prom_stdout = prom_getint(prom_chosen_node, "stdout");
 
 	node = prom_finddevice("/openprom");
-	if (!node || (s32)node == -1)
+	if (!node || (s32)node == NUMA_NO_NODE)
 		prom_halt();
 
 	prom_getstring(node, "version", prom_version, sizeof(prom_version));

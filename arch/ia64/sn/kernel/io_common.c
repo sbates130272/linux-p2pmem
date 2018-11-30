@@ -9,6 +9,7 @@
 #include <linux/memblock.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/numa.h>
 #include <asm/sn/types.h>
 #include <asm/sn/addrs.h>
 #include <asm/sn/sn_feature_sets.h>
@@ -344,7 +345,7 @@ sn_common_bus_fixup(struct pci_bus *bus,
 		printk(KERN_WARNING "on node %d but only %d nodes online."
 		       "Association set to undetermined.\n",
 		       controller->node, num_online_nodes());
-		controller->node = -1;
+		controller->node = NUMA_NO_NODE;
 	}
 }
 
