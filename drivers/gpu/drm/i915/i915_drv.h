@@ -53,6 +53,7 @@
 #include <drm/drm_auth.h>
 #include <drm/drm_cache.h>
 #include <drm/drm_util.h>
+#include <drm/drm_dsc.h>
 
 #include "i915_fixed.h"
 #include "i915_params.h"
@@ -504,6 +505,8 @@ struct i915_psr {
 	u8 sink_sync_latency;
 	ktime_t last_entry_attempt;
 	ktime_t last_exit;
+	bool sink_not_reliable;
+	bool irq_aux_error;
 };
 
 enum intel_pch {
@@ -1093,9 +1096,6 @@ static inline bool skl_ddb_entry_equal(const struct skl_ddb_entry *e1,
 }
 
 struct skl_ddb_allocation {
-	/* packed/y */
-	struct skl_ddb_entry plane[I915_MAX_PIPES][I915_MAX_PLANES];
-	struct skl_ddb_entry uv_plane[I915_MAX_PIPES][I915_MAX_PLANES];
 	u8 enabled_slices; /* GEN11 has configurable 2 slices */
 };
 
@@ -3340,6 +3340,9 @@ extern void intel_rps_mark_interactive(struct drm_i915_private *i915,
 				       bool interactive);
 extern bool intel_set_memory_cxsr(struct drm_i915_private *dev_priv,
 				  bool enable);
+void intel_dsc_enable(struct intel_encoder *encoder,
+		      const struct intel_crtc_state *crtc_state);
+void intel_dsc_disable(const struct intel_crtc_state *crtc_state);
 
 int i915_reg_read_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
