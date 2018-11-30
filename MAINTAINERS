@@ -1427,6 +1427,7 @@ F:	arch/arm/mach-ep93xx/micro9.c
 
 ARM/CORESIGHT FRAMEWORK AND DRIVERS
 M:	Mathieu Poirier <mathieu.poirier@linaro.org>
+R:	Suzuki K Poulose <suzuki.poulose@arm.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	drivers/hwtracing/coresight/*
@@ -16132,7 +16133,7 @@ F:	drivers/vme/
 F:	include/linux/vme*
 
 VMWARE BALLOON DRIVER
-M:	Xavier Deguillard <xdeguillard@vmware.com>
+M:	Julien Freche <jfreche@vmware.com>
 M:	Nadav Amit <namit@vmware.com>
 M:	"VMware, Inc." <pv-drivers@vmware.com>
 L:	linux-kernel@vger.kernel.org
