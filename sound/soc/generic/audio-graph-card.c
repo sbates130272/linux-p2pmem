@@ -36,6 +36,11 @@ struct graph_card_data {
 	struct gpio_desc *pa_gpio;
 };
 
+#define graph_priv_to_card(priv) (&(priv)->snd_card)
+#define graph_priv_to_props(priv, i) ((priv)->dai_props + (i))
+#define graph_priv_to_dev(priv) (graph_priv_to_card(priv)->dev)
+#define graph_priv_to_link(priv, i) (graph_priv_to_card(priv)->dai_link + (i))
+
 static int asoc_graph_card_outdrv_event(struct snd_soc_dapm_widget *w,
 					struct snd_kcontrol *kcontrol,
 					int event)
@@ -62,11 +67,6 @@ static const struct snd_soc_dapm_widget asoc_graph_card_dapm_widgets[] = {
 			       0, 0, NULL, 0, asoc_graph_card_outdrv_event,
 			       SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
 };
-
-#define graph_priv_to_card(priv) (&(priv)->snd_card)
-#define graph_priv_to_props(priv, i) ((priv)->dai_props + (i))
-#define graph_priv_to_dev(priv) (graph_priv_to_card(priv)->dev)
-#define graph_priv_to_link(priv, i) (graph_priv_to_card(priv)->dai_link + (i))
 
 static int asoc_graph_card_startup(struct snd_pcm_substream *substream)
 {
@@ -167,15 +167,7 @@ static int asoc_graph_card_dai_link_of(struct device_node *cpu_port,
 	struct asoc_simple_dai *codec_dai = &dai_props->codec_dai;
 	struct device_node *cpu_ep    = of_get_next_child(cpu_port, NULL);
 	struct device_node *codec_ep = of_graph_get_remote_endpoint(cpu_ep);
-	struct device_node *rcpu_ep = of_graph_get_remote_endpoint(codec_ep);
 	int ret;
-
-	if (rcpu_ep != cpu_ep) {
-		dev_err(dev, "remote-endpoint mismatch (%s/%s/%s)\n",
-			cpu_ep->name, codec_ep->name, rcpu_ep->name);
-		ret = -EINVAL;
-		goto dai_link_of_err;
-	}
 
 	ret = asoc_simple_card_parse_daifmt(dev, cpu_ep, codec_ep,
 					    NULL, &dai_link->dai_fmt);
@@ -228,7 +220,6 @@ static int asoc_graph_card_dai_link_of(struct device_node *cpu_port,
 
 dai_link_of_err:
 	of_node_put(cpu_ep);
-	of_node_put(rcpu_ep);
 	of_node_put(codec_ep);
 
 	return ret;
@@ -247,7 +238,7 @@ static int asoc_graph_card_parse_of(struct graph_card_data *priv)
 	if (ret < 0)
 		return ret;
 
-	ret = asoc_simple_card_of_parse_routing(card, NULL, 1);
+	ret = asoc_simple_card_of_parse_routing(card, NULL);
 	if (ret < 0)
 		return ret;
 

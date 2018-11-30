@@ -29,6 +29,7 @@ struct graph_card_data {
 		struct asoc_simple_dai dai;
 		struct snd_soc_dai_link_component codecs;
 		struct snd_soc_dai_link_component platform;
+		struct asoc_simple_card_data adata;
 	} *dai_props;
 	struct snd_soc_dai_link *dai_link;
 	struct asoc_simple_card_data adata;
@@ -38,6 +39,8 @@ struct graph_card_data {
 #define graph_priv_to_props(priv, i) ((priv)->dai_props + (i))
 #define graph_priv_to_dev(priv) (graph_priv_to_card(priv)->dev)
 #define graph_priv_to_link(priv, i) (graph_priv_to_card(priv)->dai_link + (i))
+
+#define PREFIX	"audio-graph-card,"
 
 static int asoc_graph_card_startup(struct snd_pcm_substream *substream)
 {
@@ -83,21 +86,27 @@ static int asoc_graph_card_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					       struct snd_pcm_hw_params *params)
 {
 	struct graph_card_data *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct graph_dai_props *dai_props = graph_priv_to_props(priv, rtd->num);
 
+	asoc_simple_card_convert_fixup(&dai_props->adata, params);
+
+	/* overwrite by top level adata if exist */
 	asoc_simple_card_convert_fixup(&priv->adata, params);
 
 	return 0;
 }
 
-static int asoc_graph_card_dai_link_of(struct device_node *ep,
+static int asoc_graph_card_dai_link_of(struct device_node *cpu_ep,
+				       struct device_node *codec_ep,
 				       struct graph_card_data *priv,
-				       unsigned int daifmt,
 				       int idx, int is_fe)
 {
 	struct device *dev = graph_priv_to_dev(priv);
 	struct snd_soc_dai_link *dai_link = graph_priv_to_link(priv, idx);
 	struct graph_dai_props *dai_props = graph_priv_to_props(priv, idx);
 	struct snd_soc_card *card = graph_priv_to_card(priv);
+	struct device_node *ep = is_fe ? cpu_ep : codec_ep;
+	struct device_node *node = of_graph_get_port_parent(ep);
 	int ret;
 
 	if (is_fe) {
@@ -154,11 +163,20 @@ static int asoc_graph_card_dai_link_of(struct device_node *ep,
 		if (ret < 0)
 			return ret;
 
+		/* check "prefix" from top node */
 		snd_soc_of_parse_audio_prefix(card,
 					      &priv->codec_conf,
 					      dai_link->codecs->of_node,
 					      "prefix");
+		/* check "prefix" from each node if top doesn't have */
+		if (!priv->codec_conf.of_node)
+			snd_soc_of_parse_node_prefix(node,
+						     &priv->codec_conf,
+						     dai_link->codecs->of_node,
+						     PREFIX "prefix");
 	}
+
+	asoc_simple_card_parse_convert(dev, node, PREFIX, &dai_props->adata);
 
 	ret = asoc_simple_card_of_parse_tdm(ep, &dai_props->dai);
 	if (ret)
@@ -168,7 +186,11 @@ static int asoc_graph_card_dai_link_of(struct device_node *ep,
 	if (ret < 0)
 		return ret;
 
-	dai_link->dai_fmt		= daifmt;
+	ret = asoc_simple_card_parse_daifmt(dev, cpu_ep, codec_ep,
+					    NULL, &dai_link->dai_fmt);
+	if (ret < 0)
+		return ret;
+
 	dai_link->dpcm_playback		= 1;
 	dai_link->dpcm_capture		= 1;
 	dai_link->ops			= &asoc_graph_card_ops;
@@ -186,10 +208,8 @@ static int asoc_graph_card_parse_of(struct graph_card_data *priv)
 	struct device_node *cpu_port;
 	struct device_node *cpu_ep;
 	struct device_node *codec_ep;
-	struct device_node *rcpu_ep;
 	struct device_node *codec_port;
 	struct device_node *codec_port_old;
-	unsigned int daifmt = 0;
 	int dai_idx, ret;
 	int rc, codec;
 
@@ -201,45 +221,16 @@ static int asoc_graph_card_parse_of(struct graph_card_data *priv)
 	 * see simple-card
 	 */
 
-	ret = asoc_simple_card_of_parse_routing(card, NULL, 0);
+	ret = asoc_simple_card_of_parse_routing(card, NULL);
 	if (ret < 0)
 		return ret;
 
-	asoc_simple_card_parse_convert(dev, NULL, &priv->adata);
+	asoc_simple_card_parse_convert(dev, node, NULL, &priv->adata);
 
 	/*
 	 * it supports multi CPU, single CODEC only here
 	 * see asoc_graph_get_dais_count
 	 */
-
-	/* find 1st codec */
-	of_for_each_phandle(&it, rc, node, "dais", NULL, 0) {
-		cpu_port = it.node;
-		cpu_ep   = of_get_next_child(cpu_port, NULL);
-		codec_ep = of_graph_get_remote_endpoint(cpu_ep);
-		rcpu_ep  = of_graph_get_remote_endpoint(codec_ep);
-
-		of_node_put(cpu_ep);
-		of_node_put(codec_ep);
-		of_node_put(rcpu_ep);
-
-		if (!codec_ep)
-			continue;
-
-		if (rcpu_ep != cpu_ep) {
-			dev_err(dev, "remote-endpoint missmatch (%s/%s/%s)\n",
-				cpu_ep->name, codec_ep->name, rcpu_ep->name);
-			ret = -EINVAL;
-			goto parse_of_err;
-		}
-
-		ret = asoc_simple_card_parse_daifmt(dev, cpu_ep, codec_ep,
-							    NULL, &daifmt);
-		if (ret < 0) {
-			of_node_put(cpu_port);
-			goto parse_of_err;
-		}
-	}
 
 	dai_idx = 0;
 	codec_port_old = NULL;
@@ -257,31 +248,22 @@ static int asoc_graph_card_parse_of(struct graph_card_data *priv)
 
 			of_node_put(cpu_ep);
 			of_node_put(codec_ep);
+			of_node_put(cpu_port);
 			of_node_put(codec_port);
+			it.node = NULL;
 
 			if (codec) {
-				if (!codec_port)
-					continue;
-
 				if (codec_port_old == codec_port)
 					continue;
 
 				codec_port_old = codec_port;
-
-				/* Back-End (= Codec) */
-				ret = asoc_graph_card_dai_link_of(codec_ep, priv, daifmt, dai_idx++, 0);
-				if (ret < 0) {
-					of_node_put(cpu_port);
-					goto parse_of_err;
-				}
-			} else {
-				/* Front-End (= CPU) */
-				ret = asoc_graph_card_dai_link_of(cpu_ep, priv, daifmt, dai_idx++, 1);
-				if (ret < 0) {
-					of_node_put(cpu_port);
-					goto parse_of_err;
-				}
 			}
+
+			ret = asoc_graph_card_dai_link_of(cpu_ep, codec_ep,
+							  priv, dai_idx++,
+							  !codec);
+			if (ret < 0)
+				goto parse_of_err;
 		}
 	}
 
@@ -318,11 +300,7 @@ static int asoc_graph_get_dais_count(struct device *dev)
 		of_node_put(codec_ep);
 		of_node_put(codec_port);
 
-		if (cpu_ep)
-			count++;
-
-		if (!codec_port)
-			continue;
+		count++;
 
 		if (codec_port_old == codec_port)
 			continue;
