@@ -3133,7 +3133,7 @@ static int selinux_sb_get_tree(struct fs_context *fc)
 		return rc;
 
 	/* Allow all mounts performed by the kernel */
-	if (fc->purpose == FS_CONTEXT_FOR_KERNEL_MOUNT)
+	if (fc->purpose == (FS_CONTEXT_FOR_KERNEL_MOUNT|FS_CONTEXT_FOR_SUBMOUNT))
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
