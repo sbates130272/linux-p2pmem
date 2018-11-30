@@ -38,22 +38,14 @@ static void dax_pmem_percpu_release(struct percpu_ref *ref)
 	complete(&dax_pmem->cmp);
 }
 
-static void dax_pmem_percpu_exit(void *data)
-{
-	struct percpu_ref *ref = data;
-	struct dax_pmem *dax_pmem = to_dax_pmem(ref);
-
-	dev_dbg(dax_pmem->dev, "trace\n");
-	wait_for_completion(&dax_pmem->cmp);
-	percpu_ref_exit(ref);
-}
-
 static void dax_pmem_percpu_kill(struct percpu_ref *ref)
 {
 	struct dax_pmem *dax_pmem = to_dax_pmem(ref);
 
 	dev_dbg(dax_pmem->dev, "trace\n");
 	percpu_ref_kill(ref);
+	wait_for_completion(&dax_pmem->cmp);
+	percpu_ref_exit(ref);
 }
 
 static int dax_pmem_probe(struct device *dev)
@@ -103,12 +95,6 @@ static int dax_pmem_probe(struct device *dev)
 			GFP_KERNEL);
 	if (rc)
 		return rc;
-
-	rc = devm_add_action(dev, dax_pmem_percpu_exit, &dax_pmem->ref);
-	if (rc) {
-		percpu_ref_exit(&dax_pmem->ref);
-		return rc;
-	}
 
 	dax_pmem->pgmap.ref = &dax_pmem->ref;
 	dax_pmem->pgmap.kill = dax_pmem_percpu_kill;
