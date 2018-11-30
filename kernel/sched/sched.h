@@ -23,6 +23,7 @@
 #include <linux/sched/prio.h>
 #include <linux/sched/rt.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/smt.h>
 #include <linux/sched/stat.h>
 #include <linux/sched/sysctl.h>
 #include <linux/sched/task.h>
@@ -174,6 +175,11 @@ static inline bool valid_policy(int policy)
 {
 	return idle_policy(policy) || fair_policy(policy) ||
 		rt_policy(policy) || dl_policy(policy);
+}
+
+static inline int task_has_idle_policy(struct task_struct *p)
+{
+	return idle_policy(p->policy);
 }
 
 static inline int task_has_rt_policy(struct task_struct *p)
@@ -936,9 +942,6 @@ static inline int cpu_of(struct rq *rq)
 
 
 #ifdef CONFIG_SCHED_SMT
-
-extern struct static_key_false sched_smt_present;
-
 extern void __update_idle_core(struct rq *rq);
 
 static inline void update_idle_core(struct rq *rq)
@@ -1796,12 +1799,12 @@ static inline void add_nr_running(struct rq *rq, unsigned count)
 
 	rq->nr_running = prev_nr + count;
 
-	if (prev_nr < 2 && rq->nr_running >= 2) {
 #ifdef CONFIG_SMP
+	if (prev_nr < 2 && rq->nr_running >= 2) {
 		if (!READ_ONCE(rq->rd->overload))
 			WRITE_ONCE(rq->rd->overload, 1);
-#endif
 	}
+#endif
 
 	sched_update_tick_dependency(rq);
 }
