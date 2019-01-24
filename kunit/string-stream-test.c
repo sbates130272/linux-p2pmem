@@ -19,7 +19,7 @@ static void string_stream_test_get_string(struct kunit *test)
 	stream->add(stream, " %s", "bar");
 
 	output = stream->get_string(stream);
-	KUNIT_EXPECT_STREQ(test, output, "Foo bar");
+	KUNIT_ASSERT_STREQ(test, output, "Foo bar");
 	kfree(output);
 	destroy_string_stream(stream);
 }
@@ -34,16 +34,16 @@ static void string_stream_test_add_and_clear(struct kunit *test)
 		stream->add(stream, "A");
 
 	output = stream->get_string(stream);
-	KUNIT_EXPECT_STREQ(test, output, "AAAAAAAAAA");
-	KUNIT_EXPECT_EQ(test, stream->length, 10);
-	KUNIT_EXPECT_FALSE(test, stream->is_empty(stream));
+	KUNIT_ASSERT_STREQ(test, output, "AAAAAAAAAA");
+	KUNIT_ASSERT_EQ(test, stream->length, 10);
+	KUNIT_ASSERT_FALSE(test, stream->is_empty(stream));
 	kfree(output);
 
 	stream->clear(stream);
 
 	output = stream->get_string(stream);
-	KUNIT_EXPECT_STREQ(test, output, "");
-	KUNIT_EXPECT_TRUE(test, stream->is_empty(stream));
+	KUNIT_ASSERT_STREQ(test, output, "");
+	KUNIT_ASSERT_TRUE(test, stream->is_empty(stream));
 	destroy_string_stream(stream);
 }
 
