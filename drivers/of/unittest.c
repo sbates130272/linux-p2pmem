@@ -2527,6 +2527,9 @@ static int __init of_unittest(void)
 	}
 	of_node_put(np);
 
+	if (IS_ENABLED(CONFIG_UML))
+		unflatten_device_tree();
+
 	pr_info("start of unittest - you will see error messages\n");
 	of_unittest_check_tree_linkage();
 	of_unittest_check_phandles();
