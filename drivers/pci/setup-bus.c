@@ -1229,21 +1229,20 @@ void __pci_bus_size_bridges(struct pci_bus *bus, struct list_head *realloc_head)
 		prefmask = IORESOURCE_MEM | IORESOURCE_PREFETCH;
 		if (b_res[2].flags & IORESOURCE_MEM_64) {
 			prefmask |= IORESOURCE_MEM_64;
-			ret = pbus_size_mem(bus, prefmask, prefmask,
+			pbus_size_mem(bus, prefmask, prefmask,
 				  prefmask, prefmask,
 				  realloc_head ? 0 : additional_mem_size,
 				  additional_mem_size, realloc_head);
 
 			/*
-			 * If successful, all non-prefetchable resources
-			 * and any 32-bit prefetchable resources will go in
-			 * the non-prefetchable window.
+			 * Given the existence of a 64-bit resource for this
+			 * bus, all non-prefetchable resources and any 32-bit
+			 * prefetchable resources will go in the
+			 * non-prefetchable window.
 			 */
-			if (ret == 0) {
-				mask = prefmask;
-				type2 = prefmask & ~IORESOURCE_MEM_64;
-				type3 = prefmask & ~IORESOURCE_PREFETCH;
-			}
+			mask = prefmask;
+			type2 = prefmask & ~IORESOURCE_MEM_64;
+			type3 = prefmask & ~IORESOURCE_PREFETCH;
 		}
 
 		/*
