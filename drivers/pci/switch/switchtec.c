@@ -317,8 +317,14 @@ static ssize_t field ## _show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
 { \
 	struct switchtec_dev *stdev = to_stdev(dev); \
-	return io_string_show(buf, &stdev->mmio_sys_info->gen3.field, \
-			    sizeof(stdev->mmio_sys_info->gen3.field)); \
+	struct sys_info_regs __iomem *si = stdev->mmio_sys_info; \
+	\
+	if (stdev->gen == SWITCHTEC_GEN4) \
+		return io_string_show(buf, &si->gen4.field, \
+				      sizeof(si->gen4.field)); \
+	else \
+		return io_string_show(buf, &si->gen3.field, \
+				      sizeof(si->gen3.field)); \
 } \
 \
 static DEVICE_ATTR_RO(field)
@@ -326,13 +332,31 @@ static DEVICE_ATTR_RO(field)
 DEVICE_ATTR_SYS_INFO_STR(vendor_id);
 DEVICE_ATTR_SYS_INFO_STR(product_id);
 DEVICE_ATTR_SYS_INFO_STR(product_revision);
-DEVICE_ATTR_SYS_INFO_STR(component_vendor);
+
+static ssize_t component_vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct switchtec_dev *stdev = to_stdev(dev);
+	struct sys_info_regs __iomem *si = stdev->mmio_sys_info;
+
+	/* component_vendor field not supported after gen4 */
+	if (stdev->gen != SWITCHTEC_GEN3)
+		return sprintf(buf, "none\n");
+
+	return io_string_show(buf, &si->gen3.component_vendor,
+			      sizeof(si->gen3.component_vendor));
+}
+static DEVICE_ATTR_RO(component_vendor);
 
 static ssize_t component_id_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
 	int id = ioread16(&stdev->mmio_sys_info->gen3.component_id);
+
+	/* component_id field not supported after gen4 */
+	if (stdev->gen != SWITCHTEC_GEN3)
+		return sprintf(buf, "none\n");
 
 	return sprintf(buf, "PM%04X\n", id);
 }
@@ -343,6 +367,10 @@ static ssize_t component_revision_show(struct device *dev,
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
 	int rev = ioread8(&stdev->mmio_sys_info->gen3.component_revision);
+
+	/* component_revision field not supported after gen4 */
+	if (stdev->gen != SWITCHTEC_GEN3)
+		return sprintf(buf, "255\n");
 
 	return sprintf(buf, "%d\n", rev);
 }
@@ -1344,6 +1372,7 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	int rc;
 	void __iomem *map;
 	unsigned long res_start, res_len;
+	u32 __iomem *part_id;
 
 	rc = pcim_enable_device(pdev);
 	if (rc)
@@ -1378,7 +1407,11 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	stdev->mmio_sys_info = stdev->mmio + SWITCHTEC_GAS_SYS_INFO_OFFSET;
 	stdev->mmio_flash_info = stdev->mmio + SWITCHTEC_GAS_FLASH_INFO_OFFSET;
 	stdev->mmio_ntb = stdev->mmio + SWITCHTEC_GAS_NTB_OFFSET;
-	stdev->partition = ioread8(&stdev->mmio_sys_info->gen3.partition_id);
+	if (stdev->gen == SWITCHTEC_GEN4)
+		part_id = &stdev->mmio_sys_info->gen4.partition_id;
+	else
+		part_id = &stdev->mmio_sys_info->gen3.partition_id;
+	stdev->partition = ioread32(part_id);
 	stdev->partition_count = ioread8(&stdev->mmio_ntb->partition_count);
 	stdev->mmio_part_cfg_all = stdev->mmio + SWITCHTEC_GAS_PART_CFG_OFFSET;
 	stdev->mmio_part_cfg = &stdev->mmio_part_cfg_all[stdev->partition];
