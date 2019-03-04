@@ -1744,6 +1744,24 @@ static enum enable_type pci_realloc_detect(struct pci_bus *bus,
 }
 #endif
 
+static void unassign_qemu_device_hack(struct pci_bus *bus)
+{
+	struct device *dev;
+	struct pci_dev *pdev;
+
+	dev = bus_find_device_by_name(&pci_bus_type, NULL, "0000:03:00.0");
+	if (!dev)
+		return;
+
+	pdev = to_pci_dev(dev);
+
+	pci_info(pdev, "---Releasing BAR 2\n");
+	release_resource(&pdev->resource[2]);
+
+	pci_bus_release_bridge_resources(bus, IORESOURCE_PREFETCH,
+					 whole_subtree);
+}
+
 /*
  * first try will not touch pci bridge res
  * second and later try will clear small leaf bridge res
@@ -1760,6 +1778,8 @@ void pci_assign_unassigned_root_bus_resources(struct pci_bus *bus)
 	struct pci_dev_resource *fail_res;
 	int pci_try_num = 1;
 	enum enable_type enable_local;
+
+	unassign_qemu_device_hack(bus);
 
 	/* don't realloc if asked to do so */
 	enable_local = pci_realloc_detect(bus, pci_realloc_enable);
