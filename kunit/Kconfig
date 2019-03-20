@@ -25,4 +25,12 @@ config KUNIT_EXAMPLE_TEST
 	help
 	  Enables example KUnit test to demo features of KUnit.
 
+config KUNIT_NTB_TEST
+	bool "NTB Unit Tests"
+	depends on KUNIT
+	help
+	  Unit tests for the NTB framework based on KUnit. Tests many
+	  of the common helper functions for calculating port numbers and
+	  resource indices.
+
 endmenu
