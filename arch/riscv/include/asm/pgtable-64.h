@@ -67,6 +67,8 @@ static inline unsigned long pud_page_vaddr(pud_t pud)
 }
 
 #define pmd_index(addr) (((addr) >> PMD_SHIFT) & (PTRS_PER_PMD - 1))
+#define pud_index(addr) (((addr) >> PUD_SHIFT) & (PTRS_PER_PUD - 1))
+#define p4d_index(addr) (((addr) >> P4D_SHIFT) & (PTRS_PER_P4D - 1))
 
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 {
