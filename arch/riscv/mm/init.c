@@ -331,8 +331,8 @@ static void __meminit free_pmd_table(pmd_t *pmd_start, pud_t *pud)
 	spin_unlock(&init_mm.page_table_lock);
 }
 
-static void __meminit
-remove_pte_table(pte_t *pte_start, unsigned long addr, unsigned long end)
+static void __meminit remove_pte_table(pte_t *pte_start, unsigned long addr,
+				       unsigned long end)
 {
 	unsigned long next;
 	pte_t *pte;
@@ -356,8 +356,8 @@ remove_pte_table(pte_t *pte_start, unsigned long addr, unsigned long end)
 	flush_tlb_all();
 }
 
-static void __meminit
-remove_pmd_table(pmd_t *pmd_start, unsigned long addr, unsigned long end)
+static void __meminit remove_pmd_table(pmd_t *pmd_start, unsigned long addr,
+				       unsigned long end)
 {
 	unsigned long next;
 	pte_t *pte_base;
@@ -396,8 +396,8 @@ remove_pud_table(pud_t *pud_start, unsigned long addr, unsigned long end)
 	}
 }
 
-static void __meminit
-remove_p4d_table(p4d_t *p4d_start, unsigned long addr, unsigned long end)
+static void __meminit remove_p4d_table(p4d_t *p4d_start, unsigned long addr,
+				       unsigned long end)
 {
 	unsigned long next;
 	pud_t *pud_base;
@@ -416,8 +416,7 @@ remove_p4d_table(p4d_t *p4d_start, unsigned long addr, unsigned long end)
 }
 
 /* start and end are both virtual address. */
-static void __meminit
-remove_pagetable(unsigned long start, unsigned long end)
+static void __meminit remove_pagetable(unsigned long start, unsigned long end)
 {
 	unsigned long next;
 	unsigned long addr;
