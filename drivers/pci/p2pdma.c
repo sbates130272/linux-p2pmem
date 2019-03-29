@@ -106,15 +106,16 @@ static void pci_p2pdma_percpu_cleanup(struct percpu_ref *ref)
 static void pci_p2pdma_release(void *data)
 {
 	struct pci_dev *pdev = data;
+	struct pci_p2pdma *p2pdma = pdev->p2pdma;
 
-	if (!pdev->p2pdma)
+	if (!p2pdma)
 		return;
 
 	/* Flush and disable pci_alloc_p2p_mem() */
 	pdev->p2pdma = NULL;
 	synchronize_rcu();
 
-	gen_pool_destroy(pdev->p2pdma->pool);
+	gen_pool_destroy(p2pdma->pool);
 	sysfs_remove_group(&pdev->dev.kobj, &p2pmem_group);
 }
 
