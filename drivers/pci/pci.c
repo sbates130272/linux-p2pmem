@@ -3125,7 +3125,17 @@ void pci_request_acs(void)
 	pci_acs_enable = 1;
 }
 
-static const char *disable_acs_redir_param;
+static char disable_acs_redir_param[COMMAND_LINE_SIZE];
+
+static void pci_set_disable_acs_redir_param(const char *param)
+{
+	if (strlen(param) >= sizeof(disable_acs_redir_param)) {
+		pr_err("PCI: disable_acs_redir parameter is too long and has been ignored!\n");
+		return;
+	}
+
+	strcpy(disable_acs_redir_param, param);
+}
 
 /**
  * pci_disable_acs_redir - disable ACS redirect capabilities
@@ -3140,7 +3150,7 @@ static void pci_disable_acs_redir(struct pci_dev *dev)
 	int pos;
 	u16 ctrl;
 
-	if (!disable_acs_redir_param)
+	if (!disable_acs_redir_param[0])
 		return;
 
 	p = disable_acs_redir_param;
@@ -6262,8 +6272,7 @@ static int __init pci_setup(char *str)
 			} else if (!strncmp(str, "pcie_scan_all", 13)) {
 				pci_add_flags(PCI_SCAN_ALL_PCIE_DEVS);
 			} else if (!strncmp(str, "disable_acs_redir=", 18)) {
-				disable_acs_redir_param =
-					kstrdup(str + 18, GFP_KERNEL);
+				pci_set_disable_acs_redir_param(str + 18);
 			} else {
 				printk(KERN_ERR "PCI: Unknown option `%s'\n",
 						str);
