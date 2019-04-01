@@ -23,6 +23,7 @@
 #include <asm/tlbflush.h>
 #include <asm/sections.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/io.h>
 
 unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)]
@@ -443,6 +444,170 @@ void vmemmap_free(unsigned long start, unsigned long end,
 	remove_pagetable(start, end);
 }
 
+static void add_pte_pagetable(pmd_t *pmd, unsigned long virt, unsigned long end,
+			      phys_addr_t phys, pgprot_t prot)
+{
+	pte_t entry, *pte;
+
+	for (; virt < end; virt += PAGE_SIZE, phys += PAGE_SIZE) {
+		pte = pte_offset_kernel(pmd, virt);
+
+		if (pte_none(*pte)) {
+			pr_info("XX PTE %lx %pa[p]\n", virt, &phys);
+			entry = pfn_pte(phys >> PAGE_SHIFT, prot);
+			set_pte_at(&init_mm, virt, pte, entry);
+		}
+	}
+}
+
+static int add_pmd_pagetable(pud_t *pud, unsigned long virt, unsigned long end,
+			     phys_addr_t phys, int node, pgprot_t prot)
+{
+	unsigned long next;
+	pmd_t *pmd;
+	void *p;
+
+	while (virt < end) {
+		next = pmd_addr_end(virt, end);
+		pmd = pmd_offset(pud, virt);
+
+		if (pmd_none(*pmd)) {
+			if (next - virt >= PMD_SIZE) {
+				pr_info("XX PMD %lx %pa[p]\n", virt, &phys);
+				*pmd = pfn_pmd(phys >> PAGE_SHIFT, prot);
+				goto next;
+			} else {
+				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+				if (!p)
+					return -ENOMEM;
+				pmd_populate_kernel(&init_mm, pmd, p);
+			}
+		}
+
+		add_pte_pagetable(pmd, virt, next, phys, prot);
+
+next:
+		phys += next - virt;
+		virt = next;
+	}
+
+	return 0;
+}
+
+static int add_pud_pagetable(p4d_t *p4d, unsigned long virt, unsigned long end,
+			     phys_addr_t phys, int node, pgprot_t prot)
+{
+	unsigned long next;
+	pud_t *pud;
+	void *p;
+	int ret;
+
+	while (virt < end) {
+		next = pud_addr_end(virt, end);
+		pud = pud_offset(p4d, virt);
+
+		if (pud_none(*pud)) {
+			if (next - virt >= PUD_SIZE) {
+				pr_info("XX PUD %lx %pa[p]\n", virt, &phys);
+				*pud = pfn_pud(phys >> PAGE_SHIFT, prot);
+				goto next;
+			} else {
+				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+				if (!p)
+					return -ENOMEM;
+				pud_populate(&init_mm, pud, p);
+			}
+		}
+
+		ret = add_pmd_pagetable(pud, virt, next, phys, node, prot);
+		if (ret)
+			return ret;
+
+next:
+		phys += next - virt;
+		virt = next;
+	}
+
+	return 0;
+}
+
+static int add_p4d_pagetable(pgd_t *pgd, unsigned long virt, unsigned long end,
+			     phys_addr_t phys, int node, pgprot_t prot)
+{
+	unsigned long next;
+	p4d_t *p4d;
+	void *p;
+	int ret;
+
+	while (virt < end) {
+		next = p4d_addr_end(virt, end);
+		p4d = p4d_offset(pgd, virt);
+
+		if (p4d_none(*p4d)) {
+			if (next - virt >= P4D_SIZE) {
+				pr_info("XX P4D %lx %pa[p]\n", virt, &phys);
+				*p4d = pfn_p4d(phys >> PAGE_SHIFT, prot);
+				goto next;
+			} else {
+				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+				if (!p)
+					return -ENOMEM;
+				p4d_populate(&init_mm, p4d, p);
+			}
+		}
+
+		ret = add_pud_pagetable(p4d, virt, next, phys, node, prot);
+		if (ret)
+			return ret;
+
+next:
+		phys += next - virt;
+		virt = next;
+	}
+
+	return 0;
+}
+
+static int __meminit add_pagetable(unsigned long virt, phys_addr_t phys,
+				   unsigned long size, int node, pgprot_t prot)
+{
+	unsigned long end = virt + size;
+	unsigned long next;
+	pgd_t *pgd;
+	void *p;
+	int ret;
+
+	while (virt < end) {
+		next = pgd_addr_end(virt, end);
+		pgd = pgd_offset_k(virt);
+
+		if (pgd_none(*pgd)) {
+			if (next - virt >= PGDIR_SIZE) {
+				pr_info("XX PGD %lx %pa[p]\n", virt, &phys);
+				*pgd = pfn_pgd(phys >> PAGE_SHIFT, prot);
+				goto next;
+			} else {
+				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+				if (!p)
+					return -ENOMEM;
+				pgd_populate(&init_mm, pgd, p);
+			}
+		}
+
+		ret = add_p4d_pagetable(pgd, virt, next, phys, node, prot);
+		if (ret)
+			return ret;
+
+next:
+		phys += next - virt;
+		virt = next;
+	}
+
+	flush_tlb_all();
+
+	return 0;
+}
+
 int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
 		    bool want_memblock)
 {
@@ -455,6 +620,11 @@ int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
 		       start, start + size);
 		return -EFAULT;
 	}
+
+	ret = add_pagetable((unsigned long)__va(start), start, size, nid,
+			    __pgprot(pgprot_val(PAGE_KERNEL) | _PAGE_EXEC));
+	if (ret)
+		return ret;
 
 	ret = __add_pages(nid, start_pfn, nr_pages, altmap, want_memblock);
 	WARN_ON_ONCE(ret);
