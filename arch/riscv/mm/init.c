@@ -269,6 +269,8 @@ asmlinkage void __init setup_vm(void)
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 			       struct vmem_altmap *altmap)
 {
+	pr_info("YY vmemmap_populate %lx %lx\n", start, end);
+
 	return vmemmap_populate_basepages(start, end, node);
 }
 #endif
@@ -353,8 +355,6 @@ static void __meminit remove_pte_table(pte_t *pte_start, unsigned long addr,
 		pte_clear(&init_mm, addr, pte);
 		spin_unlock(&init_mm.page_table_lock);
 	}
-
-	flush_tlb_all();
 }
 
 static void __meminit remove_pmd_table(pmd_t *pmd_start, unsigned long addr,
@@ -371,9 +371,13 @@ static void __meminit remove_pmd_table(pmd_t *pmd_start, unsigned long addr,
 		if (!pmd_present(*pmd))
 			continue;
 
-		pte_base = (pte_t *)pmd_page_vaddr(*pmd);
-		remove_pte_table(pte_base, addr, next);
-		free_pte_table(pte_base, pmd);
+		if (pmd_val(*pmd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC)) {
+			pmd_clear(pmd);
+		} else {
+			pte_base = (pte_t *)pmd_page_vaddr(*pmd);
+			remove_pte_table(pte_base, addr, next);
+			free_pte_table(pte_base, pmd);
+		}
 	}
 }
 
@@ -384,6 +388,7 @@ remove_pud_table(pud_t *pud_start, unsigned long addr, unsigned long end)
 	pmd_t *pmd_base;
 	pud_t *pud;
 
+
 	pud = pud_start + pud_index(addr);
 	for (; addr < end; addr = next, pud++) {
 		next = pud_addr_end(addr, end);
@@ -391,9 +396,14 @@ remove_pud_table(pud_t *pud_start, unsigned long addr, unsigned long end)
 		if (!pud_present(*pud))
 			continue;
 
-		pmd_base = pmd_offset(pud, 0);
-		remove_pmd_table(pmd_base, addr, next);
-		free_pmd_table(pmd_base, pud);
+		if (pud_val(*pud) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC)) {
+			pud_clear(pud);
+		} else {
+			pmd_base = pmd_offset(pud, 0);
+			remove_pmd_table(pmd_base, addr, next);
+			free_pmd_table(pmd_base, pud);
+		}
+
 	}
 }
 
@@ -424,6 +434,8 @@ static void __meminit remove_pagetable(unsigned long start, unsigned long end)
 	pgd_t *pgd;
 	p4d_t *p4d;
 
+	pr_info("YY remove_pagetable %lx %lx\n", start, end);
+
 	for (addr = start; addr < end; addr = next) {
 		next = pgd_addr_end(addr, end);
 
@@ -453,9 +465,10 @@ static void add_pte_pagetable(pmd_t *pmd, unsigned long virt, unsigned long end,
 		pte = pte_offset_kernel(pmd, virt);
 
 		if (pte_none(*pte)) {
-			pr_info("XX PTE %lx %pa[p]\n", virt, &phys);
 			entry = pfn_pte(phys >> PAGE_SHIFT, prot);
+			spin_lock(&init_mm.page_table_lock);
 			set_pte_at(&init_mm, virt, pte, entry);
+			spin_unlock(&init_mm.page_table_lock);
 		}
 	}
 }
@@ -464,7 +477,7 @@ static int add_pmd_pagetable(pud_t *pud, unsigned long virt, unsigned long end,
 			     phys_addr_t phys, int node, pgprot_t prot)
 {
 	unsigned long next;
-	pmd_t *pmd;
+	pmd_t entry, *pmd;
 	void *p;
 
 	while (virt < end) {
@@ -473,8 +486,8 @@ static int add_pmd_pagetable(pud_t *pud, unsigned long virt, unsigned long end,
 
 		if (pmd_none(*pmd)) {
 			if (next - virt >= PMD_SIZE) {
-				pr_info("XX PMD %lx %pa[p]\n", virt, &phys);
-				*pmd = pfn_pmd(phys >> PAGE_SHIFT, prot);
+				entry = pfn_pmd(phys >> PAGE_SHIFT, prot);
+				set_pmd(pmd, entry);
 				goto next;
 			} else {
 				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
@@ -483,6 +496,9 @@ static int add_pmd_pagetable(pud_t *pud, unsigned long virt, unsigned long end,
 				pmd_populate_kernel(&init_mm, pmd, p);
 			}
 		}
+
+		if (pmd_val(*pmd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+			goto next;
 
 		add_pte_pagetable(pmd, virt, next, phys, prot);
 
@@ -498,7 +514,7 @@ static int add_pud_pagetable(p4d_t *p4d, unsigned long virt, unsigned long end,
 			     phys_addr_t phys, int node, pgprot_t prot)
 {
 	unsigned long next;
-	pud_t *pud;
+	pud_t entry, *pud;
 	void *p;
 	int ret;
 
@@ -506,18 +522,22 @@ static int add_pud_pagetable(p4d_t *p4d, unsigned long virt, unsigned long end,
 		next = pud_addr_end(virt, end);
 		pud = pud_offset(p4d, virt);
 
-		if (pud_none(*pud)) {
+	if (pud_none(*pud)) {
 			if (next - virt >= PUD_SIZE) {
-				pr_info("XX PUD %lx %pa[p]\n", virt, &phys);
-				*pud = pfn_pud(phys >> PAGE_SHIFT, prot);
+				entry = pfn_pud(phys >> PAGE_SHIFT, prot);
+				set_pud(pud, entry);
 				goto next;
 			} else {
 				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
 				if (!p)
 					return -ENOMEM;
+				pr_info("XX PUD %px %lx\n", p, virt_to_phys(p));
 				pud_populate(&init_mm, pud, p);
 			}
 		}
+
+		if (pud_val(*pud) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+			goto next;
 
 		ret = add_pmd_pagetable(pud, virt, next, phys, node, prot);
 		if (ret)
@@ -535,7 +555,7 @@ static int add_p4d_pagetable(pgd_t *pgd, unsigned long virt, unsigned long end,
 			     phys_addr_t phys, int node, pgprot_t prot)
 {
 	unsigned long next;
-	p4d_t *p4d;
+	p4d_t entry, *p4d;
 	void *p;
 	int ret;
 
@@ -545,8 +565,8 @@ static int add_p4d_pagetable(pgd_t *pgd, unsigned long virt, unsigned long end,
 
 		if (p4d_none(*p4d)) {
 			if (next - virt >= P4D_SIZE) {
-				pr_info("XX P4D %lx %pa[p]\n", virt, &phys);
-				*p4d = pfn_p4d(phys >> PAGE_SHIFT, prot);
+				entry = pfn_p4d(phys >> PAGE_SHIFT, prot);
+				set_p4d(p4d, entry);
 				goto next;
 			} else {
 				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
@@ -555,6 +575,9 @@ static int add_p4d_pagetable(pgd_t *pgd, unsigned long virt, unsigned long end,
 				p4d_populate(&init_mm, p4d, p);
 			}
 		}
+
+		if (p4d_val(*p4d) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+			goto next;
 
 		ret = add_pud_pagetable(p4d, virt, next, phys, node, prot);
 		if (ret)
@@ -573,9 +596,11 @@ static int __meminit add_pagetable(unsigned long virt, phys_addr_t phys,
 {
 	unsigned long end = virt + size;
 	unsigned long next;
-	pgd_t *pgd;
+	pgd_t entry, *pgd;
 	void *p;
 	int ret;
+
+	pr_info("YY add_pagetable %lx %pa[p] %lx\n", virt, &phys, size);
 
 	while (virt < end) {
 		next = pgd_addr_end(virt, end);
@@ -583,8 +608,8 @@ static int __meminit add_pagetable(unsigned long virt, phys_addr_t phys,
 
 		if (pgd_none(*pgd)) {
 			if (next - virt >= PGDIR_SIZE) {
-				pr_info("XX PGD %lx %pa[p]\n", virt, &phys);
-				*pgd = pfn_pgd(phys >> PAGE_SHIFT, prot);
+				entry = pfn_pgd(phys >> PAGE_SHIFT, prot);
+				set_pgd(pgd, entry);
 				goto next;
 			} else {
 				p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
@@ -593,6 +618,9 @@ static int __meminit add_pagetable(unsigned long virt, phys_addr_t phys,
 				pgd_populate(&init_mm, pgd, p);
 			}
 		}
+
+		if (pgd_val(*pgd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+			goto next;
 
 		ret = add_p4d_pagetable(pgd, virt, next, phys, node, prot);
 		if (ret)
@@ -603,9 +631,60 @@ next:
 		virt = next;
 	}
 
+	local_flush_tlb_all();
 	flush_tlb_all();
 
 	return 0;
+}
+
+static void dump_pagetable(unsigned long virt)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pr_info("XX dump addr: %lx\n", virt);
+
+	pgd = pgd_offset_k(virt);
+	pr_info("XX dump PGD: %lx\n", pgd_val(*pgd));
+
+	if (!pgd_present(*pgd))
+	    return;
+
+	if (pgd_val(*pgd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+		return;
+
+	p4d = p4d_offset(pgd, virt);
+	pr_info("XX dump P4D: %lx\n", p4d_val(*p4d));
+
+	if (!p4d_present(*p4d))
+	    return;
+
+	if (p4d_val(*p4d) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+		return;
+
+	pud = pud_offset(p4d, virt);
+	pr_info("XX dump PUD: %lx\n", pud_val(*pud));
+
+	if (!pud_present(*pud))
+	    return;
+
+	if (pud_val(*pud) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+		return;
+
+	pmd = pmd_offset(pud, virt);
+	pr_info("XX dump PMD: %lx\n", pmd_val(*pmd));
+
+	if (!pmd_present(*pmd))
+	    return;
+
+	if (pmd_val(*pmd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
+		return;
+
+	pte = pte_offset_kernel(pmd, virt);
+	pr_info("XX dump PTE: %lx\n", pte_val(*pte));
 }
 
 int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
@@ -621,6 +700,13 @@ int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
 		return -EFAULT;
 	}
 
+	pr_info("XX slab: %d\n", slab_is_available());
+
+	pr_info("XX PRE-ADD\n");
+	dump_pagetable((unsigned long)__va(start));
+	dump_pagetable((unsigned long)phys_to_page(start));
+	pr_info("XX --\n");
+
 	ret = add_pagetable((unsigned long)__va(start), start, size, nid,
 			    __pgprot(pgprot_val(PAGE_KERNEL) | _PAGE_EXEC));
 	if (ret)
@@ -628,6 +714,15 @@ int arch_add_memory(int nid, u64 start, u64 size, struct vmem_altmap *altmap,
 
 	ret = __add_pages(nid, start_pfn, nr_pages, altmap, want_memblock);
 	WARN_ON_ONCE(ret);
+
+	pr_info("XX POST-ADD\n");
+	dump_pagetable((unsigned long)__va(start));
+	dump_pagetable((unsigned long)phys_to_page(start));
+	pr_info("XX --\n");
+
+	pr_info("XX read_va: %lx\n", *(unsigned long *)__va(start));
+	pr_info("XX page: %lx\n", (unsigned long)phys_to_page(start));
+	pr_info("XX read_page: %lx\n", *(unsigned long *)phys_to_page(start));
 
 	return ret;
 }
@@ -642,11 +737,24 @@ int __ref arch_remove_memory(int nid, u64 start, u64 size,
 	struct zone *zone;
 	int ret;
 
+	pr_info("XX PRE-DEL\n");
+	dump_pagetable((unsigned long)__va(start));
+	dump_pagetable((unsigned long)phys_to_page(start));
+	pr_info("XX --\n");
+
 	if (altmap)
 		page += vmem_altmap_offset(altmap);
 	zone = page_zone(page);
 	ret = __remove_pages(zone, start_pfn, nr_pages, altmap);
 	WARN_ON_ONCE(ret);
+
+/*	remove_pagetable((unsigned long)__va(start),
+			 (unsigned long)__va(start) + size);*/
+
+	pr_info("XX POST-DEL\n");
+	dump_pagetable((unsigned long)__va(start));
+	dump_pagetable((unsigned long)phys_to_page(start));
+	pr_info("XX --\n");
 
 	return ret;
 }
