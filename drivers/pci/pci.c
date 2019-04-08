@@ -5896,9 +5896,7 @@ resource_size_t __weak pcibios_default_alignment(void)
 	return 0;
 }
 
-#define RESOURCE_ALIGNMENT_PARAM_SIZE COMMAND_LINE_SIZE
-static char resource_alignment_param[RESOURCE_ALIGNMENT_PARAM_SIZE] = {0};
-static DEFINE_SPINLOCK(resource_alignment_lock);
+static const char __rcu *resource_alignment_param;
 
 /**
  * pci_specified_resource_alignment - get resource alignment specified by user.
@@ -5916,9 +5914,9 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 	const char *p;
 	int ret;
 
-	spin_lock(&resource_alignment_lock);
-	p = resource_alignment_param;
-	if (!*p && !align)
+	rcu_read_lock();
+	p = rcu_dereference(resource_alignment_param);
+	if (!p)
 		goto out;
 	if (pci_has_flag(PCI_PROBE_ONLY)) {
 		align = 0;
@@ -5956,7 +5954,7 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 		p++;
 	}
 out:
-	spin_unlock(&resource_alignment_lock);
+	rcu_read_unlock();
 	return align;
 }
 
@@ -6082,35 +6080,48 @@ void pci_reassigndev_resource_alignment(struct pci_dev *dev)
 	}
 }
 
-static ssize_t pci_set_resource_alignment_param(const char *buf, size_t count)
-{
-	if (count > RESOURCE_ALIGNMENT_PARAM_SIZE - 1)
-		count = RESOURCE_ALIGNMENT_PARAM_SIZE - 1;
-	spin_lock(&resource_alignment_lock);
-	strncpy(resource_alignment_param, buf, count);
-	resource_alignment_param[count] = '\0';
-	spin_unlock(&resource_alignment_lock);
-	return count;
-}
-
-static ssize_t pci_get_resource_alignment_param(char *buf, size_t size)
-{
-	size_t count;
-	spin_lock(&resource_alignment_lock);
-	count = snprintf(buf, size, "%s", resource_alignment_param);
-	spin_unlock(&resource_alignment_lock);
-	return count;
-}
-
 static ssize_t resource_alignment_show(struct bus_type *bus, char *buf)
 {
-	return pci_get_resource_alignment_param(buf, PAGE_SIZE);
+	const char *p;
+	size_t count = 0;
+
+	rcu_read_lock();
+	p = rcu_dereference(resource_alignment_param);
+	if (!p)
+		goto out;
+
+	count = snprintf(buf, PAGE_SIZE, "%s", p);
+
+	/*
+	 * When set by the command line there will not be a
+	 * line feed, which is ugly. So conditionally add it here.
+	 */
+	if (buf[count - 2] != '\n' && count < PAGE_SIZE - 1) {
+		buf[count - 1] = '\n';
+		buf[count++] = 0;
+	}
+
+out:
+	rcu_read_unlock();
+
+	return count;
 }
 
 static ssize_t resource_alignment_store(struct bus_type *bus,
 					const char *buf, size_t count)
 {
-	return pci_set_resource_alignment_param(buf, count);
+	const char *p, *old;
+
+	p = kstrndup(buf, count, GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+
+	old = rcu_dereference_protected(resource_alignment_param, 1);
+	rcu_assign_pointer(resource_alignment_param, p);
+	synchronize_rcu();
+	kfree(old);
+
+	return count;
 }
 
 static BUS_ATTR_RW(resource_alignment);
@@ -6238,8 +6249,8 @@ static int __init pci_setup(char *str)
 			} else if (!strncmp(str, "cbmemsize=", 10)) {
 				pci_cardbus_mem_size = memparse(str + 10, &str);
 			} else if (!strncmp(str, "resource_alignment=", 19)) {
-				pci_set_resource_alignment_param(str + 19,
-							strlen(str + 19));
+				RCU_INIT_POINTER(resource_alignment_param,
+						 str + 19);
 			} else if (!strncmp(str, "ecrc=", 5)) {
 				pcie_ecrc_get_policy(str + 5);
 			} else if (!strncmp(str, "hpiosize=", 9)) {
@@ -6275,15 +6286,21 @@ static int __init pci_setup(char *str)
 early_param("pci", pci_setup);
 
 /*
- * 'disable_acs_redir_param' is initialized in pci_setup(), above, to point
- * to data in the __initdata section which will be freed after the init
- * sequence is complete. We can't allocate memory in pci_setup() because some
- * architectures do not have any memory allocation service available during
- * an early_param() call. So we allocate memory and copy the variable here
- * before the init section is freed.
+ * 'resource_alignment_param' and 'disable_acs_redir_param' are initialized
+ * in pci_setup(), above, to point to data in the __initdata section which
+ * will be freed after the init sequence is complete. We can't allocate memory
+ * in pci_setup() because some architectures do not have any memory allocation
+ * service available during an early_param() call. So we allocate memory and
+ * copy the variable here before the init section is freed.
  */
 static int __init pci_realloc_setup_params(void)
 {
+	const char *p;
+
+	p = rcu_dereference_protected(resource_alignment_param, 1);
+	p = kstrdup(p, GFP_KERNEL);
+	rcu_assign_pointer(resource_alignment_param, p);
+
 	disable_acs_redir_param = kstrdup(disable_acs_redir_param, GFP_KERNEL);
 
 	return 0;
