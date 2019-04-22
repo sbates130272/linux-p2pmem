@@ -6081,7 +6081,20 @@ void pci_reassigndev_resource_alignment(struct pci_dev *dev)
 	}
 }
 
-static ssize_t pci_set_resource_alignment_param(const char *buf, size_t count)
+static ssize_t resource_alignment_show(struct bus_type *bus, char *buf)
+{
+	size_t count = 0;
+
+	spin_lock(&resource_alignment_lock);
+	if (resource_alignment_param)
+		count = snprintf(buf, PAGE_SIZE, "%s", resource_alignment_param);
+	spin_unlock(&resource_alignment_lock);
+
+	return count;
+}
+
+static ssize_t resource_alignment_store(struct bus_type *bus,
+					const char *buf, size_t count)
 {
 	spin_lock(&resource_alignment_lock);
 
@@ -6091,29 +6104,6 @@ static ssize_t pci_set_resource_alignment_param(const char *buf, size_t count)
 	spin_unlock(&resource_alignment_lock);
 
 	return resource_alignment_param ? count : -ENOMEM;
-}
-
-static ssize_t pci_get_resource_alignment_param(char *buf, size_t size)
-{
-	size_t count = 0;
-
-	spin_lock(&resource_alignment_lock);
-	if (resource_alignment_param)
-		count = snprintf(buf, size, "%s", resource_alignment_param);
-	spin_unlock(&resource_alignment_lock);
-
-	return count;
-}
-
-static ssize_t resource_alignment_show(struct bus_type *bus, char *buf)
-{
-	return pci_get_resource_alignment_param(buf, PAGE_SIZE);
-}
-
-static ssize_t resource_alignment_store(struct bus_type *bus,
-					const char *buf, size_t count)
-{
-	return pci_set_resource_alignment_param(buf, count);
 }
 
 static BUS_ATTR_RW(resource_alignment);
