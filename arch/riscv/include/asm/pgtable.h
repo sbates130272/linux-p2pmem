@@ -183,11 +183,6 @@ static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 	return (unsigned long)pfn_to_virt(pmd_val(pmd) >> _PAGE_PFN_SHIFT);
 }
 
-static inline struct page *pud_page(pud_t pud)
-{
-	return pfn_to_page(pud_val(pud) >> _PAGE_PFN_SHIFT);
-}
-
 /* Yields the page frame number (PFN) of a page table entry */
 static inline unsigned long pte_pfn(pte_t pte)
 {
