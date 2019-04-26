@@ -103,6 +103,7 @@ extern pgd_t swapper_pg_dir[];
 #define VMEMMAP_END	(VMEMMAP_START + VMEMMAP_SIZE - 1)
 #define vmemmap		((struct page *)VMEMMAP_START)
 #else
+#define VMEMMAP_SIZE	0
 #define VMEMMAP_END	KERN_SPACE_START
 #endif
 
