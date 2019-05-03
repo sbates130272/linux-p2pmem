@@ -538,6 +538,9 @@ void zero_fill_bio_iter(struct bio *bio, struct bvec_iter start)
 	struct bio_vec bv;
 	struct bvec_iter iter;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return;
+
 	__bio_for_each_segment(bv, bio, iter, start) {
 		char *data = bvec_kmap_irq(&bv, &flags);
 		memset(data, 0, bv.bv_len);
@@ -674,6 +677,9 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	if (unlikely(bio_flagged(bio, BIO_CLONED)))
 		return 0;
 
+	if (unlikely(op_uses_dma_addr(bio->bi_opf)))
+		return 0;
+
 	if (((bio->bi_iter.bi_size + len) >> 9) > queue_max_hw_sectors(q))
 		return 0;
 
@@ -768,6 +774,9 @@ bool __bio_try_merge_page(struct bio *bio, struct page *page,
 	if (WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED)))
 		return false;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return false;
+
 	if (bio->bi_vcnt > 0) {
 		struct bio_vec *bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
 		phys_addr_t vec_end_addr = page_to_phys(bv->bv_page) +
@@ -803,6 +812,7 @@ void __bio_add_page(struct bio *bio, struct page *page,
 	struct bio_vec *bv = &bio->bi_io_vec[bio->bi_vcnt];
 
 	WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED));
+	WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf));
 	WARN_ON_ONCE(bio_full(bio));
 
 	bv->bv_page = page;
@@ -885,7 +895,6 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	ssize_t size, left;
 	unsigned len, i;
 	size_t offset;
-
 	/*
 	 * Move page array up in the allocated memory for the bio vecs as far as
 	 * possible so that we can start filling biovecs from the beginning
@@ -935,6 +944,9 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 {
 	const bool is_bvec = iov_iter_is_bvec(iter);
 	unsigned short orig_vcnt = bio->bi_vcnt;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
 
 	/*
 	 * If this is a BVEC iter, then the pages are kernel pages. Don't
@@ -1015,6 +1027,10 @@ void bio_copy_data_iter(struct bio *dst, struct bvec_iter *dst_iter,
 	struct bio_vec src_bv, dst_bv;
 	void *src_p, *dst_p;
 	unsigned bytes;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(src->bi_opf)) ||
+	    WARN_ON_ONCE(op_uses_dma_addr(dst->bi_opf)))
+		return -EINVAL;
 
 	while (src_iter->bi_size && dst_iter->bi_size) {
 		src_bv = bio_iter_iovec(src, *src_iter);
@@ -1131,6 +1147,10 @@ static int bio_copy_from_iter(struct bio *bio, struct iov_iter *iter)
 	struct bio_vec *bvec;
 	struct bvec_iter_all iter_all;
 
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
+
 	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		ssize_t ret;
 
@@ -1163,6 +1183,9 @@ static int bio_copy_to_iter(struct bio *bio, struct iov_iter iter)
 	struct bio_vec *bvec;
 	struct bvec_iter_all iter_all;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
+
 	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		ssize_t ret;
 
@@ -1187,6 +1210,9 @@ void bio_free_pages(struct bio *bio)
 	int i;
 	struct bvec_iter_all iter_all;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return;
+
 	bio_for_each_segment_all(bvec, bio, i, iter_all)
 		__free_page(bvec->bv_page);
 }
@@ -1203,6 +1229,9 @@ int bio_uncopy_user(struct bio *bio)
 {
 	struct bio_map_data *bmd = bio->bi_private;
 	int ret = 0;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
 
 	if (!bio_flagged(bio, BIO_NULL_MAPPED)) {
 		/*
@@ -1445,6 +1474,9 @@ static void __bio_unmap_user(struct bio *bio)
 	int i;
 	struct bvec_iter_all iter_all;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
+
 	/*
 	 * make sure we dirty pages we wrote to
 	 */
@@ -1541,6 +1573,9 @@ static void bio_copy_kern_endio_read(struct bio *bio)
 	struct bio_vec *bvec;
 	int i;
 	struct bvec_iter_all iter_all;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return -EINVAL;
 
 	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		memcpy(p, page_address(bvec->bv_page), bvec->bv_len);
@@ -1653,6 +1688,9 @@ void bio_set_pages_dirty(struct bio *bio)
 	int i;
 	struct bvec_iter_all iter_all;
 
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return;
+
 	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		if (!PageCompound(bvec->bv_page))
 			set_page_dirty_lock(bvec->bv_page);
@@ -1664,6 +1702,9 @@ static void bio_release_pages(struct bio *bio)
 	struct bio_vec *bvec;
 	int i;
 	struct bvec_iter_all iter_all;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return;
 
 	bio_for_each_segment_all(bvec, bio, i, iter_all)
 		put_page(bvec->bv_page);
@@ -1714,6 +1755,9 @@ void bio_check_pages_dirty(struct bio *bio)
 	unsigned long flags;
 	int i;
 	struct bvec_iter_all iter_all;
+
+	if (WORN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return 0;
 
 	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		if (!PageDirty(bvec->bv_page) && !PageCompound(bvec->bv_page))
@@ -1787,6 +1831,9 @@ void bio_flush_dcache_pages(struct bio *bi)
 {
 	struct bio_vec bvec;
 	struct bvec_iter iter;
+
+	if (WARN_ON_ONCE(op_uses_dma_addr(bio->bi_opf)))
+		return;
 
 	bio_for_each_segment(bvec, bi, iter)
 		flush_dcache_page(bvec.bv_page);
