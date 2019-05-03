@@ -849,7 +849,7 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 	if (is_pci_p2pdma_page(sg_page(iod->sg)))
 		nr_mapped = pci_p2pdma_map_sg(dev->dev, iod->sg, iod->nents,
 					  dma_dir);
-	else
+	else if (!op_is_dma_addr(req->cmd_flags))
 		nr_mapped = dma_map_sg_attrs(dev->dev, iod->sg, iod->nents,
 					     dma_dir,  DMA_ATTR_NO_WARN);
 	if (!nr_mapped)
@@ -894,7 +894,8 @@ static void nvme_unmap_data(struct nvme_dev *dev, struct request *req)
 
 	if (iod->nents) {
 		/* P2PDMA requests do not need to be unmapped */
-		if (!is_pci_p2pdma_page(sg_page(iod->sg)))
+		if (!is_pci_p2pdma_page(sg_page(iod->sg)) &&
+		    !op_is_dma_addr(req->cmd_flags))
 			dma_unmap_sg(dev->dev, iod->sg, iod->nents, dma_dir);
 
 		if (blk_integrity_rq(req))
@@ -1472,7 +1473,7 @@ static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 						nvmeq->sq_cmds);
 		if (nvmeq->sq_dma_addr) {
 			set_bit(NVMEQ_SQ_CMB, &nvmeq->flags);
-			return 0; 
+			return 0;
 		}
 	}
 
@@ -2124,7 +2125,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 
 	if (nr_io_queues == 0)
 		return 0;
-	
+
 	clear_bit(NVMEQ_ENABLED, &adminq->flags);
 
 	if (dev->cmb_use_sqes) {
@@ -2650,7 +2651,8 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.name			= "pcie",
 	.module			= THIS_MODULE,
 	.flags			= NVME_F_METADATA_SUPPORTED |
-				  NVME_F_PCI_P2PDMA,
+				  NVME_F_PCI_P2PDMA |
+				  NVME_F_DMA_ADDR,
 	.reg_read32		= nvme_pci_reg_read32,
 	.reg_write32		= nvme_pci_reg_write32,
 	.reg_read64		= nvme_pci_reg_read64,
