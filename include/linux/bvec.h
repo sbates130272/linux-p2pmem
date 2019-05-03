@@ -29,7 +29,10 @@
  * was unsigned short, but we might as well be ready for > 64kB I/O pages
  */
 struct bio_vec {
-	struct page	*bv_page;
+	union {
+		struct page	*bv_page;
+		dma_addr_t	bv_dma_addr;
+	};
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
 };

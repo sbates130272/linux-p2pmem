@@ -321,6 +321,7 @@ enum req_flag_bits {
 	__REQ_RAHEAD,		/* read ahead, can fail anytime */
 	__REQ_BACKGROUND,	/* background IO */
 	__REQ_NOWAIT,           /* Don't wait if request will block */
+	__REQ_DMA_ADDR,		/* request uses dma_addr_t instead of pages */
 
 	/* command specific flags for REQ_OP_WRITE_ZEROES: */
 	__REQ_NOUNMAP,		/* do not free blocks when zeroing */
@@ -347,6 +348,7 @@ enum req_flag_bits {
 #define REQ_RAHEAD		(1ULL << __REQ_RAHEAD)
 #define REQ_BACKGROUND		(1ULL << __REQ_BACKGROUND)
 #define REQ_NOWAIT		(1ULL << __REQ_NOWAIT)
+#define REQ_DMA_ADDR		(1ULL << __REQ_DMA_ADDR)
 #define REQ_NOUNMAP		(1ULL << __REQ_NOUNMAP)
 #define REQ_HIPRI		(1ULL << __REQ_HIPRI)
 
@@ -357,7 +359,7 @@ enum req_flag_bits {
 	(REQ_FAILFAST_DEV | REQ_FAILFAST_TRANSPORT | REQ_FAILFAST_DRIVER)
 
 #define REQ_NOMERGE_FLAGS \
-	(REQ_NOMERGE | REQ_PREFLUSH | REQ_FUA)
+	(REQ_NOMERGE | REQ_PREFLUSH | REQ_FUA | REQ_DMA_ADDR)
 
 enum stat_group {
 	STAT_READ,
@@ -414,6 +416,11 @@ static inline int op_stat_group(unsigned int op)
 	if (op_is_discard(op))
 		return STAT_DISCARD;
 	return op_is_write(op);
+}
+
+static inline int op_uses_dma_addr(unsigned int op)
+{
+	return op & REQ_DMA_ADDR;
 }
 
 typedef unsigned int blk_qc_t;
