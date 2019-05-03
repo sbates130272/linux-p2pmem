@@ -481,7 +481,7 @@ static inline struct scatterlist *blk_next_sg(struct scatterlist **sg,
 
 static unsigned blk_bvec_map_sg(struct request_queue *q,
 		struct bio_vec *bvec, struct scatterlist *sglist,
-		struct scatterlist **sg)
+		struct scatterlist **sg, int dma_addr)
 {
 	unsigned nbytes = bvec->bv_len;
 	unsigned nsegs = 0, total = 0, offset = 0;
@@ -496,11 +496,16 @@ static unsigned blk_bvec_map_sg(struct request_queue *q,
 		seg_size = get_max_segment_size(q, bvec->bv_offset + total);
 		seg_size = min(nbytes, seg_size);
 
-		offset = (total + bvec->bv_offset) % PAGE_SIZE;
-		idx = (total + bvec->bv_offset) / PAGE_SIZE;
-		pg = bvec_nth_page(bvec->bv_page, idx);
+		if (!dma_addr) {
+			offset = (total + bvec->bv_offset) % PAGE_SIZE;
+			idx = (total + bvec->bv_offset) / PAGE_SIZE;
+			pg = bvec_nth_page(bvec->bv_page, idx);
 
-		sg_set_page(*sg, pg, seg_size, offset);
+			sg_set_page(*sg, pg, seg_size, offset);
+		} else {
+			sg->dma_address = bvec->bv_dma_addr + total;
+			sg_dma_len(sg) = seg_size;
+		}
 
 		total += seg_size;
 		nbytes -= seg_size;
@@ -509,6 +514,7 @@ static unsigned blk_bvec_map_sg(struct request_queue *q,
 
 	return nsegs;
 }
+
 
 static inline void
 __blk_segment_map_sg(struct request_queue *q, struct bio_vec *bvec,
@@ -532,7 +538,50 @@ new_segment:
 			sg_set_page(*sg, bvec->bv_page, nbytes, bvec->bv_offset);
 			(*nsegs) += 1;
 		} else
-			(*nsegs) += blk_bvec_map_sg(q, bvec, sglist, sg);
+			(*nsegs) += blk_bvec_map_sg(q, bvec, sglist, sg, 0);
+	}
+	*bvprv = *bvec;
+}
+
+static inline bool biovec_dma_addr_mergeable(struct request_queue *q,
+		struct bio_vec *vec1, struct bio_vec *vec2)
+{
+	unsigned long mask = queue_segment_boundary(q);
+	dma_addr_t addr1 = vec1->bv_dma_addr;
+	dma_addr_t addr2 = vec2->bv_dma_addr;
+
+	if (addr1 + vec1->bv_len != addr2)
+		return false;
+	if ((addr1 | mask) != ((addr2 + vec2->bv_len - 1) | mask))
+		return false;
+
+	return true;
+}
+
+static inline void
+__blk_segment_dma_addr_map_sg(struct request_queue *q, struct bio_vec *bvec,
+		struct scatterlist *sglist, struct bio_vec *bvprv,
+		struct scatterlist **sg, int *nsegs)
+{
+
+	int nbytes = bvec->bv_len;
+
+	if (*sg) {
+		if ((*sg)->length + nbytes > queue_max_segment_size(q))
+			goto new_segment;
+		if (!biovec_dma_addr_mergeable(q, bvprv, bvec))
+			goto new_segment;
+
+		(*sg)->length += nbytes;
+	} else {
+new_segment:
+		if (bvec->bv_len <= PAGE_SIZE) {
+			*sg = blk_next_sg(sg, sglist);
+			sg->dma_address = bvec->bv_dma_addr;
+			sg_dma_len(sg) = nbytes;
+			(*nsegs) += 1;
+		} else
+			(*nsegs) += blk_bvec_map_sg(q, bvec, sglist, sg, 1);
 	}
 	*bvprv = *bvec;
 }
@@ -590,6 +639,7 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 	if (q->dma_drain_size && q->dma_drain_needed(rq)) {
 		if (op_is_write(req_op(rq)))
 			memset(q->dma_drain_buffer, 0, q->dma_drain_size);
+		WARN_ON(op_uses_dma_addr(req_op(rq->cmd_flags)));
 
 		sg_unmark_end(sg);
 		sg = sg_next(sg);
