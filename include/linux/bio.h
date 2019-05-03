@@ -112,6 +112,13 @@ static inline bool bio_full(struct bio *bio)
 	return bio->bi_vcnt >= bio->bi_max_vecs;
 }
 
+static inline bool bio_dma_full(struct bio *bio)
+{
+	size_t vec_size = bio->bi_max_vecs * sizeof(struct bio_vec);
+
+	return bio->bi_vcnt >= (vec_size / sizeof(struct dma_vec));
+}
+
 static inline bool bio_next_segment(const struct bio *bio,
 				    struct bvec_iter_all *iter)
 {
@@ -438,6 +445,9 @@ void bio_chain(struct bio *, struct bio *);
 extern int bio_add_page(struct bio *, struct page *, unsigned int,unsigned int);
 extern int bio_add_pc_page(struct request_queue *, struct bio *, struct page *,
 			   unsigned int, unsigned int);
+extern int bio_add_dma_addr(struct request_queue *q, struct bio *bio,
+			    dma_addr_t dma_addr, unsigned int len);
+
 bool __bio_try_merge_page(struct bio *bio, struct page *page,
 		unsigned int len, unsigned int off, bool same_page);
 void __bio_add_page(struct bio *bio, struct page *page,

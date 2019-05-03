@@ -874,6 +874,44 @@ static void bio_release_pages(struct bio *bio)
 		put_page(bvec->bv_page);
 }
 
+/**
+ *	bio_add_dma_addr - attempt to add a dma address to a bio
+ *	@q: the target queue
+ *	@bio: destination bio
+ *	@dma_addr: dma address to add
+ *	@len: vec entry length
+ *
+ *	Attempt to add a dma address to the dma_vec maplist. This can
+ *	fail for a number of reasons, such as the bio being full or
+ *	target block device limitations. The target request queue must
+ *	support dma-only bios and bios can not mix pages and dma_addresses.
+ */
+int bio_add_dma_addr(struct request_queue *q, struct bio *bio,
+		     dma_addr_t dma_addr, unsigned int len)
+{
+	struct dma_vec *dv = &bio->bi_dma_vec[bio->bi_vcnt];
+
+	if (!blk_queue_dma_direct(q))
+		return -EINVAL;
+
+	if (!bio_is_dma_direct(bio))
+		return -EINVAL;
+
+	if (bio_dma_full(bio))
+		return 0;
+
+	WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED));
+
+	dv->dv_addr = dma_addr;
+	dv->dv_len = len;
+
+	bio->bi_iter.bi_size += len;
+	bio->bi_vcnt++;
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(bio_add_dma_addr);
+
 static int __bio_iov_bvec_add_pages(struct bio *bio, struct iov_iter *iter)
 {
 	const struct bio_vec *bv = iter->bvec;
