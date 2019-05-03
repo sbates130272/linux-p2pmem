@@ -3259,6 +3259,8 @@ static int nvme_alloc_ns(struct nvme_ctrl *ctrl, unsigned nsid)
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, ns->queue);
 	if (ctrl->ops->flags & NVME_F_PCI_P2PDMA)
 		blk_queue_flag_set(QUEUE_FLAG_PCI_P2PDMA, ns->queue);
+	if (ctrl->ops->flags & NVME_F_DMA_DIRECT)
+		blk_queue_flag_set(QUEUE_FLAG_DMA_DIRECT, ns->queue);
 
 	ns->queue->queuedata = ns;
 	ns->ctrl = ctrl;
