@@ -847,7 +847,7 @@ int bio_add_page(struct bio *bio, struct page *page,
 EXPORT_SYMBOL(bio_add_page);
 
 /**
- *	bio_add_dmaaddr	-	attempt to add a dma address to a bio
+ *	bio_add_dma_addr -	attempt to add a dma address to a bio
  *	@q: the target queue
  *	@bio: destination bio
  *	@dma_addr: dma address to add
@@ -864,7 +864,7 @@ int bio_add_dma_addr(struct request_queue *q, struct bio *bio,
 	if (!blk_queue_dma_only(q))
 		return -EINVAL;
 
-	if (bio->bi_vcnt > 0 && !op_uses_dma_addr(bio->bi_opf))
+	if (!op_uses_dma_addr(bio->bi_opf))
 		return -EINVAL;
 
 	if (bio_full(bio))
