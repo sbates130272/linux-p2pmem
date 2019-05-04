@@ -417,7 +417,7 @@ static int nvmet_p2pmem_ns_enable(struct nvmet_ns *ns)
 		return -EINVAL;
 	}
 
-	if (!blk_queue_pci_p2pdma(ns->bdev->bd_queue)) {
+	if (!blk_queue_dma_addr(ns->bdev->bd_queue)) {
 		pr_err("peer-to-peer DMA is not supported by the driver of %s\n",
 		       ns->device_path);
 		return -EINVAL;
@@ -922,9 +922,9 @@ int nvmet_req_alloc_sgl(struct nvmet_req *req)
 
 		req->p2p_dev = NULL;
 		if (req->sq->qid && p2p_dev) {
-			req->sg = pci_p2pmem_alloc_sgl(p2p_dev, &req->sg_cnt,
-						       req->transfer_len);
-			if (req->sg) {
+			req->p2p_dma_buf = pci_alloc_p2pmem(req->p2p_dev,
+							    req->transfer_len);
+			if (req->p2p_dma_buf) {
 				req->p2p_dev = p2p_dev;
 				return 0;
 			}
@@ -947,7 +947,8 @@ EXPORT_SYMBOL_GPL(nvmet_req_alloc_sgl);
 void nvmet_req_free_sgl(struct nvmet_req *req)
 {
 	if (req->p2p_dev)
-		pci_p2pmem_free_sgl(req->p2p_dev, req->sg);
+		pci_free_p2pmem(req->p2p_dev, req->p2p_dma_buf,
+				req->transfer_len);
 	else
 		sgl_free(req->sg);
 
