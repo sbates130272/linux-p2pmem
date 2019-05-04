@@ -6,6 +6,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/blkdev.h>
 #include <linux/module.h>
+#include <linux/pci-p2pdma.h>
 #include "nvmet.h"
 
 int nvmet_bdev_ns_enable(struct nvmet_ns *ns)
@@ -132,6 +133,24 @@ static void nvmet_submit_sg(struct nvmet_req *req, struct bio *bio,
 	submit_bio(bio);
 }
 
+static void nvmet_submit_p2p(struct nvmet_req *req, struct bio *bio)
+{
+	dma_addr_t addr;
+	int ret;
+
+	addr = pci_p2pmem_virt_to_bus(req->p2p_dev, req->p2p_dma_buf);
+
+	ret = bio_add_dma_addr(req->ns->bdev->bd_queue, bio,
+			       addr, req->transfer_len);
+	if (WARN_ON_ONCE(ret != req->transfer_len)) {
+		bio->bi_status = BLK_STS_NOTSUPP;
+		nvmet_bio_done(bio);
+		return;
+	}
+
+	submit_bio(bio);
+}
+
 static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 {
 	int sg_cnt = req->sg_cnt;
@@ -139,7 +158,7 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 	sector_t sector;
 	int op, op_flags = 0;
 
-	if (!req->sg_cnt) {
+	if (!req->sg_cnt && !req->p2p_dev) {
 		nvmet_req_complete(req, 0);
 		return;
 	}
@@ -153,8 +172,10 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 		op = REQ_OP_READ;
 	}
 
-	if (is_pci_p2pdma_page(sg_page(req->sg)))
-		op_flags |= REQ_NOMERGE;
+	if (req->p2p_dev) {
+		op_flags |= REQ_DMA_DIRECT;
+		sg_cnt = 1;
+	}
 
 	sector = le64_to_cpu(req->cmd->rw.slba);
 	sector <<= (req->ns->blksize_shift - 9);
@@ -171,7 +192,10 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 	bio->bi_end_io = nvmet_bio_done;
 	bio_set_op_attrs(bio, op, op_flags);
 
-	nvmet_submit_sg(req, bio, sector);
+	if (req->p2p_dev)
+		nvmet_submit_p2p(req, bio);
+	else
+		nvmet_submit_sg(req, bio, sector);
 }
 
 static void nvmet_bdev_execute_flush(struct nvmet_req *req)
