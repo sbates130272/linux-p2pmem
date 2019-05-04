@@ -288,7 +288,10 @@ struct nvmet_req {
 	struct nvmet_sq		*sq;
 	struct nvmet_cq		*cq;
 	struct nvmet_ns		*ns;
-	struct scatterlist	*sg;
+	union {
+		struct scatterlist	*sg;
+		void			*p2p_dma_buf;
+	};
 	struct bio_vec		inline_bvec[NVMET_MAX_INLINE_BIOVEC];
 	union {
 		struct {
