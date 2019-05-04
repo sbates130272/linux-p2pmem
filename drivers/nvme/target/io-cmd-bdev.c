@@ -103,13 +103,41 @@ static void nvmet_bio_done(struct bio *bio)
 		bio_put(bio);
 }
 
+static void nvmet_submit_sg(struct nvmet_req *req, struct bio *bio,
+			    sector_t sector)
+{
+	int sg_cnt = req->sg_cnt;
+	struct scatterlist *sg;
+	int i;
+
+	for_each_sg(req->sg, sg, req->sg_cnt, i) {
+		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
+				!= sg->length) {
+			struct bio *prev = bio;
+
+			bio = bio_alloc(GFP_KERNEL,
+					min(sg_cnt, BIO_MAX_PAGES));
+			bio_set_dev(bio, req->ns->bdev);
+			bio->bi_iter.bi_sector = sector;
+			bio->bi_opf = prev->bi_opf;
+
+			bio_chain(bio, prev);
+			submit_bio(prev);
+		}
+
+		sector += sg->length >> 9;
+		sg_cnt--;
+	}
+
+	submit_bio(bio);
+}
+
 static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 {
 	int sg_cnt = req->sg_cnt;
 	struct bio *bio;
-	struct scatterlist *sg;
 	sector_t sector;
-	int op, op_flags = 0, i;
+	int op, op_flags = 0;
 
 	if (!req->sg_cnt) {
 		nvmet_req_complete(req, 0);
@@ -143,25 +171,7 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 	bio->bi_end_io = nvmet_bio_done;
 	bio_set_op_attrs(bio, op, op_flags);
 
-	for_each_sg(req->sg, sg, req->sg_cnt, i) {
-		while (bio_add_page(bio, sg_page(sg), sg->length, sg->offset)
-				!= sg->length) {
-			struct bio *prev = bio;
-
-			bio = bio_alloc(GFP_KERNEL, min(sg_cnt, BIO_MAX_PAGES));
-			bio_set_dev(bio, req->ns->bdev);
-			bio->bi_iter.bi_sector = sector;
-			bio_set_op_attrs(bio, op, op_flags);
-
-			bio_chain(bio, prev);
-			submit_bio(prev);
-		}
-
-		sector += sg->length >> 9;
-		sg_cnt--;
-	}
-
-	submit_bio(bio);
+	nvmet_submit_sg(req, bio, sector);
 }
 
 static void nvmet_bdev_execute_flush(struct nvmet_req *req)
