@@ -661,6 +661,10 @@ static inline struct nvme_ns *nvme_get_ns_from_dev(struct device *dev)
  */
 struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path);
 void nvme_execute_passthru_rq_nowait(struct request *rq, rq_end_io_fn *done);
+struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned int nsid);
+void nvme_put_ns(struct nvme_ns *ns);
+int nvme_identify_ns(struct nvme_ctrl *ctrl,
+		     unsigned nsid, struct nvme_id_ns **id);
 #endif /* CONFIG_NVME_TARGET_PASSTHRU */
 
 #endif /* _NVME_H */
