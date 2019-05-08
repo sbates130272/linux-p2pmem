@@ -104,6 +104,37 @@ void nvmet_passthru_subsys_free(struct nvmet_subsys *subsys)
 	mutex_unlock(&subsys->lock);
 }
 
+int nvmet_passthru_alloc_ctrl(struct nvmet_subsys *subsys,
+			      const char *hostnqn)
+{
+	struct nvmet_ctrl *ctrl;
+
+	/*
+	 * Check here if this subsystem is already connected to the passthru
+	 * ctrl. We allow only one host to connect to a given passthru
+	 * subsystem.
+	 */
+	int rc = 0;
+
+	mutex_lock(&subsys->lock);
+
+	if (!subsys->passthru_ctrl)
+		goto out;
+
+	if (list_empty(&subsys->ctrls))
+		goto out;
+
+	ctrl = list_first_entry(&subsys->ctrls, struct nvmet_ctrl,
+				subsys_entry);
+
+	if (strcmp(hostnqn, ctrl->hostnqn))
+		rc = -ENODEV;
+
+out:
+	mutex_unlock(&subsys->lock);
+	return rc;
+}
+
 static void nvmet_passthru_req_complete(struct nvmet_req *req,
 		struct request *rq, u16 status)
 {

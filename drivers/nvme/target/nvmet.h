@@ -513,6 +513,8 @@ void nvmet_passthru_destroy(void);
 void nvmet_passthru_subsys_free(struct nvmet_subsys *subsys);
 int nvmet_passthru_ctrl_enable(struct nvmet_subsys *subsys);
 void nvmet_passthru_ctrl_disable(struct nvmet_subsys *subsys);
+int nvmet_passthru_alloc_ctrl(struct nvmet_subsys *subsys,
+			      const char *hostnqn);
 u16 nvmet_parse_passthru_cmd(struct nvmet_req *req);
 
 static inline
@@ -535,6 +537,11 @@ static inline void nvmet_passthru_subsys_free(struct nvmet_subsys *subsys)
 }
 static inline void nvmet_passthru_ctrl_disable(struct nvmet_subsys *subsys)
 {
+}
+static inline int nvmet_passthru_alloc_ctrl(struct nvmet_subsys *subsys,
+					    const char *hostnqn)
+{
+	return 0;
 }
 static inline u16 nvmet_parse_passthru_cmd(struct nvmet_req *req)
 {
