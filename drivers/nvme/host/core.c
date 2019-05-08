@@ -461,7 +461,7 @@ static void nvme_free_ns(struct kref *kref)
 	kfree(ns);
 }
 
-static void nvme_put_ns(struct nvme_ns *ns)
+void nvme_put_ns(struct nvme_ns *ns)
 {
 	kref_put(&ns->kref, nvme_free_ns);
 }
@@ -1227,7 +1227,7 @@ static int nvme_identify_ns_list(struct nvme_ctrl *dev, unsigned nsid, __le32 *n
 				    NVME_IDENTIFY_DATA_SIZE);
 }
 
-static int nvme_identify_ns(struct nvme_ctrl *ctrl,
+int nvme_identify_ns(struct nvme_ctrl *ctrl,
 		unsigned nsid, struct nvme_id_ns **id)
 {
 	struct nvme_command c = { };
@@ -3435,7 +3435,7 @@ static int ns_cmp(void *priv, struct list_head *a, struct list_head *b)
 	return nsa->head->ns_id - nsb->head->ns_id;
 }
 
-static struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid)
+struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid)
 {
 	struct nvme_ns *ns, *ret = NULL;
 
@@ -4283,6 +4283,8 @@ void nvme_execute_passthru_rq_nowait(struct request *rq, rq_end_io_fn *done)
 }
 EXPORT_SYMBOL_GPL(nvme_execute_passthru_rq_nowait);
 
+EXPORT_SYMBOL_GPL(nvme_find_get_ns);
+EXPORT_SYMBOL_GPL(nvme_put_ns);
 #endif /* CONFIG_NVME_TARGET_PASSTHRU */
 
 /*
