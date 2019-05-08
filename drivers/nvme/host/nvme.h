@@ -670,6 +670,11 @@ static inline struct nvme_ns *nvme_get_ns_from_dev(struct device *dev)
  * and should not be used for other things. They are not exported unless
  * CONFIG_NVME_TARGET_PASSTHRU is set.
  */
+void nvme_put_ns(struct nvme_ns *ns);
+u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
+			 u8 opcode);
+void nvme_execute_passthru_rq(struct request *rq);
+struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned int nsid);
 struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path);
 
 #endif /* _NVME_H */
