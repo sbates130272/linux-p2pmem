@@ -230,6 +230,7 @@ struct nvmet_subsys {
 
 #ifdef CONFIG_NVME_TARGET_PASSTHRU
 	struct nvme_ctrl	*passthru_ctrl;
+	char			*passthru_ctrl_path;
 #endif /* CONFIG_NVME_TARGET_PASSTHRU */
 };
 
@@ -514,6 +515,9 @@ static inline u32 nvmet_dsm_len(struct nvmet_req *req)
 #ifdef CONFIG_NVME_TARGET_PASSTHRU
 int nvmet_passthru_init(void);
 void nvmet_passthru_destroy(void);
+void nvmet_passthru_subsys_free(struct nvmet_subsys *subsys);
+int nvmet_passthru_ctrl_enable(struct nvmet_subsys *subsys);
+void nvmet_passthru_ctrl_disable(struct nvmet_subsys *subsys);
 u16 nvmet_parse_passthru_admin_cmd(struct nvmet_req *req);
 u16 nvmet_setup_passthru_command(struct nvmet_req *req);
 static inline struct nvme_ctrl *nvmet_passthru_ctrl(struct nvmet_subsys *subsys)
@@ -526,6 +530,12 @@ static inline int nvmet_passthru_init(void)
 	return 0;
 }
 static inline void nvmet_passthru_destroy(void)
+{
+}
+static inline void nvmet_passthru_subsys_free(struct nvmet_subsys *subsys)
+{
+}
+static inline void nvmet_passthru_ctrl_disable(struct nvmet_subsys *subsys)
 {
 }
 static inline u16 nvmet_parse_passthru_admin_cmd(struct nvmet_req *req)
