@@ -858,6 +858,7 @@ enum nvme_admin_opcode {
 	nvme_admin_security_recv	= 0x82,
 	nvme_admin_sanitize_nvm		= 0x84,
 	nvme_admin_get_lba_status	= 0x86,
+	nvme_admin_vendor_start		= 0xC0,
 };
 
 #define nvme_admin_opcode_name(opcode)	{ opcode, #opcode }

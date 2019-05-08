@@ -227,6 +227,10 @@ struct nvmet_subsys {
 
 	struct config_group	namespaces_group;
 	struct config_group	allowed_hosts_group;
+
+#ifdef CONFIG_NVME_TARGET_PASSTHRU
+	struct nvme_ctrl	*passthru_ctrl;
+#endif /* CONFIG_NVME_TARGET_PASSTHRU */
 };
 
 static inline struct nvmet_subsys *to_subsys(struct config_item *item)
@@ -302,6 +306,11 @@ struct nvmet_req {
 			struct bio_vec          *bvec;
 			struct work_struct      work;
 		} f;
+		struct {
+			struct request		*rq;
+			struct work_struct      work;
+			u16 (*end_req)(struct nvmet_req *req);
+		} p;
 	};
 	int			sg_cnt;
 	/* data length as parsed from the SGL descriptor: */
@@ -379,6 +388,8 @@ void nvmet_req_complete(struct nvmet_req *req, u16 status);
 int nvmet_req_alloc_sgl(struct nvmet_req *req);
 void nvmet_req_free_sgl(struct nvmet_req *req);
 
+void nvmet_execute_set_features(struct nvmet_req *req);
+void nvmet_execute_get_features(struct nvmet_req *req);
 void nvmet_execute_keep_alive(struct nvmet_req *req);
 
 void nvmet_cq_setup(struct nvmet_ctrl *ctrl, struct nvmet_cq *cq, u16 qid,
@@ -498,6 +509,34 @@ static inline u32 nvmet_dsm_len(struct nvmet_req *req)
 {
 	return (le32_to_cpu(req->cmd->dsm.nr) + 1) *
 		sizeof(struct nvme_dsm_range);
+}
+
+#ifdef CONFIG_NVME_TARGET_PASSTHRU
+u16 nvmet_parse_passthru_admin_cmd(struct nvmet_req *req);
+u16 nvmet_setup_passthru_command(struct nvmet_req *req);
+static inline struct nvme_ctrl *nvmet_passthru_ctrl(struct nvmet_subsys *subsys)
+{
+	return subsys->passthru_ctrl;
+}
+#else /* CONFIG_NVME_TARGET_PASSTHRU */
+static inline u16 nvmet_parse_passthru_admin_cmd(struct nvmet_req *req)
+{
+	return 0;
+}
+static inline u16 nvmet_setup_passthru_command(struct nvmet_req *req)
+{
+	return 0;
+}
+static inline struct nvme_ctrl *nvmet_passthru_ctrl(struct nvmet_subsys *subsys)
+{
+	return NULL;
+}
+#endif /* CONFIG_NVME_TARGET_PASSTHRU */
+
+static inline struct nvme_ctrl *
+nvmet_req_passthru_ctrl(struct nvmet_req *req)
+{
+	return nvmet_passthru_ctrl(req->sq->ctrl->subsys);
 }
 
 u16 errno_to_nvme_status(struct nvmet_req *req, int errno);
