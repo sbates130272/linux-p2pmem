@@ -522,6 +522,12 @@ int nvmet_ns_enable(struct nvmet_ns *ns)
 
 	mutex_lock(&subsys->lock);
 	ret = 0;
+
+	if (nvmet_passthru_ctrl(subsys)) {
+		pr_info("cannot enable both passthru and regular namespaces for a single subsystem");
+		goto out_unlock;
+	}
+
 	if (ns->enabled)
 		goto out_unlock;
 
@@ -1418,7 +1424,7 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 	if (!subsys)
 		return ERR_PTR(-ENOMEM);
 
-	subsys->ver = NVME_VS(1, 3, 0); /* NVMe 1.3.0 */
+	subsys->ver = NVMET_DEFAULT_VS;
 	/* generate a random serial number as our controllers are ephemeral: */
 	get_random_bytes(&subsys->serial, sizeof(subsys->serial));
 
@@ -1458,6 +1464,8 @@ static void nvmet_subsys_free(struct kref *ref)
 		container_of(ref, struct nvmet_subsys, ref);
 
 	WARN_ON_ONCE(!list_empty(&subsys->namespaces));
+
+	nvmet_passthru_subsys_free(subsys);
 
 	kfree(subsys->subsysnqn);
 	kfree(subsys);
