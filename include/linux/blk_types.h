@@ -12,12 +12,14 @@
 
 struct bio_set;
 struct bio;
+struct bio_dma;
 struct bio_integrity_payload;
 struct page;
 struct block_device;
 struct io_context;
 struct cgroup_subsys_state;
 typedef void (bio_end_io_t) (struct bio *);
+typedef void (bio_end_dma_io_t) (struct bio_dma *);
 
 /*
  * Block error status values.  See block/blk-core:blk_errors for the details.
@@ -138,11 +140,9 @@ static inline void bio_issue_init(struct bio_issue *issue,
 }
 
 /*
- * main unit of I/O for the block layer and lower layers (ie drivers and
- * stacking drivers)
+ * core bio field used in both regular bios and dma bios
  */
-struct bio {
-	struct bio		*bi_next;	/* request queue link */
+struct bio_core {
 	struct gendisk		*bi_disk;
 	unsigned int		bi_opf;		/* bottom bits req flags,
 						 * top bits REQ_OP. Use
@@ -169,9 +169,13 @@ struct bio {
 	struct bvec_iter	bi_iter;
 
 	atomic_t		__bi_remaining;
-	bio_end_io_t		*bi_end_io;
+	union {
+		bio_end_io_t		*bi_end_io;
+		bio_end_dma_io_t	*bi_end_dma_io;
+	};
 
 	void			*bi_private;
+
 #ifdef CONFIG_BLK_CGROUP
 	/*
 	 * Represents the association of the css and request_queue for the bio.
@@ -182,6 +186,19 @@ struct bio {
 	struct blkcg_gq		*bi_blkg;
 	struct bio_issue	bi_issue;
 #endif
+};
+
+/*
+ * main unit of I/O for the block layer and lower layers (ie drivers and
+ * stacking drivers)
+ */
+struct bio {
+	struct bio		*bi_next;	/* request queue link */
+	union {
+		struct bio_core	core;
+		struct bio_core;
+	};
+
 	union {
 #if defined(CONFIG_BLK_DEV_INTEGRITY)
 		struct bio_integrity_payload *bi_integrity; /* data integrity */
@@ -208,6 +225,26 @@ struct bio {
 	 * MUST obviously be kept at the very end of the bio.
 	 */
 	struct bio_vec		bi_inline_vecs[0];
+};
+
+/*
+ * main unit of I/O for DMA direct operations in the block layer and
+ * lower layers
+ */
+struct bio_dma {
+	union {
+		struct bio_core	core;
+		struct bio_core;
+	};
+
+	unsigned short		bi_vcnt;	/* how many dma_vec's */
+
+	/*
+	 * We inline a number of vecs at the end of the bio_dma, to avoid
+	 * double allocations for a small number of dma_vecs. This member
+	 * MUST obviously be kept at the very end of the bio.
+	 */
+	struct dma_vec		bi_vecs[0];
 };
 
 #define BIO_RESET_BYTES		offsetof(struct bio, bi_max_vecs)
