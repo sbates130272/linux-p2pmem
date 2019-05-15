@@ -51,11 +51,11 @@ const char *bdevname(struct block_device *bdev, char *buf)
 
 EXPORT_SYMBOL(bdevname);
 
-const char *bio_devname(struct bio *bio, char *buf)
+const char *__bio_devname(struct bio_core *bio, char *buf)
 {
 	return disk_name(bio->bi_disk, bio->bi_partno, buf);
 }
-EXPORT_SYMBOL(bio_devname);
+EXPORT_SYMBOL(__bio_devname);
 
 /*
  * There's very little reason to use this, you should really

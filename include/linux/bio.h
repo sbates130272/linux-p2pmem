@@ -83,13 +83,14 @@ static inline bool bio_has_data(struct bio *bio)
 	return false;
 }
 
-static inline bool bio_no_advance_iter(struct bio *bio)
+static inline bool __bio_no_advance_iter(struct bio_core *bio)
 {
 	return bio_op(bio) == REQ_OP_DISCARD ||
 	       bio_op(bio) == REQ_OP_SECURE_ERASE ||
 	       bio_op(bio) == REQ_OP_WRITE_SAME ||
 	       bio_op(bio) == REQ_OP_WRITE_ZEROES;
 }
+#define bio_no_advance_iter(bio) __bio_no_advance_iter(&(bio)->core)
 
 static inline bool bio_mergeable(struct bio *bio)
 {
@@ -229,20 +230,23 @@ static inline void bio_cnt_set(struct bio *bio, unsigned int count)
 	atomic_set(&bio->__bi_cnt, count);
 }
 
-static inline bool bio_flagged(struct bio *bio, unsigned int bit)
+static inline bool __bio_flagged(struct bio_core *bio, unsigned int bit)
 {
 	return (bio->bi_flags & (1U << bit)) != 0;
 }
+#define bio_flagged(bio, bit) __bio_flagged(&(bio)->core, bit)
 
-static inline void bio_set_flag(struct bio *bio, unsigned int bit)
+static inline void __bio_set_flag(struct bio_core *bio, unsigned int bit)
 {
 	bio->bi_flags |= (1U << bit);
 }
+#define bio_set_flag(bio, bit) __bio_set_flag(&(bio)->core, bit)
 
-static inline void bio_clear_flag(struct bio *bio, unsigned int bit)
+static inline void __bio_clear_flag(struct bio_core *bio, unsigned int bit)
 {
 	bio->bi_flags &= ~(1U << bit);
 }
+#define bio_clear_flag(bio, bit) __bio_clear_flag(&(bio)->core, bit)
 
 static inline void bio_get_first_bvec(struct bio *bio, struct bio_vec *bv)
 {
@@ -421,6 +425,20 @@ static inline void bio_wouldblock_error(struct bio *bio)
 	bio_endio(bio);
 }
 
+extern void bio_dma_endio(struct bio_dma *);
+
+static inline void bio_dma_io_error(struct bio_dma *bio)
+{
+	bio->bi_status = BLK_STS_IOERR;
+	bio_dma_endio(bio);
+}
+
+static inline void bio_dma_wouldblock_error(struct bio_dma *bio)
+{
+	bio->bi_status = BLK_STS_AGAIN;
+	bio_dma_endio(bio);
+}
+
 struct request_queue;
 extern int bio_phys_segments(struct request_queue *, struct bio *);
 
@@ -490,7 +508,8 @@ static inline void zero_fill_bio(struct bio *bio)
 extern struct bio_vec *bvec_alloc(gfp_t, int, unsigned long *, mempool_t *);
 extern void bvec_free(mempool_t *, struct bio_vec *, unsigned int);
 extern unsigned int bvec_nr_vecs(unsigned short idx);
-extern const char *bio_devname(struct bio *bio, char *buffer);
+extern const char *__bio_devname(struct bio_core *bio, char *buffer);
+#define bio_devname(bio, buffer) __bio_devname(&(bio)->core, buffer)
 
 #define bio_set_dev(bio, bdev) 			\
 do {						\

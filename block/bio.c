@@ -1866,6 +1866,24 @@ again:
 EXPORT_SYMBOL(bio_endio);
 
 /**
+ * bio_dma_endio - end I/O on a bio_dma
+ * @bio:	bio
+ *
+ * Description:
+ *   bio_dma_endio() will end I/O on the whole bio. bio_dma_endio() is
+ *   the preferred way to end I/O on a bio. No one should call
+ *   bi_end_dma_io() directly on a bio unless they own it and thus know
+ *   that it has an end_io function.
+ **/
+void bio_dma_endio(struct bio_dma *bio)
+{
+	/* release cgroup info */
+	if (bio->bi_end_dma_io)
+		bio->bi_end_dma_io(bio);
+}
+EXPORT_SYMBOL(bio_dma_endio);
+
+/**
  * bio_split - split a bio
  * @bio:	bio to split
  * @sectors:	number of sectors to split from the front of @bio
