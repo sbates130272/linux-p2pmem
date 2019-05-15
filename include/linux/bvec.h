@@ -34,6 +34,11 @@ struct bio_vec {
 	unsigned int	bv_offset;
 };
 
+struct dma_vec {
+	dma_addr_t	dv_addr;
+	unsigned int	dv_len;
+};
+
 struct bvec_iter {
 	sector_t		bi_sector;	/* device address in 512 byte
 						   sectors */
@@ -121,6 +126,32 @@ static inline bool bvec_iter_advance(const struct bio_vec *bv,
 		iter->bi_bvec_done += len;
 
 		if (iter->bi_bvec_done == cur->bv_len) {
+			iter->bi_bvec_done = 0;
+			iter->bi_idx++;
+		}
+	}
+	return true;
+}
+
+static inline bool dvec_iter_advance(const struct dma_vec *dv,
+		struct bvec_iter *iter, unsigned bytes)
+{
+	if (WARN_ONCE(bytes > iter->bi_size,
+		     "Attempted to advance past end of bvec iter\n")) {
+		iter->bi_size = 0;
+		return false;
+	}
+
+	while (bytes) {
+		const struct dma_vec *cur = dv + iter->bi_idx;
+		unsigned len = min3(bytes, iter->bi_size,
+				    cur->dv_len - iter->bi_bvec_done);
+
+		bytes -= len;
+		iter->bi_size -= len;
+		iter->bi_bvec_done += len;
+
+		if (iter->bi_bvec_done == cur->dv_len) {
 			iter->bi_bvec_done = 0;
 			iter->bi_idx++;
 		}
