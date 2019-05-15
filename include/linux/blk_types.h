@@ -191,7 +191,10 @@ struct bio {
 
 	atomic_t		__bi_cnt;	/* pin count */
 
-	struct bio_vec		*bi_io_vec;	/* the actual vec list */
+	union {
+		struct bio_vec	*bi_io_vec;	/* the actual vec list */
+		struct dma_vec	*bi_dma_vec;	/* for dma direct bios*/
+	};
 
 	struct bio_set		*bi_pool;
 

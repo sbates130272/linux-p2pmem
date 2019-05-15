@@ -28,6 +28,8 @@
 
 #define bio_iter_iovec(bio, iter)				\
 	bvec_iter_bvec((bio)->bi_io_vec, (iter))
+#define bio_iter_dma_vec(bio, iter)				\
+	bvec_iter_dvec((bio)->bi_dma_vec, (iter))
 
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))
@@ -39,6 +41,7 @@
 #define bio_page(bio)		bio_iter_page((bio), (bio)->bi_iter)
 #define bio_offset(bio)		bio_iter_offset((bio), (bio)->bi_iter)
 #define bio_iovec(bio)		bio_iter_iovec((bio), (bio)->bi_iter)
+#define bio_dma_vec(bio)	bio_iter_dma_vec((bio), (bio)->bi_iter)
 
 #define bio_multiple_segments(bio)				\
 	((bio)->bi_iter.bi_size != bio_iovec(bio).bv_len)
@@ -154,6 +157,15 @@ static inline void bio_advance_iter(struct bio *bio, struct bvec_iter *iter,
 /* iterate over multi-page bvec */
 #define bio_for_each_bvec(bvl, bio, iter)			\
 	__bio_for_each_bvec(bvl, bio, iter, (bio)->bi_iter)
+
+#define __bio_for_each_dvec(dvl, bio, iter, start)		\
+	for (iter = (start);						\
+	     (iter).bi_size &&						\
+		((dvl = bvec_iter_dvec((bio)->bi_dma_vec, (iter))), 1); \
+	     dvec_iter_advance((bio)->bi_dma_vec, &(iter), (dvl).dv_len))
+
+#define bio_for_each_dvec(dvl, bio, iter)			\
+	__bio_for_each_dvec(dvl, bio, iter, (bio)->bi_iter)
 
 #define bio_iter_last(bvec, iter) ((iter).bi_size == (bvec).bv_len)
 
