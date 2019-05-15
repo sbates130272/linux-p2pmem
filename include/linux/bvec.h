@@ -34,6 +34,18 @@ struct bio_vec {
 	unsigned int	bv_offset;
 };
 
+struct dma_vec {
+	dma_addr_t	dv_addr;
+	unsigned int	dv_len;
+};
+
+/*
+ * the bio code relies on using the space allocated for the bio_vecs
+ * as dma_vecs; thus it's important that the size of dma_vec be
+ * less than or equal to the size of bio_vec
+ */
+static_assert(sizeof(struct dma_vec) <= sizeof(struct bio_vec));
+
 struct bvec_iter {
 	sector_t		bi_sector;	/* device address in 512 byte
 						   sectors */
@@ -102,6 +114,17 @@ static inline struct page *bvec_nth_page(struct page *page, int idx)
 	.bv_offset	= bvec_iter_offset((bvec), (iter)),	\
 })
 
+#define bvec_iter_dvec_addr(dvec, iter) 	\
+	(__bvec_iter_bvec((dvec), (iter))->dv_addr)
+#define bvec_iter_dvec_len(dvec, iter) 	\
+	(__bvec_iter_bvec((dvec), (iter))->dv_len)
+
+#define bvec_iter_dvec(dvec, iter)				\
+((struct dma_vec) {						\
+	.dv_addr	= bvec_iter_dvec_addr((dvec), (iter)),	\
+	.dv_len		= bvec_iter_dvec_len((dvec), (iter)),	\
+})
+
 static inline bool bvec_iter_advance(const struct bio_vec *bv,
 		struct bvec_iter *iter, unsigned bytes)
 {
@@ -121,6 +144,32 @@ static inline bool bvec_iter_advance(const struct bio_vec *bv,
 		iter->bi_bvec_done += len;
 
 		if (iter->bi_bvec_done == cur->bv_len) {
+			iter->bi_bvec_done = 0;
+			iter->bi_idx++;
+		}
+	}
+	return true;
+}
+
+static inline bool dvec_iter_advance(const struct dma_vec *dv,
+		struct bvec_iter *iter, unsigned bytes)
+{
+	if (WARN_ONCE(bytes > iter->bi_size,
+		     "Attempted to advance past end of bvec iter\n")) {
+		iter->bi_size = 0;
+		return false;
+	}
+
+	while (bytes) {
+		const struct dma_vec *cur = dv + iter->bi_idx;
+		unsigned len = min3(bytes, iter->bi_size,
+				    cur->dv_len - iter->bi_bvec_done);
+
+		bytes -= len;
+		iter->bi_size -= len;
+		iter->bi_bvec_done += len;
+
+		if (iter->bi_bvec_done == cur->dv_len) {
 			iter->bi_bvec_done = 0;
 			iter->bi_idx++;
 		}
