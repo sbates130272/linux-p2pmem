@@ -997,6 +997,19 @@ static bool generic_make_request_checks(struct bio *bio)
 	return true;
 }
 
+static bool generic_make_dma_request_checks(struct bio_dma *bio)
+{
+	int ret;
+
+	ret = __generic_make_request_checks(&bio->core, NULL);
+	if (!ret) {
+		bio_dma_endio(bio);
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * generic_make_request - hand a buffer to its device driver for I/O
  * @bio:  The bio describing the location in memory and on the device.
@@ -1171,6 +1184,44 @@ blk_qc_t direct_make_request(struct bio *bio)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(direct_make_request);
+
+/**
+ * direct_make_dma_request - hand a DMA address to its device driver for I/O
+ * @bio:  The DMA bio describing the location in memory and on the device.
+ *
+ * This function behaves like direct_make_request(), but submits DMA
+ * bios which do not use struct pages. If the called driver does not
+ * support this, it will fail the IO with BLK_STS_NOTSUPP.
+ */
+blk_qc_t direct_make_dma_request(struct bio_dma *bio)
+{
+	struct request_queue *q = bio->bi_disk->queue;
+	bool nowait = bio->bi_opf & REQ_NOWAIT;
+	blk_qc_t ret;
+
+	if (unlikely(!q->make_dma_request_fn)) {
+		bio->bi_status = BLK_STS_NOTSUPP;
+		bio_dma_endio(bio);
+	}
+
+	if (!generic_make_dma_request_checks(bio))
+		return BLK_QC_T_NONE;
+
+	if (unlikely(blk_queue_enter(q, nowait ? BLK_MQ_REQ_NOWAIT : 0))) {
+		if (nowait && !blk_queue_dying(q))
+			bio->bi_status = BLK_STS_AGAIN;
+		else
+			bio->bi_status = BLK_STS_IOERR;
+		bio_dma_endio(bio);
+		return BLK_QC_T_NONE;
+	}
+
+	ret = q->make_dma_request_fn(q, bio);
+
+	blk_queue_exit(q);
+	return ret;
+}
+EXPORT_SYMBOL(direct_make_dma_request);
 
 /**
  * submit_bio - submit a bio to the block device layer for I/O
