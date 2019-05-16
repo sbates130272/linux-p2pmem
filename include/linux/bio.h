@@ -172,6 +172,27 @@ static inline void bio_advance_iter(struct bio *bio, struct bvec_iter *iter,
 
 #define bio_iter_last(bvec, iter) ((iter).bi_size == (bvec).bv_len)
 
+static inline void bio_dma_advance_iter(struct bio_dma *bio,
+		struct bvec_iter *iter, unsigned bytes)
+{
+	iter->bi_sector += bytes >> 9;
+
+	if (bio_no_advance_iter(bio))
+		iter->bi_size -= bytes;
+	else
+		dvec_iter_advance(bio->bi_vecs, iter, bytes);
+		/* TODO: It is reasonable to complete bio with error here. */
+}
+
+#define __bio_dma_for_each_dvec(dvl, bio, iter, start)			\
+	for (iter = (start);						\
+	     (iter).bi_size &&						\
+		((dvl = (bio)->bi_vecs[(iter).bi_idx]), 1);	\
+	     bio_dma_advance_iter((bio), &(iter), (dvl).dv_len))
+
+#define bio_dma_for_each_dvec(dvl, bio, iter)			\
+	__bio_dma_for_each_dvec(dvl, bio, iter, (bio)->bi_iter)
+
 static inline unsigned bio_segments(struct bio *bio)
 {
 	unsigned segs = 0;
