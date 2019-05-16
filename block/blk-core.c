@@ -1355,6 +1355,11 @@ unsigned int blk_rq_err_bytes(const struct request *rq)
 	if (!(rq->rq_flags & RQF_MIXED_MERGE))
 		return blk_rq_bytes(rq);
 
+	if (op_is_dma_direct(rq->cmd_flags)) {
+		bytes = rq->bio_dma->bi_iter.bi_size;
+		goto out;
+	}
+
 	/*
 	 * Currently the only 'mixing' which can happen is between
 	 * different fastfail types.  We can safely fail portions
@@ -1368,6 +1373,7 @@ unsigned int blk_rq_err_bytes(const struct request *rq)
 		bytes += bio->bi_iter.bi_size;
 	}
 
+out:
 	/* this could lead to infinite loop */
 	BUG_ON(blk_rq_bytes(rq) && !bytes);
 	return bytes;
@@ -1454,6 +1460,9 @@ void blk_account_io_start(struct request *rq, bool new_io)
  */
 void blk_steal_bios(struct bio_list *list, struct request *rq)
 {
+	if (WARN_ON(op_is_dma_direct(rq_src->cmd_flags)))
+		return;
+
 	if (rq->bio) {
 		if (list->tail)
 			list->tail->bi_next = rq->bio;
@@ -1501,6 +1510,9 @@ bool blk_update_request(struct request *req, blk_status_t error,
 	int total_bytes;
 
 	trace_block_rq_complete(req, blk_status_to_errno(error), nr_bytes);
+
+	if (WARN_ON(op_is_dma_direct(rq_src->cmd_flags)))
+		return false;
 
 	if (!req->bio)
 		return false;
@@ -1696,6 +1708,9 @@ int blk_rq_prep_clone(struct request *rq, struct request *rq_src,
 		      void *data)
 {
 	struct bio *bio, *bio_src;
+
+	if (WARN_ON(op_is_dma_direct(rq_src->cmd_flags)))
+	    return -EINVAL;
 
 	if (!bs)
 		bs = &fs_bio_set;

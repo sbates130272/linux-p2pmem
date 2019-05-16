@@ -363,6 +363,7 @@ enum req_flag_bits {
 	__REQ_NOUNMAP,		/* do not free blocks when zeroing */
 
 	__REQ_HIPRI,
+	__REQ_DMA_DIRECT,	/* request uses dma bio */
 
 	/* for driver use */
 	__REQ_DRV,
@@ -386,6 +387,7 @@ enum req_flag_bits {
 #define REQ_NOWAIT		(1ULL << __REQ_NOWAIT)
 #define REQ_NOUNMAP		(1ULL << __REQ_NOUNMAP)
 #define REQ_HIPRI		(1ULL << __REQ_HIPRI)
+#define REQ_DMA_DIRECT		(1ULL << __REQ_DMA_DIRECT)
 
 #define REQ_DRV			(1ULL << __REQ_DRV)
 #define REQ_SWAP		(1ULL << __REQ_SWAP)
@@ -394,7 +396,7 @@ enum req_flag_bits {
 	(REQ_FAILFAST_DEV | REQ_FAILFAST_TRANSPORT | REQ_FAILFAST_DRIVER)
 
 #define REQ_NOMERGE_FLAGS \
-	(REQ_NOMERGE | REQ_PREFLUSH | REQ_FUA)
+	(REQ_NOMERGE | REQ_PREFLUSH | REQ_FUA | REQ_DMA_DIRECT)
 
 enum stat_group {
 	STAT_READ,
@@ -451,6 +453,11 @@ static inline int op_stat_group(unsigned int op)
 	if (op_is_discard(op))
 		return STAT_DISCARD;
 	return op_is_write(op);
+}
+
+static inline bool op_is_dma_direct(unsigned int op)
+{
+	return op & REQ_DMA_DIRECT;
 }
 
 typedef unsigned int blk_qc_t;

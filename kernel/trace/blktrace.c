@@ -780,7 +780,7 @@ blk_trace_bio_get_cgid(struct request_queue *q, struct bio *bio)
 static union kernfs_node_id *
 blk_trace_request_get_cgid(struct request_queue *q, struct request *rq)
 {
-	if (!rq->bio)
+	if (!rq->bio || op_is_dma_direct(rq->cmd_flags))
 		return NULL;
 	/* Use the first bio */
 	return blk_trace_bio_get_cgid(q, rq->bio);
@@ -1921,4 +1921,3 @@ void blk_fill_rwbs(char *rwbs, unsigned int op, int bytes)
 EXPORT_SYMBOL_GPL(blk_fill_rwbs);
 
 #endif /* CONFIG_EVENT_TRACING */
-

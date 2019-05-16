@@ -144,8 +144,15 @@ struct request {
 	int tag;
 	sector_t __sector;		/* sector cursor */
 
-	struct bio *bio;
-	struct bio *biotail;
+	union {
+		struct bio *bio;
+		struct bio_dma *bio_dma;
+	};
+
+	union {
+		struct bio *biotail;
+		struct bio_dma *biodmatail;
+	};
 
 	struct list_head queuelist;
 
