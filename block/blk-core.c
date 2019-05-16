@@ -742,13 +742,13 @@ void blk_init_request_from_bio(struct request *req, struct bio *bio)
 }
 EXPORT_SYMBOL_GPL(blk_init_request_from_bio);
 
-static void handle_bad_sector(struct bio *bio, sector_t maxsector)
+static void handle_bad_sector(struct bio_core *bio, sector_t maxsector)
 {
 	char b[BDEVNAME_SIZE];
 
 	printk(KERN_INFO "attempt to access beyond end of device\n");
 	printk(KERN_INFO "%s: rw=%d, want=%Lu, limit=%Lu\n",
-			bio_devname(bio, b), bio->bi_opf,
+			__bio_devname(bio, b), bio->bi_opf,
 			(unsigned long long)bio_end_sector(bio),
 			(long long)maxsector);
 }
@@ -788,7 +788,7 @@ static inline bool should_fail_request(struct hd_struct *part,
 
 #endif /* CONFIG_FAIL_MAKE_REQUEST */
 
-static inline bool bio_check_ro(struct bio *bio, struct hd_struct *part)
+static inline bool bio_check_ro(struct bio_core *bio, struct hd_struct *part)
 {
 	const int op = bio_op(bio);
 
@@ -801,7 +801,7 @@ static inline bool bio_check_ro(struct bio *bio, struct hd_struct *part)
 		WARN_ONCE(1,
 		       "generic_make_request: Trying to write "
 			"to read-only block-device %s (partno %d)\n",
-			bio_devname(bio, b), part->partno);
+			__bio_devname(bio, b), part->partno);
 		/* Older lvm-tools actually trigger this */
 		return false;
 	}
@@ -809,7 +809,7 @@ static inline bool bio_check_ro(struct bio *bio, struct hd_struct *part)
 	return false;
 }
 
-static noinline int should_fail_bio(struct bio *bio)
+static noinline int should_fail_bio(struct bio_core *bio)
 {
 	if (should_fail_request(&bio->bi_disk->part0, bio->bi_iter.bi_size))
 		return -EIO;
@@ -822,7 +822,7 @@ ALLOW_ERROR_INJECTION(should_fail_bio, ERRNO);
  * This may well happen - the kernel calls bread() without checking the size of
  * the device, e.g., when mounting a file system.
  */
-static inline int bio_check_eod(struct bio *bio, sector_t maxsector)
+static inline int bio_check_eod(struct bio_core *bio, sector_t maxsector)
 {
 	unsigned int nr_sectors = bio_sectors(bio);
 
@@ -838,7 +838,8 @@ static inline int bio_check_eod(struct bio *bio, sector_t maxsector)
 /*
  * Remap block n of partition p to block n+start(p) of the disk.
  */
-static inline int blk_partition_remap(struct bio *bio)
+static inline int blk_partition_remap(struct bio_core *bio,
+				      struct bio *trace_bio)
 {
 	struct hd_struct *p;
 	int ret = -EIO;
@@ -860,8 +861,8 @@ static inline int blk_partition_remap(struct bio *bio)
 		if (bio_check_eod(bio, part_nr_sects_read(p)))
 			goto out;
 		bio->bi_iter.bi_sector += p->start_sect;
-		trace_block_bio_remap(bio->bi_disk->queue, bio, part_devt(p),
-				      bio->bi_iter.bi_sector - p->start_sect);
+		trace_block_bio_remap(bio->bi_disk->queue, trace_bio,
+			part_devt(p), bio->bi_iter.bi_sector - p->start_sect);
 	}
 	bio->bi_partno = 0;
 	ret = 0;
@@ -871,7 +872,8 @@ out:
 }
 
 static noinline_for_stack bool
-generic_make_request_checks(struct bio *bio)
+__generic_make_request_checks(struct bio_core *bio,
+			      struct bio *trace_bio)
 {
 	struct request_queue *q;
 	int nr_sectors = bio_sectors(bio);
@@ -885,7 +887,8 @@ generic_make_request_checks(struct bio *bio)
 		printk(KERN_ERR
 		       "generic_make_request: Trying to access "
 			"nonexistent block-device %s (%Lu)\n",
-			bio_devname(bio, b), (long long)bio->bi_iter.bi_sector);
+			__bio_devname(bio, b),
+		       (long long)bio->bi_iter.bi_sector);
 		goto end_io;
 	}
 
@@ -900,7 +903,7 @@ generic_make_request_checks(struct bio *bio)
 		goto end_io;
 
 	if (bio->bi_partno) {
-		if (unlikely(blk_partition_remap(bio)))
+		if (unlikely(blk_partition_remap(bio, trace_bio)))
 			goto end_io;
 	} else {
 		if (unlikely(bio_check_ro(bio, &bio->bi_disk->part0)))
@@ -959,6 +962,28 @@ generic_make_request_checks(struct bio *bio)
 	 */
 	create_io_context(GFP_ATOMIC, q->node);
 
+	return true;
+
+not_supported:
+	status = BLK_STS_NOTSUPP;
+end_io:
+	bio->bi_status = status;
+	return false;
+}
+
+static bool generic_make_request_checks(struct bio *bio)
+{
+	struct request_queue *q;
+	int ret;
+
+	q = bio->bi_disk->queue;
+
+	ret = __generic_make_request_checks(&bio->core, bio);
+	if (!ret) {
+		bio_endio(bio);
+		return false;
+	}
+
 	if (!blkcg_bio_issue_check(q, bio))
 		return false;
 
@@ -970,13 +995,6 @@ generic_make_request_checks(struct bio *bio)
 		bio_set_flag(bio, BIO_TRACE_COMPLETION);
 	}
 	return true;
-
-not_supported:
-	status = BLK_STS_NOTSUPP;
-end_io:
-	bio->bi_status = status;
-	bio_endio(bio);
-	return false;
 }
 
 /**
