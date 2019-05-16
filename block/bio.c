@@ -579,6 +579,35 @@ int bio_phys_segments(struct request_queue *q, struct bio *bio)
 	return bio->bi_phys_segments;
 }
 
+int bio_dma_phys_segments(struct request_queue *q, struct bio_dma *bio)
+{
+	unsigned int max_seg_size = queue_max_segment_size(q);
+	struct bvec_iter iter;
+	int nr_phys_segs = 0;
+	struct dma_vec dv;
+
+	if (likely(bio_flagged(bio, BIO_SEG_VALID)))
+		return bio->bi_phys_segments;
+
+	switch (bio_op(bio)) {
+	case REQ_OP_DISCARD:
+	case REQ_OP_SECURE_ERASE:
+	case REQ_OP_WRITE_ZEROES:
+		goto out;
+	case REQ_OP_WRITE_SAME:
+		nr_phys_segs = 1;
+		goto out;
+	}
+
+	bio_dma_for_each_dvec(dv, bio, iter)
+		nr_phys_segs += DIV_ROUND_UP(dv.dv_len, max_seg_size);
+
+out:
+	bio->bi_phys_segments = nr_phys_segs;
+	bio_set_flag(bio, BIO_SEG_VALID);
+	return nr_phys_segs;
+}
+
 /**
  * 	__bio_clone_fast - clone a bio that shares the original bio's biovec
  * 	@bio: destination bio
