@@ -82,6 +82,21 @@ static inline bool biovec_phys_mergeable(struct request_queue *q,
 	return true;
 }
 
+static inline bool dmavec_phys_mergeable(struct request_queue *q,
+		struct dma_vec *vec1, struct dma_vec *vec2)
+{
+	unsigned long mask = queue_segment_boundary(q);
+	phys_addr_t addr1 = vec1->dv_addr;
+	phys_addr_t addr2 = vec2->dv_addr;
+
+	if (addr1 + vec1->dv_len != addr2)
+		return false;
+	if ((addr1 | mask) != ((addr2 + vec2->dv_len - 1) | mask))
+		return false;
+	return true;
+}
+
+
 static inline bool __bvec_gap_to_prev(struct request_queue *q,
 		struct bio_vec *bprv, unsigned int offset)
 {
