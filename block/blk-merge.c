@@ -375,6 +375,23 @@ void blk_queue_split(struct request_queue *q, struct bio **bio)
 }
 EXPORT_SYMBOL(blk_queue_split);
 
+
+static unsigned int __blk_recalc_dma_rq_segments(struct request_queue *q,
+						 struct bio *bio)
+{
+	unsigned int max_seg_size = queue_max_segment_size(q);
+	struct bvec_iter iter;
+	int nr_phys_segs = 0;
+	struct dma_vec dv;
+
+	for_each_bio(bio) {
+		bio_for_each_dvec(dv, bio, iter)
+			nr_phys_segs += DIV_ROUND_UP(dv.dv_len, max_seg_size);
+	}
+
+	return nr_phys_segs;
+}
+
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 					     struct bio *bio)
 {
@@ -398,6 +415,9 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	case REQ_OP_WRITE_SAME:
 		return 1;
 	}
+
+	if (bio_is_dma_direct(bio))
+		return __blk_recalc_dma_rq_segments(q, bio);
 
 	fbio = bio;
 	seg_size = 0;
