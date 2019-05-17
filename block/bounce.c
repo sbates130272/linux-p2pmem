@@ -368,6 +368,14 @@ void blk_queue_bounce(struct request_queue *q, struct bio **bio_orig)
 		return;
 
 	/*
+	 * For DMA direct bios, Upper layers are expected to ensure
+	 * the device in question can access the DMA addresses. So
+	 * it never makes sense to bounce a DMA direct bio.
+	 */
+	if (bio_is_dma_direct(*bio_orig))
+		return;
+
+	/*
 	 * for non-isa bounce case, just check if the bounce pfn is equal
 	 * to or bigger than the highest pfn in the system -- in that case,
 	 * don't waste time iterating over bio segments
