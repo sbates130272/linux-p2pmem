@@ -545,6 +545,69 @@ static int __blk_bios_map_sg(struct request_queue *q, struct bio *bio,
 	return nsegs;
 }
 
+static unsigned blk_dvec_map_sg(struct request_queue *q,
+		struct dma_vec *dvec, struct scatterlist *sglist,
+		struct scatterlist **sg)
+{
+	unsigned nbytes = dvec->dv_len;
+	unsigned nsegs = 0, total = 0;
+
+	while (nbytes > 0) {
+		unsigned seg_size;
+
+		*sg = blk_next_sg(sg, sglist);
+
+		seg_size = get_max_segment_size(q, total);
+		seg_size = min(nbytes, seg_size);
+
+		(*sg)->dma_address = dvec->dv_addr + total;
+		sg_dma_len(*sg) = seg_size;
+
+		total += seg_size;
+		nbytes -= seg_size;
+		nsegs++;
+	}
+
+	return nsegs;
+}
+
+static inline void
+__blk_segment_dma_map_sg(struct request_queue *q, struct dma_vec *dvec,
+			 struct scatterlist *sglist, struct dma_vec *dvprv,
+			 struct scatterlist **sg, int *nsegs)
+{
+	int nbytes = dvec->dv_len;
+
+	if (*sg) {
+		if ((*sg)->length + nbytes > queue_max_segment_size(q))
+			goto new_segment;
+		if (!dmavec_phys_mergeable(q, dvprv, dvec))
+			goto new_segment;
+
+		(*sg)->length += nbytes;
+	} else {
+new_segment:
+		(*nsegs) += blk_dvec_map_sg(q, dvec, sglist, sg);
+	}
+	*dvprv = *dvec;
+}
+
+static int __blk_dma_bios_map_sg(struct request_queue *q, struct bio *bio,
+				 struct scatterlist *sglist,
+				 struct scatterlist **sg)
+{
+	struct dma_vec dvec, dvprv = {};
+	struct bvec_iter iter;
+	int nsegs = 0;
+
+	for_each_bio(bio)
+		bio_for_each_dvec(dvec, bio, iter)
+			__blk_segment_dma_map_sg(q, &dvec, sglist, &dvprv,
+						 sg, &nsegs);
+
+	return nsegs;
+}
+
 /*
  * map a request to scatterlist, return number of sg entries setup. Caller
  * must make sure sg can hold rq->nr_phys_segments entries
@@ -559,6 +622,8 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 		nsegs = __blk_bvec_map_sg(rq->special_vec, sglist, &sg);
 	else if (rq->bio && bio_op(rq->bio) == REQ_OP_WRITE_SAME)
 		nsegs = __blk_bvec_map_sg(bio_iovec(rq->bio), sglist, &sg);
+	else if (blk_rq_is_dma_direct(rq))
+		nsegs = __blk_dma_bios_map_sg(q, rq->bio, sglist, &sg);
 	else if (rq->bio)
 		nsegs = __blk_bios_map_sg(q, rq->bio, sglist, &sg);
 
