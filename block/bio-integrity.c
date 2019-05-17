@@ -221,6 +221,10 @@ bool bio_integrity_prep(struct bio *bio)
 	if (bio_integrity(bio))
 		return true;
 
+	/* The block layer cannot handle integrity for dma-direct bios */
+	if (bio_is_dma_direct(bio))
+		return true;
+
 	if (bio_data_dir(bio) == READ) {
 		if (!bi->profile->verify_fn ||
 		    !(bi->flags & BLK_INTEGRITY_VERIFY))
