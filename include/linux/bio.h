@@ -91,10 +91,12 @@ static inline bool bio_mergeable(struct bio *bio)
 
 static inline unsigned int bio_cur_bytes(struct bio *bio)
 {
-	if (bio_has_data(bio))
-		return bio_iovec(bio).bv_len;
-	else /* dataless requests such as discard */
+	if (!bio_has_data(bio)) /* dataless requests such as discard */
 		return bio->bi_iter.bi_size;
+	else if (op_is_dma_direct(bio->bi_opf))
+		return bio_dma_vec(bio).dv_len;
+	else
+		return bio_iovec(bio).bv_len;
 }
 
 static inline void *bio_data(struct bio *bio)
