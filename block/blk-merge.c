@@ -324,6 +324,14 @@ void blk_queue_split(struct request_queue *q, struct bio **bio)
 	struct bio *split, *res;
 	unsigned nsegs;
 
+	/*
+	 * Presently, we should never see any DMA direct bios that
+	 * require any kind of splitting. So we just need to set
+	 * nsegs and return.
+	 */
+	if (bio_is_dma_direct(*bio))
+		return;
+
 	switch (bio_op(*bio)) {
 	case REQ_OP_DISCARD:
 	case REQ_OP_SECURE_ERASE:
