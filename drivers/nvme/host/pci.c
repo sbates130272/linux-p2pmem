@@ -564,9 +564,8 @@ static void nvme_unmap_data(struct nvme_dev *dev, struct request *req)
 
 	WARN_ON_ONCE(!iod->nents);
 
-	/* P2PDMA requests do not need to be unmapped */
-	if (!is_pci_p2pdma_page(sg_page(iod->sg)) &&
-	    !blk_rq_is_dma_direct(req))
+	/* DMA direct requests do not need to be unmapped */
+	if (!blk_rq_is_dma_direct(req))
 		dma_unmap_sg(dev->dev, iod->sg, iod->nents, rq_dma_dir(req));
 
 
@@ -828,16 +827,14 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 	if (blk_rq_nr_phys_segments(req) == 1 && !blk_rq_is_dma_direct(req)) {
 		struct bio_vec bv = req_bvec(req);
 
-		if (!is_pci_p2pdma_page(bv.bv_page)) {
-			if (bv.bv_offset + bv.bv_len <= dev->ctrl.page_size * 2)
-				return nvme_setup_prp_simple(dev, req,
-							     &cmnd->rw, &bv);
+		if (bv.bv_offset + bv.bv_len <= dev->ctrl.page_size * 2)
+			return nvme_setup_prp_simple(dev, req,
+						     &cmnd->rw, &bv);
 
-			if (iod->nvmeq->qid &&
-			    dev->ctrl.sgls & ((1 << 0) | (1 << 1)))
-				return nvme_setup_sgl_simple(dev, req,
-							     &cmnd->rw, &bv);
-		}
+		if (iod->nvmeq->qid &&
+		    dev->ctrl.sgls & ((1 << 0) | (1 << 1)))
+			return nvme_setup_sgl_simple(dev, req,
+						     &cmnd->rw, &bv);
 	}
 
 	iod->dma_len = 0;
@@ -849,10 +846,7 @@ static blk_status_t nvme_map_data(struct nvme_dev *dev, struct request *req,
 	if (!iod->nents)
 		goto out;
 
-	if (is_pci_p2pdma_page(sg_page(iod->sg)))
-		nr_mapped = pci_p2pdma_map_sg(dev->dev, iod->sg, iod->nents,
-					      rq_dma_dir(req));
-	else if (blk_rq_is_dma_direct(req))
+	if (blk_rq_is_dma_direct(req))
 		nr_mapped = iod->nents;
 	else
 		nr_mapped = dma_map_sg_attrs(dev->dev, iod->sg, iod->nents,
@@ -2642,7 +2636,6 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.name			= "pcie",
 	.module			= THIS_MODULE,
 	.flags			= NVME_F_METADATA_SUPPORTED |
-				  NVME_F_PCI_P2PDMA |
 				  NVME_F_DMA_DIRECT,
 	.reg_read32		= nvme_pci_reg_read32,
 	.reg_write32		= nvme_pci_reg_write32,
