@@ -320,6 +320,39 @@ out_unmap_sg:
 EXPORT_SYMBOL(rdma_rw_ctx_init);
 
 /**
+ * rdma_rw_ctx_dma_init - initialize a RDMA READ/WRITE context from a
+ *	DMA address instead of SGL
+ * @ctx:	context to initialize
+ * @qp:		queue pair to operate on
+ * @port_num:	port num to which the connection is bound
+ * @addr:	DMA address to READ/WRITE from/to
+ * @len:	length of memory to operate on
+ * @remote_addr:remote address to read/write (relative to @rkey)
+ * @rkey:	remote key to operate on
+ * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
+ *
+ * Returns the number of WQEs that will be needed on the workqueue if
+ * successful, or a negative error code.
+ */
+int rdma_rw_ctx_dma_init(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+		u8 port_num, dma_addr_t addr, u32 len, u64 remote_addr,
+		u32 rkey, enum dma_data_direction dir)
+{
+	struct scatterlist sg;
+
+	sg_dma_address(&sg) = addr;
+	sg_dma_len(&sg) = len;
+
+	if (rdma_rw_io_needs_mr(qp->device, port_num, dir, 1))
+		return rdma_rw_init_mr_wrs(ctx, qp, port_num, &sg, 1, 0,
+					   remote_addr, rkey, dir);
+	else
+		return rdma_rw_init_single_wr(ctx, qp, &sg, 0, remote_addr,
+					      rkey, dir);
+}
+EXPORT_SYMBOL(rdma_rw_ctx_dma_init);
+
+/**
  * rdma_rw_ctx_signature_init - initialize a RW context with signature offload
  * @ctx:	context to initialize
  * @qp:		queue pair to operate on
@@ -566,17 +599,7 @@ int rdma_rw_ctx_post(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
 }
 EXPORT_SYMBOL(rdma_rw_ctx_post);
 
-/**
- * rdma_rw_ctx_destroy - release all resources allocated by rdma_rw_ctx_init
- * @ctx:	context to release
- * @qp:		queue pair to operate on
- * @port_num:	port num to which the connection is bound
- * @sg:		scatterlist that was used for the READ/WRITE
- * @sg_cnt:	number of entries in @sg
- * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
- */
-void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
-		struct scatterlist *sg, u32 sg_cnt, enum dma_data_direction dir)
+static void __rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp)
 {
 	int i;
 
@@ -596,12 +619,41 @@ void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
 		BUG();
 		break;
 	}
+}
+
+/**
+ * rdma_rw_ctx_destroy - release all resources allocated by rdma_rw_ctx_init
+ * @ctx:	context to release
+ * @qp:		queue pair to operate on
+ * @port_num:	port num to which the connection is bound
+ * @sg:		scatterlist that was used for the READ/WRITE
+ * @sg_cnt:	number of entries in @sg
+ * @dir:	%DMA_TO_DEVICE for RDMA WRITE, %DMA_FROM_DEVICE for RDMA READ
+ */
+void rdma_rw_ctx_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp, u8 port_num,
+		struct scatterlist *sg, u32 sg_cnt, enum dma_data_direction dir)
+{
+	__rdma_rw_ctx_destroy(ctx, qp);
 
 	/* P2PDMA contexts do not need to be unmapped */
 	if (!is_pci_p2pdma_page(sg_page(sg)))
 		ib_dma_unmap_sg(qp->pd->device, sg, sg_cnt, dir);
 }
 EXPORT_SYMBOL(rdma_rw_ctx_destroy);
+
+/**
+ * rdma_rw_ctx_dma_destroy - release all resources allocated by
+ *	rdma_rw_ctx_dma_init
+ * @ctx:	context to release
+ * @qp:		queue pair to operate on
+ * @port_num:	port num to which the connection is bound
+ */
+void rdma_rw_ctx_dma_destroy(struct rdma_rw_ctx *ctx, struct ib_qp *qp,
+			     u8 port_num)
+{
+	__rdma_rw_ctx_destroy(ctx, qp);
+}
+EXPORT_SYMBOL(rdma_rw_ctx_dma_destroy);
 
 /**
  * rdma_rw_ctx_destroy_signature - release all resources allocated by
