@@ -18,6 +18,7 @@
 #include <linux/percpu-refcount.h>
 #include <linux/random.h>
 #include <linux/seq_buf.h>
+#include <linux/iommu.h>
 
 struct pci_p2pdma {
 	struct percpu_ref devmap_ref;
@@ -284,6 +285,9 @@ static bool root_complex_whitelist(struct pci_dev *dev)
 	struct pci_dev *root = pci_get_slot(host->bus, PCI_DEVFN(0, 0));
 	unsigned short vendor, device;
 
+	if (iommu_present(dev->dev.bus))
+		return false;
+
 	if (!root)
 		return false;
 
@@ -453,8 +457,7 @@ static int upstream_bridge_distance_warn(struct pci_dev *provider,
  *
  * For now, "compatible" means the provider and the clients are all behind
  * the same PCI root port. This cuts out cases that may work but is safest
- * for the user. Future work can expand this to white-list root complexes that
- * can safely forward between each ports.
+ * for the user.
  */
 int pci_p2pdma_distance_many(struct pci_dev *provider, struct device **clients,
 			     int num_clients, bool verbose)
