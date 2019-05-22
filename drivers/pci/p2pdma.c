@@ -667,60 +667,6 @@ pci_bus_addr_t pci_p2pmem_virt_to_bus(struct pci_dev *pdev, void *addr)
 EXPORT_SYMBOL_GPL(pci_p2pmem_virt_to_bus);
 
 /**
- * pci_p2pmem_alloc_sgl - allocate peer-to-peer DMA memory in a scatterlist
- * @pdev: the device to allocate memory from
- * @nents: the number of SG entries in the list
- * @length: number of bytes to allocate
- *
- * Return: %NULL on error or &struct scatterlist pointer and @nents on success
- */
-struct scatterlist *pci_p2pmem_alloc_sgl(struct pci_dev *pdev,
-					 unsigned int *nents, u32 length)
-{
-	struct scatterlist *sg;
-	void *addr;
-
-	sg = kzalloc(sizeof(*sg), GFP_KERNEL);
-	if (!sg)
-		return NULL;
-
-	sg_init_table(sg, 1);
-
-	addr = pci_alloc_p2pmem(pdev, length);
-	if (!addr)
-		goto out_free_sg;
-
-	sg_set_buf(sg, addr, length);
-	*nents = 1;
-	return sg;
-
-out_free_sg:
-	kfree(sg);
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(pci_p2pmem_alloc_sgl);
-
-/**
- * pci_p2pmem_free_sgl - free a scatterlist allocated by pci_p2pmem_alloc_sgl()
- * @pdev: the device to allocate memory from
- * @sgl: the allocated scatterlist
- */
-void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl)
-{
-	struct scatterlist *sg;
-	int count;
-
-	for_each_sg(sgl, sg, INT_MAX, count) {
-		if (!sg)
-			break;
-
-		pci_free_p2pmem(pdev, sg_virt(sg), sg->length);
-	}
-	kfree(sgl);
-}
-EXPORT_SYMBOL_GPL(pci_p2pmem_free_sgl);
-
-/**
  * pci_p2pmem_publish - publish the peer-to-peer DMA memory for use by
  *	other devices with pci_p2pmem_find()
  * @pdev: the device with peer-to-peer DMA memory to publish
@@ -737,47 +683,6 @@ void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 		pdev->p2pdma->p2pmem_published = publish;
 }
 EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
-
-/**
- * pci_p2pdma_map_sg - map a PCI peer-to-peer scatterlist for DMA
- * @dev: device doing the DMA request
- * @sg: scatter list to map
- * @nents: elements in the scatterlist
- * @dir: DMA direction
- *
- * Scatterlists mapped with this function should not be unmapped in any way.
- *
- * Returns the number of SG entries mapped or 0 on error.
- */
-int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
-		      enum dma_data_direction dir)
-{
-	struct dev_pagemap *pgmap;
-	struct scatterlist *s;
-	phys_addr_t paddr;
-	int i;
-
-	/*
-	 * p2pdma mappings are not compatible with devices that use
-	 * dma_virt_ops. If the upper layers do the right thing
-	 * this should never happen because it will be prevented
-	 * by the check in pci_p2pdma_add_client()
-	 */
-	if (WARN_ON_ONCE(IS_ENABLED(CONFIG_DMA_VIRT_OPS) &&
-			 dev->dma_ops == &dma_virt_ops))
-		return 0;
-
-	for_each_sg(sg, s, nents, i) {
-		pgmap = sg_page(s)->pgmap;
-		paddr = sg_phys(s);
-
-		s->dma_address = paddr - pgmap->pci_p2pdma_bus_offset;
-		sg_dma_len(s) = s->length;
-	}
-
-	return nents;
-}
-EXPORT_SYMBOL_GPL(pci_p2pdma_map_sg);
 
 /**
  * pci_p2pdma_enable_store - parse a configfs/sysfs attribute store
