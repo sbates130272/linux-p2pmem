@@ -84,9 +84,8 @@ Client Drivers
 --------------
 
 A client driver typically only has to conditionally change its DMA map
-routine to use the mapping function :c:func:`pci_p2pdma_map_sg()` instead
-of the usual :c:func:`dma_map_sg()` function. Memory mapped in this
-way does not need to be unmapped.
+routine to use the PCI bus address with :c:func:`pci_p2pmem_virt_to_bus()`
+for the DMA address instead of the usual :c:func:`dma_map_sg()` function.
 
 The client may also, optionally, make use of
 :c:func:`is_pci_p2pdma_page()` to determine when to use the P2P mapping
@@ -117,9 +116,7 @@ returned with pci_dev_put().
 
 Once a provider is selected, the orchestrator can then use
 :c:func:`pci_alloc_p2pmem()` and :c:func:`pci_free_p2pmem()` to
-allocate P2P memory from the provider. :c:func:`pci_p2pmem_alloc_sgl()`
-and :c:func:`pci_p2pmem_free_sgl()` are convenience functions for
-allocating scatter-gather lists with P2P memory.
+allocate P2P memory from the provider.
 
 Struct Page Caveats
 -------------------
