@@ -20,8 +20,8 @@
 #include <linux/seq_buf.h>
 
 struct pci_p2pdma {
-	struct percpu_ref devmap_ref;
-	struct completion devmap_ref_done;
+	struct percpu_ref ref;
+	struct completion ref_done;
 	struct gen_pool *pool;
 	bool p2pmem_published;
 };
@@ -77,9 +77,9 @@ static const struct attribute_group p2pmem_group = {
 static void pci_p2pdma_percpu_release(struct percpu_ref *ref)
 {
 	struct pci_p2pdma *p2p =
-		container_of(ref, struct pci_p2pdma, devmap_ref);
+		container_of(ref, struct pci_p2pdma, ref);
 
-	complete_all(&p2p->devmap_ref_done);
+	complete_all(&p2p->ref_done);
 }
 
 static void pci_p2pdma_percpu_kill(void * data)
@@ -92,10 +92,10 @@ static void pci_p2pdma_percpu_kill(void * data)
 	 * times. We only want the first action to actually kill the
 	 * percpu_ref.
 	 */
-	if (!percpu_ref_is_dying(&p2p->devmap_ref))
-		percpu_ref_kill(&p2p->devmap_ref);
+	if (!percpu_ref_is_dying(&p2p->ref))
+		percpu_ref_kill(&p2p->ref);
 
-	wait_for_completion(&p2p->devmap_ref_done);
+	wait_for_completion(&p2p->ref_done);
 	gen_pool_destroy(p2p->pool);
 }
 
@@ -106,7 +106,7 @@ static void pci_p2pdma_release(void *data)
 	if (!pdev->p2pdma)
 		return;
 
-	percpu_ref_exit(&pdev->p2pdma->devmap_ref);
+	percpu_ref_exit(&pdev->p2pdma->ref);
 
 	sysfs_remove_group(&pdev->dev.kobj, &p2pmem_group);
 	pdev->p2pdma = NULL;
@@ -125,8 +125,8 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 	if (!p2p->pool)
 		goto out;
 
-	init_completion(&p2p->devmap_ref_done);
-	error = percpu_ref_init(&p2p->devmap_ref,
+	init_completion(&p2p->ref_done);
+	error = percpu_ref_init(&p2p->ref,
 			pci_p2pdma_percpu_release, 0, GFP_KERNEL);
 	if (error)
 		goto out_pool_destroy;
@@ -546,13 +546,13 @@ void *pci_alloc_p2pmem(struct pci_dev *pdev, size_t size)
 	if (unlikely(!pdev->p2pdma))
 		return NULL;
 
-	if (unlikely(!percpu_ref_tryget_live(&pdev->p2pdma->devmap_ref)))
+	if (unlikely(!percpu_ref_tryget_live(&pdev->p2pdma->ref)))
 		return NULL;
 
 	ret = (void *)gen_pool_alloc(pdev->p2pdma->pool, size);
 
 	if (unlikely(!ret))
-		percpu_ref_put(&pdev->p2pdma->devmap_ref);
+		percpu_ref_put(&pdev->p2pdma->ref);
 
 	return ret;
 }
@@ -567,7 +567,7 @@ EXPORT_SYMBOL_GPL(pci_alloc_p2pmem);
 void pci_free_p2pmem(struct pci_dev *pdev, void *addr, size_t size)
 {
 	gen_pool_free(pdev->p2pdma->pool, (uintptr_t)addr, size);
-	percpu_ref_put(&pdev->p2pdma->devmap_ref);
+	percpu_ref_put(&pdev->p2pdma->ref);
 }
 EXPORT_SYMBOL_GPL(pci_free_p2pmem);
 
