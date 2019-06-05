@@ -182,7 +182,8 @@ struct blk_segment_split_ctx {
 	unsigned int front_seg_size;
 
 	bool prv_valid;
-	struct bio_vec bvprv;
+	unsigned long prv_addr;
+	unsigned int prv_len;
 
 	const unsigned int max_sectors;
 	const unsigned int max_segs;
@@ -239,23 +240,19 @@ static bool vec_split_segs(struct request_queue *q, unsigned addr,
 	return !!len;
 }
 
-static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
-			    struct blk_segment_split_ctx *ctx)
-{
-	return vec_split_segs(q, bv->bv_offset, bv->bv_len, ctx);
-}
-
-static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
-			      struct blk_segment_split_ctx *ctx)
+static bool vec_should_split(struct request_queue *q,
+			     unsigned long addr, unsigned int len,
+			     struct blk_segment_split_ctx *ctx)
 {
 	/*
 	 * If the queue doesn't support SG gaps and adding this
 	 * offset would create a gap, disallow it.
 	 */
-	if (ctx->prv_valid && bvec_gap_to_prev(q, &ctx->bvprv, bv->bv_offset))
+	if (ctx->prv_valid &&
+	    vec_gap_to_prev(q, ctx->prv_addr, ctx->prv_len, addr))
 		return true;
 
-	if (ctx->sectors + (bv->bv_len >> 9) > ctx->max_sectors) {
+	if (ctx->sectors + (len >> 9) > ctx->max_sectors) {
 		/*
 		 * Consider this a new segment if we're splitting in
 		 * the middle of this vector.
@@ -263,20 +260,21 @@ static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
 		if (ctx->nsegs < ctx->max_segs &&
 		    ctx->sectors < ctx->max_sectors) {
 			/* split in the middle of bvec */
-			bv->bv_len = (ctx->max_sectors - ctx->sectors) << 9;
-			bvec_split_segs(q, bv, ctx);
+			len = (ctx->max_sectors - ctx->sectors) << 9;
+			vec_split_segs(q, addr, len, ctx);
 		}
 
 		return true;
 	}
 
 	if (ctx->prv_valid &&
-	    ctx->seg_size + bv->bv_len <= queue_max_segment_size(q) &&
-	    biovec_phys_mergeable(q, &ctx->bvprv, bv)) {
-		ctx->seg_size += bv->bv_len;
-		ctx->bvprv = *bv;
+	    ctx->seg_size + len <= queue_max_segment_size(q) &&
+	    vec_phys_mergeable(q, ctx->prv_addr, ctx->prv_len, addr, len)) {
+		ctx->seg_size += len;
+		ctx->prv_addr = addr;
+		ctx->prv_len = len;
 		ctx->prv_valid = true;
-		ctx->sectors += bv->bv_len >> 9;
+		ctx->sectors += len >> 9;
 
 		if (ctx->nsegs == 1 && ctx->seg_size > ctx->front_seg_size)
 			ctx->front_seg_size = ctx->seg_size;
@@ -287,16 +285,17 @@ static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
 	if (ctx->nsegs == ctx->max_segs)
 		return true;
 
-	ctx->bvprv = *bv;
+	ctx->prv_addr = addr;
+	ctx->prv_len = len;
 	ctx->prv_valid = true;
 
-	if (bv->bv_offset + bv->bv_len <= PAGE_SIZE) {
+	if (addr + len <= PAGE_SIZE) {
 		ctx->nsegs++;
-		ctx->seg_size = bv->bv_len;
-		ctx->sectors += bv->bv_len >> 9;
+		ctx->seg_size = len;
+		ctx->sectors += len >> 9;
 		if (ctx->nsegs == 1 && ctx->seg_size > ctx->front_seg_size)
 			ctx->front_seg_size = ctx->seg_size;
-	} else if (bvec_split_segs(q, bv, ctx)) {
+	} else if (vec_split_segs(q, addr, len, ctx)) {
 		return true;
 	}
 
@@ -320,7 +319,7 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 	};
 
 	bio_for_each_bvec(bv, bio, iter) {
-		do_split = bvec_should_split(q, &bv, &ctx);
+		do_split = vec_should_split(q, bv.bv_offset, bv.bv_len, &ctx);
 		if (do_split)
 			break;
 	}
@@ -388,14 +387,16 @@ void blk_queue_split(struct request_queue *q, struct bio **bio)
 }
 EXPORT_SYMBOL(blk_queue_split);
 
-static void bvec_calc_rq_segments(struct request_queue *q,
-		struct bio_vec *bv, struct blk_segment_split_ctx *ctx)
+static void vec_calc_rq_segments(struct request_queue *q,
+				 unsigned long addr, unsigned int len,
+				 struct blk_segment_split_ctx *ctx)
 {
 	if (ctx->prv_valid &&
-	    ctx->seg_size + bv->bv_len <= queue_max_segment_size(q) &&
-	    biovec_phys_mergeable(q, &ctx->bvprv, bv)) {
-		ctx->seg_size += bv->bv_len;
-		ctx->bvprv = *bv;
+	    ctx->seg_size + len <= queue_max_segment_size(q) &&
+	    vec_phys_mergeable(q, ctx->prv_addr, ctx->prv_len, addr, len)) {
+		ctx->seg_size += len;
+		ctx->prv_addr = addr;
+		ctx->prv_len = len;
 
 		if (ctx->nsegs == 1 && ctx->seg_size > ctx->front_seg_size)
 			ctx->front_seg_size = ctx->seg_size;
@@ -403,9 +404,10 @@ static void bvec_calc_rq_segments(struct request_queue *q,
 		return;
 	}
 
-	ctx->bvprv = *bv;
+	ctx->prv_addr = addr;
+	ctx->prv_len = len;
 	ctx->prv_valid = true;
-	bvec_split_segs(q, bv, ctx);
+	vec_split_segs(q, addr, len, ctx);
 }
 
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
@@ -435,7 +437,7 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	fbio = bio;
 	for_each_bio(bio) {
 		bio_for_each_bvec(bv, bio, iter)
-			bvec_calc_rq_segments(q, &bv, &ctx);
+			vec_calc_rq_segments(q, bv.bv_offset, bv.bv_len, &ctx);
 
 		bbio = bio;
 	}
