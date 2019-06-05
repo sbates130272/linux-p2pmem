@@ -66,20 +66,36 @@ static inline void blk_queue_enter_live(struct request_queue *q)
 	percpu_ref_get(&q->q_usage_counter);
 }
 
+static inline bool vec_phys_mergeable(struct request_queue *q,
+				      unsigned long addr1, unsigned int len1,
+				      unsigned long addr2, unsigned int len2)
+{
+	unsigned long mask = queue_segment_boundary(q);
+
+	if (addr1 + len1 != addr2)
+		return false;
+	if ((addr1 | mask) != ((addr2 + len2 - 1) | mask))
+		return false;
+	return true;
+}
+
 static inline bool biovec_phys_mergeable(struct request_queue *q,
 		struct bio_vec *vec1, struct bio_vec *vec2)
 {
-	unsigned long mask = queue_segment_boundary(q);
 	phys_addr_t addr1 = page_to_phys(vec1->bv_page) + vec1->bv_offset;
 	phys_addr_t addr2 = page_to_phys(vec2->bv_page) + vec2->bv_offset;
 
-	if (addr1 + vec1->bv_len != addr2)
-		return false;
 	if (xen_domain() && !xen_biovec_phys_mergeable(vec1, vec2->bv_page))
 		return false;
-	if ((addr1 | mask) != ((addr2 + vec2->bv_len - 1) | mask))
-		return false;
-	return true;
+
+	return vec_phys_mergeable(q, addr1, vec1->bv_len, addr2, vec2->bv_len);
+}
+
+static inline bool dmavec_phys_mergeable(struct request_queue *q,
+		struct dma_vec *vec1, struct dma_vec *vec2)
+{
+	return vec_phys_mergeable(q, vec1->dv_addr, vec1->dv_len,
+				  vec2->dv_addr, vec2->dv_len);
 }
 
 static inline bool __bvec_gap_to_prev(struct request_queue *q,
