@@ -439,12 +439,30 @@ static void vec_calc_rq_segments(struct request_queue *q,
 	vec_split_segs(q, addr, len, ctx);
 }
 
+static void bio_calc_rq_segments(struct request_queue *q, struct bio *bio,
+				 struct blk_segment_split_ctx *ctx)
+{
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	bio_for_each_bvec(bv, bio, iter)
+		vec_calc_rq_segments(q, bv.bv_offset, bv.bv_len, ctx);
+}
+
+static void bio_dma_calc_rq_segments(struct request_queue *q, struct bio *bio,
+				     struct blk_segment_split_ctx *ctx)
+{
+	struct bvec_iter iter;
+	struct dma_vec dv;
+
+	bio_for_each_dvec(dv, bio, iter)
+		vec_calc_rq_segments(q, dv.dv_addr, dv.dv_len, ctx);
+}
+
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 					     struct bio *bio)
 {
-	struct bio_vec bv;
 	struct bio *fbio, *bbio;
-	struct bvec_iter iter;
 	struct blk_segment_split_ctx ctx = {
 		.max_segs = UINT_MAX,
 	};
@@ -465,8 +483,10 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 
 	fbio = bio;
 	for_each_bio(bio) {
-		bio_for_each_bvec(bv, bio, iter)
-			vec_calc_rq_segments(q, bv.bv_offset, bv.bv_len, &ctx);
+		if (bio_is_dma_direct(bio))
+			bio_dma_calc_rq_segments(q, bio, &ctx);
+		else
+			bio_calc_rq_segments(q, bio, &ctx);
 
 		bbio = bio;
 	}
