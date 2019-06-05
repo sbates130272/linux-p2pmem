@@ -175,14 +175,13 @@ static unsigned get_max_segment_size(struct request_queue *q,
 }
 
 /*
- * Split the bvec @bv into segments, and update all kinds of
- * variables.
+ * Split the an address/offset and length into segments, and
+ * update all kinds of variables.
  */
-static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
-		unsigned *nsegs, unsigned *last_seg_size,
+static bool vec_split_segs(struct request_queue *q, unsigned addr,
+		unsigned len, unsigned *nsegs, unsigned *last_seg_size,
 		unsigned *front_seg_size, unsigned *sectors, unsigned max_segs)
 {
-	unsigned len = bv->bv_len;
 	unsigned total_len = 0;
 	unsigned new_nsegs = 0, seg_size = 0;
 
@@ -191,14 +190,14 @@ static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
 	 * current bvec has to be splitted as multiple segments.
 	 */
 	while (len && new_nsegs + *nsegs < max_segs) {
-		seg_size = get_max_segment_size(q, bv->bv_offset + total_len);
+		seg_size = get_max_segment_size(q, addr + total_len);
 		seg_size = min(seg_size, len);
 
 		new_nsegs++;
 		total_len += seg_size;
 		len -= seg_size;
 
-		if ((bv->bv_offset + total_len) & queue_virt_boundary(q))
+		if ((addr + total_len) & queue_virt_boundary(q))
 			break;
 	}
 
@@ -210,7 +209,7 @@ static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
 		unsigned first_seg_size;
 
 		if (new_nsegs == 1)
-			first_seg_size = get_max_segment_size(q, bv->bv_offset);
+			first_seg_size = get_max_segment_size(q, addr);
 		else
 			first_seg_size = queue_max_segment_size(q);
 
@@ -226,6 +225,15 @@ static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
 
 	/* split in the middle of the bvec if len != 0 */
 	return !!len;
+}
+
+static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
+		unsigned *nsegs, unsigned *last_seg_size,
+		unsigned *front_seg_size, unsigned *sectors, unsigned max_segs)
+{
+	return vec_split_segs(q, bv->bv_offset, bv->bv_len, nsegs,
+			      last_seg_size, front_seg_size, sectors,
+			      max_segs);
 }
 
 static struct bio *blk_bio_segment_split(struct request_queue *q,
