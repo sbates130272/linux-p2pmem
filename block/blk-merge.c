@@ -391,12 +391,9 @@ EXPORT_SYMBOL(blk_queue_split);
 static void bvec_calc_rq_segments(struct request_queue *q,
 		struct bio_vec *bv, struct blk_segment_split_ctx *ctx)
 {
-	if (ctx->prv_valid) {
-		if (ctx->seg_size + bv->bv_len > queue_max_segment_size(q))
-			goto new_segment;
-		if (!biovec_phys_mergeable(q, &ctx->bvprv, bv))
-			goto new_segment;
-
+	if (ctx->prv_valid &&
+	    ctx->seg_size + bv->bv_len <= queue_max_segment_size(q) &&
+	    biovec_phys_mergeable(q, &ctx->bvprv, bv)) {
 		ctx->seg_size += bv->bv_len;
 		ctx->bvprv = *bv;
 
@@ -406,7 +403,6 @@ static void bvec_calc_rq_segments(struct request_queue *q,
 		return;
 	}
 
-new_segment:
 	ctx->bvprv = *bv;
 	ctx->prv_valid = true;
 	bvec_split_segs(q, bv, ctx);
