@@ -98,11 +98,19 @@ static inline bool dmavec_phys_mergeable(struct request_queue *q,
 				  vec2->dv_addr, vec2->dv_len);
 }
 
+static inline bool __vec_gap_to_prev(struct request_queue *q,
+		unsigned int prv_offset, unsigned int prv_len,
+		unsigned int nxt_offset)
+{
+	return (nxt_offset & queue_virt_boundary(q)) ||
+		((prv_offset + prv_len) & queue_virt_boundary(q));
+}
+
 static inline bool __bvec_gap_to_prev(struct request_queue *q,
 		struct bio_vec *bprv, unsigned int offset)
 {
-	return (offset & queue_virt_boundary(q)) ||
-		((bprv->bv_offset + bprv->bv_len) & queue_virt_boundary(q));
+	return __vec_gap_to_prev(q, bprv->bv_offset, bprv->bv_len,
+				 offset);
 }
 
 /*
@@ -115,6 +123,15 @@ static inline bool bvec_gap_to_prev(struct request_queue *q,
 	if (!queue_virt_boundary(q))
 		return false;
 	return __bvec_gap_to_prev(q, bprv, offset);
+}
+
+static inline bool vec_gap_to_prev(struct request_queue *q,
+		unsigned int prv_offset, unsigned int prv_len,
+		unsigned int nxt_offset)
+{
+	if (!queue_virt_boundary(q))
+		return false;
+	return __vec_gap_to_prev(q, prv_offset, prv_len, nxt_offset);
 }
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
