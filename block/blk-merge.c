@@ -270,12 +270,9 @@ static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
 		return true;
 	}
 
-	if (ctx->prv_valid) {
-		if (ctx->seg_size + bv->bv_len > queue_max_segment_size(q))
-			goto new_segment;
-		if (!biovec_phys_mergeable(q, &ctx->bvprv, bv))
-			goto new_segment;
-
+	if (ctx->prv_valid &&
+	    ctx->seg_size + bv->bv_len <= queue_max_segment_size(q) &&
+	    biovec_phys_mergeable(q, &ctx->bvprv, bv)) {
 		ctx->seg_size += bv->bv_len;
 		ctx->bvprv = *bv;
 		ctx->prv_valid = true;
@@ -287,7 +284,6 @@ static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
 		return false;
 	}
 
-new_segment:
 	if (ctx->nsegs == ctx->max_segs)
 		return true;
 
