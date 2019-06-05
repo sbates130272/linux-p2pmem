@@ -174,13 +174,23 @@ static unsigned get_max_segment_size(struct request_queue *q,
 		     queue_max_segment_size(q));
 }
 
+struct blk_segment_split_ctx {
+	unsigned int seg_size;
+	unsigned int nsegs;
+	unsigned int sectors;
+
+	unsigned int front_seg_size;
+
+	const unsigned int max_sectors;
+	const unsigned int max_segs;
+};
+
 /*
  * Split the an address/offset and length into segments, and
  * update all kinds of variables.
  */
 static bool vec_split_segs(struct request_queue *q, unsigned addr,
-		unsigned len, unsigned *nsegs, unsigned *last_seg_size,
-		unsigned *front_seg_size, unsigned *sectors, unsigned max_segs)
+		unsigned len, struct blk_segment_split_ctx *ctx)
 {
 	unsigned total_len = 0;
 	unsigned new_nsegs = 0, seg_size = 0;
@@ -189,7 +199,7 @@ static bool vec_split_segs(struct request_queue *q, unsigned addr,
 	 * Multi-page bvec may be too big to hold in one segment, so the
 	 * current bvec has to be splitted as multiple segments.
 	 */
-	while (len && new_nsegs + *nsegs < max_segs) {
+	while (len && new_nsegs + ctx->nsegs < ctx->max_segs) {
 		seg_size = get_max_segment_size(q, addr + total_len);
 		seg_size = min(seg_size, len);
 
@@ -205,7 +215,7 @@ static bool vec_split_segs(struct request_queue *q, unsigned addr,
 		return !!len;
 
 	/* update front segment size */
-	if (!*nsegs) {
+	if (!ctx->nsegs) {
 		unsigned first_seg_size;
 
 		if (new_nsegs == 1)
@@ -213,27 +223,23 @@ static bool vec_split_segs(struct request_queue *q, unsigned addr,
 		else
 			first_seg_size = queue_max_segment_size(q);
 
-		if (*front_seg_size < first_seg_size)
-			*front_seg_size = first_seg_size;
+		if (ctx->front_seg_size < first_seg_size)
+			ctx->front_seg_size = first_seg_size;
 	}
 
 	/* update other varibles */
-	*last_seg_size = seg_size;
-	*nsegs += new_nsegs;
-	if (sectors)
-		*sectors += total_len >> 9;
+	ctx->seg_size = seg_size;
+	ctx->nsegs += new_nsegs;
+	ctx->sectors += total_len >> 9;
 
 	/* split in the middle of the bvec if len != 0 */
 	return !!len;
 }
 
 static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
-		unsigned *nsegs, unsigned *last_seg_size,
-		unsigned *front_seg_size, unsigned *sectors, unsigned max_segs)
+			    struct blk_segment_split_ctx *ctx)
 {
-	return vec_split_segs(q, bv->bv_offset, bv->bv_len, nsegs,
-			      last_seg_size, front_seg_size, sectors,
-			      max_segs);
+	return vec_split_segs(q, bv->bv_offset, bv->bv_len, ctx);
 }
 
 static struct bio *blk_bio_segment_split(struct request_queue *q,
@@ -243,12 +249,14 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 {
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	struct bvec_iter iter;
-	unsigned seg_size = 0, nsegs = 0, sectors = 0;
-	unsigned front_seg_size = bio->bi_seg_front_size;
 	bool do_split = true;
 	struct bio *new = NULL;
-	const unsigned max_sectors = get_max_io_size(q, bio);
-	const unsigned max_segs = queue_max_segments(q);
+
+	struct blk_segment_split_ctx ctx = {
+		.front_seg_size = bio->bi_seg_front_size,
+		.max_sectors = get_max_io_size(q, bio),
+		.max_segs = queue_max_segments(q),
+	};
 
 	bio_for_each_bvec(bv, bio, iter) {
 		/*
@@ -258,71 +266,71 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 		if (bvprvp && bvec_gap_to_prev(q, bvprvp, bv.bv_offset))
 			goto split;
 
-		if (sectors + (bv.bv_len >> 9) > max_sectors) {
+		if (ctx.sectors + (bv.bv_len >> 9) > ctx.max_sectors) {
 			/*
 			 * Consider this a new segment if we're splitting in
 			 * the middle of this vector.
 			 */
-			if (nsegs < max_segs &&
-			    sectors < max_sectors) {
+			if (ctx.nsegs < ctx.max_segs &&
+			    ctx.sectors < ctx.max_sectors) {
 				/* split in the middle of bvec */
-				bv.bv_len = (max_sectors - sectors) << 9;
-				bvec_split_segs(q, &bv, &nsegs,
-						&seg_size,
-						&front_seg_size,
-						&sectors, max_segs);
+				bv.bv_len =
+					(ctx.max_sectors - ctx.sectors) << 9;
+				bvec_split_segs(q, &bv, &ctx);
 			}
 			goto split;
 		}
 
 		if (bvprvp) {
-			if (seg_size + bv.bv_len > queue_max_segment_size(q))
+			if (ctx.seg_size + bv.bv_len >
+			    queue_max_segment_size(q))
 				goto new_segment;
 			if (!biovec_phys_mergeable(q, bvprvp, &bv))
 				goto new_segment;
 
-			seg_size += bv.bv_len;
+			ctx.seg_size += bv.bv_len;
 			bvprv = bv;
 			bvprvp = &bvprv;
-			sectors += bv.bv_len >> 9;
+			ctx.sectors += bv.bv_len >> 9;
 
-			if (nsegs == 1 && seg_size > front_seg_size)
-				front_seg_size = seg_size;
+			if (ctx.nsegs == 1 &&
+			    ctx.seg_size > ctx.front_seg_size)
+				ctx.front_seg_size = ctx.seg_size;
 
 			continue;
 		}
 new_segment:
-		if (nsegs == max_segs)
+		if (ctx.nsegs == ctx.max_segs)
 			goto split;
 
 		bvprv = bv;
 		bvprvp = &bvprv;
 
 		if (bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
-			nsegs++;
-			seg_size = bv.bv_len;
-			sectors += bv.bv_len >> 9;
-			if (nsegs == 1 && seg_size > front_seg_size)
-				front_seg_size = seg_size;
-		} else if (bvec_split_segs(q, &bv, &nsegs, &seg_size,
-				    &front_seg_size, &sectors, max_segs)) {
+			ctx.nsegs++;
+			ctx.seg_size = bv.bv_len;
+			ctx.sectors += bv.bv_len >> 9;
+			if (ctx.nsegs == 1 && ctx.seg_size >
+			    ctx.front_seg_size)
+				ctx.front_seg_size = ctx.seg_size;
+		} else if (bvec_split_segs(q, &bv, &ctx)) {
 			goto split;
 		}
 	}
 
 	do_split = false;
 split:
-	*segs = nsegs;
+	*segs = ctx.nsegs;
 
 	if (do_split) {
-		new = bio_split(bio, sectors, GFP_NOIO, bs);
+		new = bio_split(bio, ctx.sectors, GFP_NOIO, bs);
 		if (new)
 			bio = new;
 	}
 
-	bio->bi_seg_front_size = front_seg_size;
-	if (seg_size > bio->bi_seg_back_size)
-		bio->bi_seg_back_size = seg_size;
+	bio->bi_seg_front_size = ctx.front_seg_size;
+	if (ctx.seg_size > bio->bi_seg_back_size)
+		bio->bi_seg_back_size = ctx.seg_size;
 
 	return do_split ? new : NULL;
 }
@@ -380,15 +388,16 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 {
 	struct bio_vec bv, bvprv = { NULL };
 	int prev = 0;
-	unsigned int seg_size, nr_phys_segs;
-	unsigned front_seg_size;
 	struct bio *fbio, *bbio;
 	struct bvec_iter iter;
+	struct blk_segment_split_ctx ctx = {
+		.max_segs = UINT_MAX,
+	};
 
 	if (!bio)
 		return 0;
 
-	front_seg_size = bio->bi_seg_front_size;
+	ctx.front_seg_size = bio->bi_seg_front_size;
 
 	switch (bio_op(bio)) {
 	case REQ_OP_DISCARD:
@@ -400,40 +409,37 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	}
 
 	fbio = bio;
-	seg_size = 0;
-	nr_phys_segs = 0;
 	for_each_bio(bio) {
 		bio_for_each_bvec(bv, bio, iter) {
 			if (prev) {
-				if (seg_size + bv.bv_len
+				if (ctx.seg_size + bv.bv_len
 				    > queue_max_segment_size(q))
 					goto new_segment;
 				if (!biovec_phys_mergeable(q, &bvprv, &bv))
 					goto new_segment;
 
-				seg_size += bv.bv_len;
+				ctx.seg_size += bv.bv_len;
 				bvprv = bv;
 
-				if (nr_phys_segs == 1 && seg_size >
-						front_seg_size)
-					front_seg_size = seg_size;
+				if (ctx.nsegs == 1 && ctx.seg_size >
+				    ctx.front_seg_size)
+					ctx.front_seg_size = ctx.seg_size;
 
 				continue;
 			}
 new_segment:
 			bvprv = bv;
 			prev = 1;
-			bvec_split_segs(q, &bv, &nr_phys_segs, &seg_size,
-					&front_seg_size, NULL, UINT_MAX);
+			bvec_split_segs(q, &bv, &ctx);
 		}
 		bbio = bio;
 	}
 
-	fbio->bi_seg_front_size = front_seg_size;
-	if (seg_size > bbio->bi_seg_back_size)
-		bbio->bi_seg_back_size = seg_size;
+	fbio->bi_seg_front_size = ctx.front_seg_size;
+	if (ctx.seg_size > bbio->bi_seg_back_size)
+		bbio->bi_seg_back_size = ctx.seg_size;
 
-	return nr_phys_segs;
+	return ctx.nsegs;
 }
 
 void blk_recalc_rq_segments(struct request *rq)
