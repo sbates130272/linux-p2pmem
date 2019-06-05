@@ -181,6 +181,9 @@ struct blk_segment_split_ctx {
 
 	unsigned int front_seg_size;
 
+	bool prv_valid;
+	struct bio_vec bvprv;
+
 	const unsigned int max_sectors;
 	const unsigned int max_segs;
 };
@@ -242,14 +245,76 @@ static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
 	return vec_split_segs(q, bv->bv_offset, bv->bv_len, ctx);
 }
 
+static bool bvec_should_split(struct request_queue *q, struct bio_vec *bv,
+			      struct blk_segment_split_ctx *ctx)
+{
+	/*
+	 * If the queue doesn't support SG gaps and adding this
+	 * offset would create a gap, disallow it.
+	 */
+	if (ctx->prv_valid && bvec_gap_to_prev(q, &ctx->bvprv, bv->bv_offset))
+		return true;
+
+	if (ctx->sectors + (bv->bv_len >> 9) > ctx->max_sectors) {
+		/*
+		 * Consider this a new segment if we're splitting in
+		 * the middle of this vector.
+		 */
+		if (ctx->nsegs < ctx->max_segs &&
+		    ctx->sectors < ctx->max_sectors) {
+			/* split in the middle of bvec */
+			bv->bv_len = (ctx->max_sectors - ctx->sectors) << 9;
+			bvec_split_segs(q, bv, ctx);
+		}
+
+		return true;
+	}
+
+	if (ctx->prv_valid) {
+		if (ctx->seg_size + bv->bv_len > queue_max_segment_size(q))
+			goto new_segment;
+		if (!biovec_phys_mergeable(q, &ctx->bvprv, bv))
+			goto new_segment;
+
+		ctx->seg_size += bv->bv_len;
+		ctx->bvprv = *bv;
+		ctx->prv_valid = true;
+		ctx->sectors += bv->bv_len >> 9;
+
+		if (ctx->nsegs == 1 && ctx->seg_size > ctx->front_seg_size)
+			ctx->front_seg_size = ctx->seg_size;
+
+		return false;
+	}
+
+new_segment:
+	if (ctx->nsegs == ctx->max_segs)
+		return true;
+
+	ctx->bvprv = *bv;
+	ctx->prv_valid = true;
+
+	if (bv->bv_offset + bv->bv_len <= PAGE_SIZE) {
+		ctx->nsegs++;
+		ctx->seg_size = bv->bv_len;
+		ctx->sectors += bv->bv_len >> 9;
+		if (ctx->nsegs == 1 && ctx->seg_size > ctx->front_seg_size)
+			ctx->front_seg_size = ctx->seg_size;
+	} else if (bvec_split_segs(q, bv, ctx)) {
+		return true;
+	}
+
+	return false;
+}
+
 static struct bio *blk_bio_segment_split(struct request_queue *q,
 					 struct bio *bio,
 					 struct bio_set *bs,
 					 unsigned *segs)
 {
-	struct bio_vec bv, bvprv, *bvprvp = NULL;
+	struct bio_vec bv;
 	struct bvec_iter iter;
-	bool do_split = true;
+	bool do_split = false;
 	struct bio *new = NULL;
 
 	struct blk_segment_split_ctx ctx = {
@@ -259,67 +324,11 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 	};
 
 	bio_for_each_bvec(bv, bio, iter) {
-		/*
-		 * If the queue doesn't support SG gaps and adding this
-		 * offset would create a gap, disallow it.
-		 */
-		if (bvprvp && bvec_gap_to_prev(q, bvprvp, bv.bv_offset))
-			goto split;
-
-		if (ctx.sectors + (bv.bv_len >> 9) > ctx.max_sectors) {
-			/*
-			 * Consider this a new segment if we're splitting in
-			 * the middle of this vector.
-			 */
-			if (ctx.nsegs < ctx.max_segs &&
-			    ctx.sectors < ctx.max_sectors) {
-				/* split in the middle of bvec */
-				bv.bv_len =
-					(ctx.max_sectors - ctx.sectors) << 9;
-				bvec_split_segs(q, &bv, &ctx);
-			}
-			goto split;
-		}
-
-		if (bvprvp) {
-			if (ctx.seg_size + bv.bv_len >
-			    queue_max_segment_size(q))
-				goto new_segment;
-			if (!biovec_phys_mergeable(q, bvprvp, &bv))
-				goto new_segment;
-
-			ctx.seg_size += bv.bv_len;
-			bvprv = bv;
-			bvprvp = &bvprv;
-			ctx.sectors += bv.bv_len >> 9;
-
-			if (ctx.nsegs == 1 &&
-			    ctx.seg_size > ctx.front_seg_size)
-				ctx.front_seg_size = ctx.seg_size;
-
-			continue;
-		}
-new_segment:
-		if (ctx.nsegs == ctx.max_segs)
-			goto split;
-
-		bvprv = bv;
-		bvprvp = &bvprv;
-
-		if (bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
-			ctx.nsegs++;
-			ctx.seg_size = bv.bv_len;
-			ctx.sectors += bv.bv_len >> 9;
-			if (ctx.nsegs == 1 && ctx.seg_size >
-			    ctx.front_seg_size)
-				ctx.front_seg_size = ctx.seg_size;
-		} else if (bvec_split_segs(q, &bv, &ctx)) {
-			goto split;
-		}
+		do_split = bvec_should_split(q, &bv, &ctx);
+		if (do_split)
+			break;
 	}
 
-	do_split = false;
-split:
 	*segs = ctx.nsegs;
 
 	if (do_split) {
