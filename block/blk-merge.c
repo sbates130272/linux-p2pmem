@@ -201,63 +201,78 @@ static bool bvec_split_segs(struct request_queue *q, struct bio_vec *bv,
 			      sectors, max_segs);
 }
 
+struct blk_segment_split_ctx {
+	unsigned nsegs;
+	unsigned sectors;
+
+	bool prv_valid;
+	struct bio_vec bvprv;
+
+	const unsigned max_sectors;
+	const unsigned max_segs;
+};
+
 static struct bio *blk_bio_segment_split(struct request_queue *q,
 					 struct bio *bio,
 					 struct bio_set *bs,
 					 unsigned *segs)
 {
-	struct bio_vec bv, bvprv, *bvprvp = NULL;
+	struct bio_vec bv;
 	struct bvec_iter iter;
-	unsigned nsegs = 0, sectors = 0;
 	bool do_split = true;
 	struct bio *new = NULL;
-	const unsigned max_sectors = get_max_io_size(q, bio);
-	const unsigned max_segs = queue_max_segments(q);
+
+	struct blk_segment_split_ctx ctx = {
+		.max_sectors = get_max_io_size(q, bio),
+		.max_segs = queue_max_segments(q),
+	};
 
 	bio_for_each_bvec(bv, bio, iter) {
 		/*
 		 * If the queue doesn't support SG gaps and adding this
 		 * offset would create a gap, disallow it.
 		 */
-		if (bvprvp && bvec_gap_to_prev(q, bvprvp, bv.bv_offset))
+		if (ctx.prv_valid && bvec_gap_to_prev(q, &ctx.bvprv,
+						      bv.bv_offset))
 			goto split;
 
-		if (sectors + (bv.bv_len >> 9) > max_sectors) {
+		if (ctx.sectors + (bv.bv_len >> 9) > ctx.max_sectors) {
 			/*
 			 * Consider this a new segment if we're splitting in
 			 * the middle of this vector.
 			 */
-			if (nsegs < max_segs &&
-			    sectors < max_sectors) {
+			if (ctx.nsegs < ctx.max_segs &&
+			    ctx.sectors < ctx.max_sectors) {
 				/* split in the middle of bvec */
-				bv.bv_len = (max_sectors - sectors) << 9;
-				bvec_split_segs(q, &bv, &nsegs,
-						&sectors, max_segs);
+				bv.bv_len =
+					(ctx.max_sectors - ctx.sectors) << 9;
+				bvec_split_segs(q, &bv, &ctx.nsegs,
+						&ctx.sectors, ctx.max_segs);
 			}
 			goto split;
 		}
 
-		if (nsegs == max_segs)
+		if (ctx.nsegs == ctx.max_segs)
 			goto split;
 
-		bvprv = bv;
-		bvprvp = &bvprv;
+		ctx.bvprv = bv;
+		ctx.prv_valid = true;
 
 		if (bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
-			nsegs++;
-			sectors += bv.bv_len >> 9;
-		} else if (bvec_split_segs(q, &bv, &nsegs, &sectors,
-				max_segs)) {
+			ctx.nsegs++;
+			ctx.sectors += bv.bv_len >> 9;
+		} else if (bvec_split_segs(q, &bv, &ctx.nsegs, &ctx.sectors,
+				ctx.max_segs)) {
 			goto split;
 		}
 	}
 
 	do_split = false;
 split:
-	*segs = nsegs;
+	*segs = ctx.nsegs;
 
 	if (do_split) {
-		new = bio_split(bio, sectors, GFP_NOIO, bs);
+		new = bio_split(bio, ctx.sectors, GFP_NOIO, bs);
 		if (new)
 			bio = new;
 	}
