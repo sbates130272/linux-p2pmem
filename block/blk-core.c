@@ -1240,17 +1240,41 @@ unsigned int blk_rq_err_bytes(const struct request *rq)
 }
 EXPORT_SYMBOL_GPL(blk_rq_err_bytes);
 
+static void __blk_account_io_completion(struct request *req,
+					unsigned int bytes)
+{
+	const int sgrp = op_stat_group(req_op(req));
+	struct hd_struct *part;
+
+	part_stat_lock();
+	part = req->part;
+	part_stat_add(part, sectors[sgrp], bytes >> 9);
+	part_stat_unlock();
+}
+
 void blk_account_io_completion(struct request *req, unsigned int bytes)
 {
-	if (blk_do_io_stat(req)) {
-		const int sgrp = op_stat_group(req_op(req));
-		struct hd_struct *part;
+	if (blk_do_io_stat(req))
+		__blk_account_io_completion(req, bytes);
+}
 
-		part_stat_lock();
-		part = req->part;
-		part_stat_add(part, sectors[sgrp], bytes >> 9);
-		part_stat_unlock();
-	}
+static void __blk_account_io_done(struct request *req, u64 now)
+{
+	const int sgrp = op_stat_group(req_op(req));
+	struct hd_struct *part;
+
+	part_stat_lock();
+	part = req->part;
+
+	update_io_ticks(part, jiffies);
+	part_stat_inc(part, ios[sgrp]);
+	part_stat_add(part, nsecs[sgrp], now - req->start_time_ns);
+	part_stat_add(part, time_in_queue,
+		      nsecs_to_jiffies64(now - req->start_time_ns));
+	part_dec_in_flight(req->q, part, rq_data_dir(req));
+
+	hd_struct_put(part);
+	part_stat_unlock();
 }
 
 void blk_account_io_done(struct request *req, u64 now)
@@ -1261,30 +1285,14 @@ void blk_account_io_done(struct request *req, u64 now)
 	 * containing request is enough.
 	 */
 	if (blk_do_io_stat(req) && !(req->rq_flags & RQF_FLUSH_SEQ)) {
-		const int sgrp = op_stat_group(req_op(req));
-		struct hd_struct *part;
-
-		part_stat_lock();
-		part = req->part;
-
-		update_io_ticks(part, jiffies);
-		part_stat_inc(part, ios[sgrp]);
-		part_stat_add(part, nsecs[sgrp], now - req->start_time_ns);
-		part_stat_add(part, time_in_queue, nsecs_to_jiffies64(now - req->start_time_ns));
-		part_dec_in_flight(req->q, part, rq_data_dir(req));
-
-		hd_struct_put(part);
-		part_stat_unlock();
+		__blk_account_io_done(req, now);
 	}
 }
 
-void blk_account_io_start(struct request *rq, bool new_io)
+static void __blk_account_io_start(struct request *rq, bool new_io)
 {
 	struct hd_struct *part;
 	int rw = rq_data_dir(rq);
-
-	if (!blk_do_io_stat(rq))
-		return;
 
 	part_stat_lock();
 
@@ -1313,6 +1321,34 @@ void blk_account_io_start(struct request *rq, bool new_io)
 
 	part_stat_unlock();
 }
+
+void blk_account_io_start(struct request *rq, bool new_io)
+{
+	if (!blk_do_io_stat(rq))
+		return;
+
+	__blk_account_io_start(rq, new_io);
+}
+
+void blk_account_passthru_done(struct request *rq, unsigned int bytes)
+{
+	if (!rq->part)
+		return;
+
+	__blk_account_io_done(rq, ktime_get_ns());
+	__blk_account_io_completion(rq, bytes);
+}
+EXPORT_SYMBOL_GPL(blk_account_passthru_done);
+
+void blk_account_passthru_start(struct request *rq)
+{
+	if (!rq->rq_disk)
+		return;
+
+	rq->start_time_ns = ktime_get_ns();
+	__blk_account_io_start(rq, true);
+}
+EXPORT_SYMBOL_GPL(blk_account_passthru_start);
 
 /*
  * Steal bios from a request and add them to a bio list.
