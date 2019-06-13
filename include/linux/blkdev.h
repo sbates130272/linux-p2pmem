@@ -643,6 +643,9 @@ bool blk_queue_flag_test_and_set(unsigned int flag, struct request_queue *q);
 extern void blk_set_pm_only(struct request_queue *q);
 extern void blk_clear_pm_only(struct request_queue *q);
 
+void blk_account_passthru_done(struct request *rq, unsigned int bytes);
+void blk_account_passthru_start(struct request *rq);
+
 static inline bool blk_account_rq(struct request *rq)
 {
 	return (rq->rq_flags & RQF_STARTED) && !blk_rq_is_passthrough(rq);
