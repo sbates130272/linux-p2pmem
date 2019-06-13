@@ -159,6 +159,8 @@ static void nvmet_passthru_req_done(struct request *rq,
 	/* open code nvme_set_result(), one less conversion */
 	req->cqe->result.u32 = nvme_req(rq)->result.u32;
 
+	blk_account_passthru_done(rq, req->transfer_len);
+
 	nvmet_passthru_req_complete(req, rq, status);
 }
 
@@ -406,6 +408,9 @@ static struct request *nvmet_passthru_blk_make_request(struct nvmet_req *req,
 	if (IS_ERR(rq))
 		return rq;
 
+	if (req->sq->qid != 0 && cmd->common.opcode != nvme_cmd_flush)
+		rq->rq_disk = req->p.passthru_ns->disk;
+
 	for_each_bio(bio) {
 		int ret = blk_rq_append_bio(rq, &bio);
 
@@ -421,6 +426,9 @@ static struct request *nvmet_passthru_blk_make_request(struct nvmet_req *req,
 	 */
 	req->cmd->common.flags &= ~(NVME_CMD_FUSE_FIRST | NVME_CMD_FUSE_SECOND |
 			NVME_CMD_SGL_ALL);
+
+	blk_account_passthru_start(rq);
+
 	return rq;
 }
 
