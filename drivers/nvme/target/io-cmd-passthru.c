@@ -154,6 +154,8 @@ static void nvmet_passthru_req_done(struct request *rq,
 	/* open code nvme_set_result(), one less conversion */
 	req->cqe->result.u32 = nvme_req(rq)->result.u32;
 
+	blk_account_passthru_done(rq, req->transfer_len);
+
 	nvmet_passthru_req_complete(req, rq, status);
 }
 
@@ -448,6 +450,9 @@ static struct request *nvmet_passthru_blk_make_request(struct nvmet_req *req,
 		}
 	}
 
+	if (ns && cmd->common.opcode != nvme_cmd_flush)
+		rq->rq_disk = ns->disk;
+
 	/*
 	 * We don't support fused cmds, also nvme-pci driver uses its own
 	 * sgl_threshold parameter to decide whether to use SGLs or PRPs hence
@@ -455,6 +460,9 @@ static struct request *nvmet_passthru_blk_make_request(struct nvmet_req *req,
 	 */
 	req->cmd->common.flags &= ~(NVME_CMD_FUSE_FIRST | NVME_CMD_FUSE_SECOND |
 			NVME_CMD_SGL_ALL);
+
+	blk_account_passthru_start(rq);
+
 	return rq;
 }
 
@@ -504,7 +512,7 @@ static void nvmet_passthru_execute_cmd(struct nvmet_req *req)
 
 	rq->end_io_data = req;
 	if (req->sq->qid != 0) {
-		blk_execute_rq_nowait(rq->q, NULL, rq, 0,
+		blk_execute_rq_nowait(rq->q, rq->rq_disk, rq, 0,
 				      nvmet_passthru_req_done);
 	} else {
 		req->p.rq = rq;
