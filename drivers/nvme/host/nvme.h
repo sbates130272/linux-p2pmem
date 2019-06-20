@@ -665,4 +665,11 @@ static inline struct nvme_ns *nvme_get_ns_from_dev(struct device *dev)
 	return dev_to_disk(dev)->private_data;
 }
 
+/*
+ * The functions that follow within are only for use by the nvmet-passthru
+ * and should not be used for other things. They are not exported unless
+ * CONFIG_NVME_TARGET_PASSTHRU is set.
+ */
+struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path);
+
 #endif /* _NVME_H */
