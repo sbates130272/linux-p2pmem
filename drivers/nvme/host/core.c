@@ -2769,6 +2769,29 @@ static const struct file_operations nvme_dev_fops = {
 	.compat_ioctl	= nvme_dev_ioctl,
 };
 
+struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path)
+{
+	struct nvme_ctrl *ctrl;
+	struct cdev *cdev;
+
+	cdev = cdev_get_by_path(path);
+	if (IS_ERR(cdev))
+		return ERR_CAST(cdev);
+
+	if (cdev->ops != &nvme_dev_fops) {
+		ctrl = ERR_PTR(-EINVAL);
+		goto out_cdev_put;
+	}
+
+	ctrl = container_of(cdev, struct nvme_ctrl, cdev);
+	nvme_get_ctrl(ctrl);
+
+out_cdev_put:
+	cdev_put(cdev);
+	return ctrl;
+}
+EXPORT_SYMBOL_GPL(nvme_ctrl_get_by_path);
+
 static ssize_t nvme_sysfs_reset(struct device *dev,
 				struct device_attribute *attr, const char *buf,
 				size_t count)
