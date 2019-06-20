@@ -763,4 +763,10 @@ void nvme_hwmon_init(struct nvme_ctrl *ctrl);
 static inline void nvme_hwmon_init(struct nvme_ctrl *ctrl) { }
 #endif
 
+/*
+ * These functions are only for use by nvmet-passthru and are only exported
+ * if CONFIG_NVME_TARGET_PASSTHRU is set.
+ */
+struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path);
+
 #endif /* _NVME_H */
