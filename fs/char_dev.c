@@ -22,6 +22,7 @@
 #include <linux/mutex.h>
 #include <linux/backing-dev.h>
 #include <linux/tty.h>
+#include <linux/namei.h>
 
 #include "internal.h"
 
@@ -402,6 +403,38 @@ struct cdev *cdev_lookup(struct inode *inode)
 	return p;
 }
 
+struct cdev *cdev_get_by_path(const char *pathname)
+{
+	struct inode *inode;
+	struct cdev *cdev;
+	struct path path;
+	int error;
+
+	if (!pathname || !*pathname)
+		return ERR_PTR(-EINVAL);
+
+	error = kern_path(pathname, LOOKUP_FOLLOW, &path);
+	if (error)
+		return ERR_PTR(error);
+
+	if (!may_open_dev(&path)) {
+		cdev = ERR_PTR(-EACCES);
+		goto out;
+	}
+
+	inode = d_backing_inode(path.dentry);
+	if (!S_ISCHR(inode->i_mode)) {
+		cdev = ERR_PTR(-EINVAL);
+		goto out;
+	}
+
+	cdev = cdev_lookup(inode);
+
+out:
+	path_put(&path);
+	return cdev;
+}
+
 /*
  * Called every time a character special file is opened
  */
@@ -689,5 +722,6 @@ EXPORT_SYMBOL(cdev_add);
 EXPORT_SYMBOL(cdev_set_parent);
 EXPORT_SYMBOL(cdev_device_add);
 EXPORT_SYMBOL(cdev_device_del);
+EXPORT_SYMBOL(cdev_get_by_path);
 EXPORT_SYMBOL(__register_chrdev);
 EXPORT_SYMBOL(__unregister_chrdev);
