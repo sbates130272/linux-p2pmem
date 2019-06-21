@@ -366,12 +366,8 @@ void cdev_put(struct cdev *p)
 	}
 }
 
-/*
- * Called every time a character special file is opened
- */
-static int chrdev_open(struct inode *inode, struct file *filp)
+struct cdev *cdev_lookup(struct inode *inode)
 {
-	const struct file_operations *fops;
 	struct cdev *p;
 	struct cdev *new = NULL;
 	int ret = 0;
@@ -384,7 +380,7 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 		spin_unlock(&cdev_lock);
 		kobj = kobj_lookup(cdev_map, inode->i_rdev, &idx);
 		if (!kobj)
-			return -ENXIO;
+			return ERR_PTR(-ENXIO);
 		new = container_of(kobj, struct cdev, kobj);
 		spin_lock(&cdev_lock);
 		/* Check i_cdev again in case somebody beat us to it while
@@ -401,7 +397,23 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 	spin_unlock(&cdev_lock);
 	cdev_put(new);
 	if (ret)
-		return ret;
+		return ERR_PTR(ret);
+
+	return p;
+}
+
+/*
+ * Called every time a character special file is opened
+ */
+static int chrdev_open(struct inode *inode, struct file *filp)
+{
+	const struct file_operations *fops;
+	struct cdev *p;
+	int ret = 0;
+
+	p = cdev_lookup(inode);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
 
 	ret = -ENXIO;
 	fops = fops_get(p->ops);
