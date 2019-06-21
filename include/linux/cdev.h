@@ -24,6 +24,7 @@ void cdev_init(struct cdev *, const struct file_operations *);
 
 struct cdev *cdev_alloc(void);
 
+struct cdev *cdev_get_by_path(const char *pathname);
 void cdev_put(struct cdev *p);
 
 int cdev_add(struct cdev *, dev_t, unsigned);
