@@ -723,5 +723,6 @@ EXPORT_SYMBOL(cdev_set_parent);
 EXPORT_SYMBOL(cdev_device_add);
 EXPORT_SYMBOL(cdev_device_del);
 EXPORT_SYMBOL(cdev_get_by_path);
+EXPORT_SYMBOL(cdev_put);
 EXPORT_SYMBOL(__register_chrdev);
 EXPORT_SYMBOL(__unregister_chrdev);
