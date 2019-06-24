@@ -19,10 +19,12 @@
 #include <linux/random.h>
 #include <linux/seq_buf.h>
 #include <linux/iommu.h>
+#include <linux/xarray.h>
 
 struct pci_p2pdma {
 	struct gen_pool *pool;
 	bool p2pmem_published;
+	struct xarray dist_cache;
 };
 
 static ssize_t size_show(struct device *dev, struct device_attribute *attr,
@@ -97,6 +99,8 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 	p2p = devm_kzalloc(&pdev->dev, sizeof(*p2p), GFP_KERNEL);
 	if (!p2p)
 		return -ENOMEM;
+
+	xa_init(&p2p->dist_cache);
 
 	p2p->pool = gen_pool_create(PAGE_SHIFT, dev_to_node(&pdev->dev));
 	if (!p2p->pool)
@@ -390,17 +394,29 @@ static int upstream_bridge_distance(struct pci_dev *provider,
 				    struct pci_dev *client,
 				    struct seq_buf *acs_list)
 {
+	void *entry;
 	int dist;
+
+	if (provider->p2pdma) {
+		entry = xa_load(&provider->p2pdma->dist_cache, client->devfn);
+		if (entry)
+			return xa_to_value(entry);
+	}
 
 	dist = __upstream_bridge_distance(provider, client, acs_list);
 
 	if (!(dist & P2PDMA_THRU_HOST_BRIDGE))
-		return dist;
+		goto store_and_return;
 
-	if (root_complex_whitelist(provider) && root_complex_whitelist(client))
-		return dist;
+	if (!root_complex_whitelist(provider) || !root_complex_whitelist(client))
+		dist |= P2PDMA_NOT_SUPPORTED;
 
-	return dist | P2PDMA_NOT_SUPPORTED;
+store_and_return:
+	if (provider->p2pdma)
+		xa_store(&provider->p2pdma->dist_cache, client->devfn,
+			 xa_mk_value(dist), GFP_KERNEL);
+
+	return dist;
 }
 
 static int upstream_bridge_distance_warn(struct pci_dev *provider,
