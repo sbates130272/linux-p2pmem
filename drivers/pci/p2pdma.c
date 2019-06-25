@@ -262,18 +262,10 @@ static void seq_buf_print_bus_devfn(struct seq_buf *buf, struct pci_dev *pdev)
 	seq_buf_printf(buf, "%s;", pci_name(pdev));
 }
 
-/*
- * If we can't find a common upstream bridge take a look at the root
- * complex and compare it to a whitelist of known good hardware.
- */
-static bool root_complex_whitelist(struct pci_dev *dev)
+static bool __host_bridge_whitelist(struct pci_host_bridge *host)
 {
-	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
 	struct pci_dev *root = pci_get_slot(host->bus, PCI_DEVFN(0, 0));
 	unsigned short vendor, device;
-
-	if (iommu_present(dev->dev.bus))
-		return false;
 
 	if (!root)
 		return false;
@@ -284,6 +276,24 @@ static bool root_complex_whitelist(struct pci_dev *dev)
 
 	/* AMD ZEN host bridges can do peer to peer */
 	if (vendor == PCI_VENDOR_ID_AMD && device == 0x1450)
+		return true;
+
+	return false;
+}
+
+/*
+ * If we can't find a common upstream bridge take a look at the root
+ * complex and compare it to a whitelist of known good hardware.
+ */
+static bool host_bridge_whitelist(struct pci_dev *a, struct pci_dev *b)
+{
+	struct pci_host_bridge *host_a = pci_find_host_bridge(a->bus);
+	struct pci_host_bridge *host_b = pci_find_host_bridge(b->bus);
+
+	if (iommu_present(a->dev.bus) || iommu_present(b->dev.bus))
+		return false;
+
+	if (__host_bridge_whitelist(host_a) && __host_bridge_whitelist(host_b))
 		return true;
 
 	return false;
@@ -413,7 +423,7 @@ static int upstream_bridge_distance(struct pci_dev *provider,
 	if (!(dist & P2PDMA_THRU_HOST_BRIDGE))
 		return dist;
 
-	if (root_complex_whitelist(provider) && root_complex_whitelist(client))
+	if (host_bridge_whitelist(provider, client))
 		return dist;
 
 	return dist | P2PDMA_NOT_SUPPORTED;
