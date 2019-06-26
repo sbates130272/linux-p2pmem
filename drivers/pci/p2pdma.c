@@ -826,8 +826,22 @@ int pci_p2pdma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 		int nents, enum dma_data_direction dir, unsigned long attrs)
 {
 	struct dev_pagemap *pgmap = sg_page(sg)->pgmap;
+	struct pci_dev *client;
+	int dist;
 
-	return __pci_p2pdma_map_sg(pgmap, dev, sg, nents);
+	client = find_parent_pci_dev(dev);
+	if (WARN_ON_ONCE(!client))
+		return 0;
+
+	dist = upstream_bridge_distance(pgmap->pci_p2pdma_provider,
+					client, NULL);
+	if (WARN_ON_ONCE(dist & P2PDMA_NOT_SUPPORTED))
+		return 0;
+
+	if (dist & P2PDMA_THRU_HOST_BRIDGE)
+		return dma_map_sg_attrs(dev, sg, nents, dir, attrs);
+	else
+		return __pci_p2pdma_map_sg(pgmap, dev, sg, nents);
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_map_sg_attrs);
 
@@ -843,6 +857,21 @@ EXPORT_SYMBOL_GPL(pci_p2pdma_map_sg_attrs);
 void pci_p2pdma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 		int nents, enum dma_data_direction dir, unsigned long attrs)
 {
+	struct dev_pagemap *pgmap = sg_page(sg)->pgmap;
+	struct pci_dev *client;
+	int dist;
+
+	client = find_parent_pci_dev(dev);
+	if (!client)
+		return;
+
+	dist = upstream_bridge_distance(pgmap->pci_p2pdma_provider,
+					client, NULL);
+	if (dist & P2PDMA_NOT_SUPPORTED)
+		return;
+
+	if (dist & P2PDMA_THRU_HOST_BRIDGE)
+		dma_unmap_sg_attrs(dev, sg, nents, dir, attrs);
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_unmap_sg_attrs);
 
