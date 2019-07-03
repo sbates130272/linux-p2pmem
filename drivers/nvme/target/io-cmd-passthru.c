@@ -507,6 +507,10 @@ fail_free_bio:
 		first_bio = first_bio->bi_next;
 		bio_endio(bio);
 	}
+	/*
+	 *TODO: Check fail path should probably complete the nvmet_req
+	 * with an error
+	 */
 }
 
 /*
