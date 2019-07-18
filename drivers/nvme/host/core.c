@@ -301,6 +301,9 @@ bool nvme_change_ctrl_state(struct nvme_ctrl *ctrl,
 	unsigned long flags;
 	bool changed = false;
 
+	/* Ensure a scan isn't in progress when we change the state */
+	mutex_lock(&ctrl->scan_lock);
+
 	spin_lock_irqsave(&ctrl->lock, flags);
 
 	old_state = ctrl->state;
@@ -375,6 +378,8 @@ bool nvme_change_ctrl_state(struct nvme_ctrl *ctrl,
 		ctrl->state = new_state;
 
 	spin_unlock_irqrestore(&ctrl->lock, flags);
+	mutex_unlock(&ctrl->scan_lock);
+
 	if (changed && ctrl->state == NVME_CTRL_LIVE)
 		nvme_kick_requeue_lists(ctrl);
 	return changed;
@@ -3534,6 +3539,8 @@ static void nvme_scan_work(struct work_struct *work)
 	struct nvme_id_ctrl *id;
 	unsigned nn;
 
+	mutex_lock(&ctrl->scan_lock);
+
 	if (ctrl->state != NVME_CTRL_LIVE)
 		return;
 
@@ -3547,7 +3554,6 @@ static void nvme_scan_work(struct work_struct *work)
 	if (nvme_identify_ctrl(ctrl, &id))
 		return;
 
-	mutex_lock(&ctrl->scan_lock);
 	nn = le32_to_cpu(id->nn);
 	if (ctrl->vs >= NVME_VS(1, 1, 0) &&
 	    !(ctrl->quirks & NVME_QUIRK_IDENTIFY_CNS)) {
