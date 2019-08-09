@@ -2553,6 +2553,23 @@ static void unmap_page(struct device *dev, dma_addr_t dma_addr, size_t size,
 	__unmap_single(dma_dom, dma_addr, size, dir);
 }
 
+static dma_addr_t map_resource(struct device *dev, phys_addr_t paddr,
+		size_t size, enum dma_data_direction dir, unsigned long attrs)
+{
+	struct protection_domain *domain;
+	struct dma_ops_domain *dma_dom;
+
+	domain = get_domain(dev);
+	if (PTR_ERR(domain) == -EINVAL)
+		return (dma_addr_t)paddr;
+	else if (IS_ERR(domain))
+		return DMA_MAPPING_ERROR;
+
+	dma_dom = to_dma_ops_domain(domain);
+
+	return __map_single(dev, dma_dom, paddr, size, dir, *dev->dma_mask);
+}
+
 static int sg_num_pages(struct device *dev,
 			struct scatterlist *sglist,
 			int nelems)
@@ -2795,6 +2812,8 @@ static const struct dma_map_ops amd_iommu_dma_ops = {
 	.unmap_page	= unmap_page,
 	.map_sg		= map_sg,
 	.unmap_sg	= unmap_sg,
+	.map_resource	= map_resource,
+	.unmap_resource	= unmap_page,
 	.dma_supported	= amd_iommu_dma_supported,
 	.mmap		= dma_common_mmap,
 	.get_sgtable	= dma_common_get_sgtable,
