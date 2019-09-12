@@ -1196,82 +1196,135 @@ static long do_splice(struct file *in, loff_t __user *off_in,
 
 	return -EINVAL;
 }
-static long do_p2pdma_splice(struct file *in, loff_t __user *off_in,
-			     struct file *out, loff_t __user *off_out,
-			     size_t len, unsigned int flags)
-{
-	struct device *clients[2];
-	struct pci_dev *p2p_dev;
-	int ret;
-	struct kiocb kiocb;
-	struct iov_iter iov_iter;
-	struct bio_vec bvec;
-	struct page *page;
-	void *addr;
-	pci_bus_addr_t paddr;
 
-	/* make sure files are flagged O_DIRECT */
-	if (!(io_is_direct(in) && io_is_direct(out)))
-		return -EIO;
+static inline bool __splice_pci_p2pdma_supported(struct file *f)
+{
+	struct device *d = disk_to_dev(f->f_inode->i_sb->s_bdev->bd_disk);
+
+	if (!blk_queue_pci_p2pdma(f->f_inode->i_sb->s_bdev->bd_queue)) {
+		pr_err("peer-to-peer DMA is not supported by the driver of %s\n",
+		       dev_name(d));
+		return false;
+	}
+	return true;
+}
+
+#define P2P_DMA_SRC		0
+#define P2P_DMA_DST		1
+#define P2P_DMA_CLIENT_LEN	(P2P_DMA_SRC + P2P_DMA_DST + 1)
+
+static struct pci_dev *splice_p2pmem_get_clients(struct file *in,
+						 struct file *out)
+{
+	struct device *clients[P2P_DMA_DST + 1];
+	struct pci_dev *p2p_dev;
 
 	/* get the struct device for each file's device */
-	clients[0] = disk_to_dev(in->f_inode->i_sb->s_bdev->bd_disk);
-	clients[1] = disk_to_dev(out->f_inode->i_sb->s_bdev->bd_disk);
-
-	/* ensure read and write drivers can support p2p queue requests */
-	if (!blk_queue_pci_p2pdma(in->f_inode->i_sb->s_bdev->bd_queue)) {
-		pr_err("peer-to-peer DMA is not supported by the driver of %s\n",
-		       dev_name(clients[0]));
-		return -EINVAL;
-	}
-	if (!blk_queue_pci_p2pdma(out->f_inode->i_sb->s_bdev->bd_queue)) {
-		pr_err("peer-to-peer DMA is not supported by the driver of %s\n",
-		       dev_name(clients[1]));
-		return -EINVAL;
-	}
+	clients[P2P_DMA_SRC] = disk_to_dev(in->f_inode->i_sb->s_bdev->bd_disk);
+	clients[P2P_DMA_DST] = disk_to_dev(out->f_inode->i_sb->s_bdev->bd_disk);
 
 	/* determine p2p path and contributer for the copy */
-	p2p_dev = pci_p2pmem_find_many(clients, ARRAY_SIZE(clients));
+	p2p_dev = pci_p2pmem_find_many(clients, P2P_DMA_CLIENT_LEN);
 	if (!p2p_dev) {
 		pr_err("no peer-to-peer memory is available (%s and %s)\n",
-		       dev_name(clients[0]), dev_name(clients[1]));
-		return -ENOMEM;
+		       dev_name(clients[P2P_DMA_SRC]),
+		       dev_name(clients[P2P_DMA_DST]));
+		goto out;
 	}
 
 	pr_info("using p2pmem on %s for xcopy between %s and %s\n",
-		pci_name(p2p_dev), dev_name(clients[0]), dev_name(clients[1]));
+		pci_name(p2p_dev), dev_name(clients[P2P_DMA_SRC]),
+		dev_name(clients[P2P_DMA_DST]));
+out:
+	return p2p_dev;
+}
+
+static int check_p2pdma_file_perm(struct file *in, struct file *out)
+{
+	int ret = 0;
+
+	/* make sure files are flagged O_DIRECT */
+	if (!(io_is_direct(in) && io_is_direct(out))) {
+		ret = -ENOTSUPP;
+		goto out;
+	}
+
+	if (!__splice_pci_p2pdma_supported(in)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!__splice_pci_p2pdma_supported(out)) {
+		ret = -EINVAL;
+		goto out;
+	}
+out:
+	return ret;
+}
+
+static inline int do_io(struct file *f, struct kiocb *kiocb,
+			struct bio_vec *bvec, struct iov_iter *iov_iter,
+			int rw)
+{
+	ssize_t (*call_iter)(struct kiocb *iocb, struct iov_iter *iter);
+
+	call_iter = rw == READ ? f->f_op->read_iter : f->f_op->write_iter;
+	init_sync_kiocb(kiocb, f);
+	/* allow fs to poll on the bio if supported */
+	kiocb->ki_flags |= IOCB_HIPRI;
+	iov_iter_bvec(iov_iter, rw, bvec, 1, PAGE_SIZE);
+
+	return call_iter(kiocb, iov_iter);
+}
+
+static long do_p2pdma_splice(struct file *in, loff_t __user *off_in,
+			     struct file *out, loff_t __user *off_out,
+			     size_t len)
+{
+	struct iov_iter iov_iter;
+	struct pci_dev *p2p_dev;
+	pci_bus_addr_t paddr;
+	struct bio_vec bvec;
+	struct kiocb kiocb;
+	void *addr;
+	int ret;
+
+	ret = check_p2pdma_file_perm(in, out);
+	if (ret)
+		goto out;
+
+	ret = -ENOMEM;
+
+	p2p_dev = splice_p2pmem_get_clients(in, out);
+	if (!p2p_dev)
+		goto out;
 
 	/* now do a xcopy! */
-	init_sync_kiocb(&kiocb, in);
 	addr = pci_alloc_p2pmem(p2p_dev, PAGE_SIZE);
 	if (!addr)
-		return -ENOMEM;
-	page = virt_to_page(addr);
+		goto out;
+	paddr = pci_p2pmem_virt_to_bus(p2p_dev, addr);
 
-	bvec.bv_page = page;
+	bvec.bv_page = virt_to_page(addr);
 	bvec.bv_len = PAGE_SIZE;
 	bvec.bv_offset = 0;
 
-	iov_iter_bvec(&iov_iter, READ, &bvec, 1, PAGE_SIZE);
-	ret = in->f_op->read_iter(&kiocb, &iov_iter);
+	/* Read */
+	ret = do_io(in, &kiocb, &bvec, &iov_iter, READ);
 	if (ret != PAGE_SIZE)
-		return -EIO;
-	paddr = pci_p2pmem_virt_to_bus(p2p_dev, addr);
+		goto free_pci_p2pmem;
 	pr_info("read %d bytes using %px %pad\n", ret, addr, &paddr);
 
-	init_sync_kiocb(&kiocb, out);
-	iov_iter_bvec(&iov_iter, WRITE, &bvec, 1, PAGE_SIZE);
-	ret = out->f_op->write_iter(&kiocb, &iov_iter);
+	/* Write */
+	ret = do_io(out, &kiocb, &bvec, &iov_iter, WRITE);
 	if (ret != PAGE_SIZE)
-		return -EIO;
-	paddr = pci_p2pmem_virt_to_bus(p2p_dev, addr);
-	paddr = pci_p2pmem_virt_to_bus(p2p_dev, addr);
+		goto free_pci_p2pmem;
 	pr_info("wrote %d bytes using %px %pad\n", ret, addr, &paddr);
 
+free_pci_p2pmem:
 	pci_free_p2pmem(p2p_dev, addr, PAGE_SIZE);
-
-	return 0;
-
+out:
+	return ret;
 }
 
 static int iter_to_pipe(struct iov_iter *from,
@@ -1485,7 +1538,7 @@ SYSCALL_DEFINE6(splice, int, fd_in, loff_t __user *, off_in,
 		size_t, len, unsigned int, flags)
 {
 	struct fd in, out;
-	long error;
+	long ret;
 
 	pr_info("%s: flags = 0x%x\n", __func__, flags);
 
@@ -1495,30 +1548,23 @@ SYSCALL_DEFINE6(splice, int, fd_in, loff_t __user *, off_in,
 	if (unlikely(flags & ~SPLICE_F_ALL))
 		return -EINVAL;
 
-	error = -EBADF;
+	ret = -EBADF;
 	in = fdget(fd_in);
-	if (in.file) {
-		if (in.file->f_mode & FMODE_READ) {
-			out = fdget(fd_out);
-			if (out.file) {
-				if (out.file->f_mode & FMODE_WRITE) {
-					if (unlikely(flags & SPLICE_F_P2PDMA)) {
-						error = do_p2pdma_splice(in.file, off_in,
-									 out.file, off_out,
-									 len, flags);
-					} else {
-						error = do_splice(in.file, off_in,
-								  out.file, off_out,
-								  len, flags);
-					}
-				}
-				fdput(out);
-			}
+	out = fdget(fd_out);
+	if (in.file && in.file->f_mode && FMODE_READ &&
+	    out.file && out.file->f_mode & FMODE_WRITE) {
+		if (unlikely(flags & SPLICE_F_P2PDMA)) {
+			ret = do_p2pdma_splice(in.file, off_in,
+					       out.file, off_out, len);
+		} else {
+			ret = do_splice(in.file, off_in,
+					out.file, off_out, len, flags);
 		}
-		fdput(in);
 	}
+	fdput(out);
+	fdput(in);
 
-	return error;
+	return ret;
 }
 
 /*
