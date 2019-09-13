@@ -36,6 +36,9 @@
 #include <linux/compat.h>
 #include <linux/sched/signal.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/genhd.h>
+#include <linux/blkdev.h>
+
 
 #include "internal.h"
 
