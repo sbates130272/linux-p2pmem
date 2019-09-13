@@ -1200,11 +1200,29 @@ static long do_splice(struct file *in, loff_t __user *off_in,
 	return -EINVAL;
 }
 
+/*
+ * Method for getting the block device from the struct file depends on
+ * if the file is in a filesystem or is a block device file. Provide a
+ * helper.
+ */
+static inline struct block_device *__splice_pci_p2pdma_bdev(struct file *in)
+{
+	umode_t i_mode;
+
+	i_mode = file_inode(in)->i_mode;
+	if (S_ISREG(i_mode))
+		return in->f_inode->i_sb->s_bdev;
+
+	/* block device file */
+	return I_BDEV(in->f_mapping->host);
+}
+
 static inline bool __splice_pci_p2pdma_supported(struct file *f)
 {
-	struct device *d = disk_to_dev(f->f_inode->i_sb->s_bdev->bd_disk);
+	struct block_device *bd = __splice_pci_p2pdma_bdev(f);
+	struct device *d = disk_to_dev(bd->bd_disk);
 
-	if (!blk_queue_pci_p2pdma(f->f_inode->i_sb->s_bdev->bd_queue)) {
+	if (!blk_queue_pci_p2pdma(bd->bd_queue)) {
 		pr_err("peer-to-peer DMA is not supported by the driver of %s\n",
 		       dev_name(d));
 		return false;
@@ -1221,10 +1239,14 @@ static struct pci_dev *splice_p2pmem_get_clients(struct file *in,
 {
 	struct device *clients[P2P_DMA_DST + 1];
 	struct pci_dev *p2p_dev;
+	struct block_device *bd_in, *bd_out;
+
+	bd_in = __splice_pci_p2pdma_bdev(in);
+	bd_out = __splice_pci_p2pdma_bdev(out);
 
 	/* get the struct device for each file's device */
-	clients[P2P_DMA_SRC] = disk_to_dev(in->f_inode->i_sb->s_bdev->bd_disk);
-	clients[P2P_DMA_DST] = disk_to_dev(out->f_inode->i_sb->s_bdev->bd_disk);
+	clients[P2P_DMA_SRC] = disk_to_dev(bd_in->bd_disk);
+	clients[P2P_DMA_DST] = disk_to_dev(bd_out->bd_disk);
 
 	/* determine p2p path and contributer for the copy */
 	p2p_dev = pci_p2pmem_find_many(clients, P2P_DMA_CLIENT_LEN);
@@ -1242,15 +1264,46 @@ out:
 	return p2p_dev;
 }
 
+static int __check_file_perm(struct file *in)
+{
+	int ret = 0;
+	umode_t i_mode;
+
+	/* file must be regular or block device */
+	i_mode = file_inode(in)->i_mode;
+	if (unlikely(!S_ISREG(i_mode) && !S_ISBLK(i_mode))) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* make sure files are flagged O_DIRECT */
+	if (!io_is_direct(in)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* make sure regular file is block-device backed */
+	if (S_ISREG(i_mode)) {
+		if (!in->f_inode->i_sb->s_bdev) {
+			ret = -ENOTBLK;
+			goto out;
+		}
+	}
+out:
+	return ret;
+}
+
 static int check_p2pdma_file_perm(struct file *in, struct file *out)
 {
 	int ret = 0;
 
-	/* make sure files are flagged O_DIRECT */
-	if (!(io_is_direct(in) && io_is_direct(out))) {
-		ret = -EINVAL;
+	ret = __check_file_perm(in);
+	if (ret)
 		goto out;
-	}
+
+	ret = __check_file_perm(out);
+	if (ret)
+		goto out;
 
 	if (!__splice_pci_p2pdma_supported(in)) {
 		ret = -EINVAL;
