@@ -1248,7 +1248,7 @@ static int check_p2pdma_file_perm(struct file *in, struct file *out)
 
 	/* make sure files are flagged O_DIRECT */
 	if (!(io_is_direct(in) && io_is_direct(out))) {
-		ret = -ENOTSUPP;
+		ret = -EINVAL;
 		goto out;
 	}
 
