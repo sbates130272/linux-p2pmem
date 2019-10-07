@@ -93,38 +93,12 @@ static void blk_mq_hctx_clear_pending(struct blk_mq_hw_ctx *hctx,
 
 struct mq_inflight {
 	struct hd_struct *part;
-	unsigned int *inflight;
+	unsigned int inflight[2];
 };
 
 static bool blk_mq_check_inflight(struct blk_mq_hw_ctx *hctx,
 				  struct request *rq, void *priv,
 				  bool reserved)
-{
-	struct mq_inflight *mi = priv;
-
-	/*
-	 * index[0] counts the specific partition that was asked for.
-	 */
-	if (rq->part == mi->part)
-		mi->inflight[0]++;
-
-	return true;
-}
-
-unsigned int blk_mq_in_flight(struct request_queue *q, struct hd_struct *part)
-{
-	unsigned inflight[2];
-	struct mq_inflight mi = { .part = part, .inflight = inflight, };
-
-	inflight[0] = inflight[1] = 0;
-	blk_mq_queue_tag_busy_iter(q, blk_mq_check_inflight, &mi);
-
-	return inflight[0];
-}
-
-static bool blk_mq_check_inflight_rw(struct blk_mq_hw_ctx *hctx,
-				     struct request *rq, void *priv,
-				     bool reserved)
 {
 	struct mq_inflight *mi = priv;
 
@@ -134,13 +108,23 @@ static bool blk_mq_check_inflight_rw(struct blk_mq_hw_ctx *hctx,
 	return true;
 }
 
+unsigned int blk_mq_in_flight(struct request_queue *q, struct hd_struct *part)
+{
+	struct mq_inflight mi = { .part = part };
+
+	blk_mq_queue_tag_busy_iter(q, blk_mq_check_inflight, &mi);
+
+	return mi.inflight[0] + mi.inflight[1];
+}
+
 void blk_mq_in_flight_rw(struct request_queue *q, struct hd_struct *part,
 			 unsigned int inflight[2])
 {
-	struct mq_inflight mi = { .part = part, .inflight = inflight, };
+	struct mq_inflight mi = { .part = part };
 
-	inflight[0] = inflight[1] = 0;
-	blk_mq_queue_tag_busy_iter(q, blk_mq_check_inflight_rw, &mi);
+	blk_mq_queue_tag_busy_iter(q, blk_mq_check_inflight, &mi);
+	inflight[0] = mi.inflight[0];
+	inflight[1] = mi.inflight[1];
 }
 
 void blk_freeze_queue_start(struct request_queue *q)
@@ -662,18 +646,6 @@ bool blk_mq_complete_request(struct request *rq)
 	return true;
 }
 EXPORT_SYMBOL(blk_mq_complete_request);
-
-int blk_mq_request_started(struct request *rq)
-{
-	return blk_mq_rq_state(rq) != MQ_RQ_IDLE;
-}
-EXPORT_SYMBOL_GPL(blk_mq_request_started);
-
-int blk_mq_request_completed(struct request *rq)
-{
-	return blk_mq_rq_state(rq) == MQ_RQ_COMPLETE;
-}
-EXPORT_SYMBOL_GPL(blk_mq_request_completed);
 
 void blk_mq_start_request(struct request *rq)
 {
@@ -2876,9 +2848,9 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
 
-	q->nr_queues = nr_hw_queues(set);
-	q->queue_hw_ctx = kcalloc_node(q->nr_queues, sizeof(*(q->queue_hw_ctx)),
-						GFP_KERNEL, set->numa_node);
+	q->queue_hw_ctx = kcalloc_node(nr_hw_queues(set),
+				       sizeof(*(q->queue_hw_ctx)), GFP_KERNEL,
+				       set->numa_node);
 	if (!q->queue_hw_ctx)
 		goto err_sys_init;
 
