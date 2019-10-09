@@ -677,6 +677,10 @@ int arch_add_memory(int nid, u64 start, u64 size,
 	int ret;
 
 	ret = __add_pages(nid, start_pfn, nr_pages, modifiers);
+	if (modifiers->pgprot != PAGE_KERNEL)
+		return -EINVAL;
+
+	ret = __add_pages(nid, start_pfn, nr_pages, restrictions);
 	if (ret)
 		printk("%s: Problem encountered in __add_pages() as ret=%d\n",
 		       __func__,  ret);

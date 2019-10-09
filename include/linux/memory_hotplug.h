@@ -56,9 +56,11 @@ enum {
 /*
  * Restrictions for the memory hotplug:
  * altmap: alternative allocator for memmap array
+ * pgprot: page protection flags to apply to newly added page tables
  */
 struct mhp_modifiers {
 	struct vmem_altmap *altmap;
+	pgprot_t pgprot;
 };
 
 /*

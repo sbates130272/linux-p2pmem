@@ -1027,7 +1027,7 @@ static int online_memory_block(struct memory_block *mem, void *arg)
  */
 int __ref add_memory_resource(int nid, struct resource *res)
 {
-	struct mhp_modifiers modifiers = {};
+	struct mhp_modifiers modifiers = {.pgprot = PAGE_KERNEL};
 	u64 start, size;
 	bool new_node = false;
 	int ret;
