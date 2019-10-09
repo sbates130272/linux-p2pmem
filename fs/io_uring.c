@@ -269,7 +269,7 @@ struct sqe_submit {
 	unsigned short			index;
 	u32				sequence;
 	bool				has_user;
-	bool				needs_lock;
+	bool				in_async;
 	bool				needs_fixed_file;
 };
 
@@ -1444,13 +1444,9 @@ static int io_read(struct io_kiocb *req, const struct sqe_submit *s,
 			ret2 = -EAGAIN;
 		/* Catch -EAGAIN return for forced non-blocking submission */
 		if (!force_nonblock || ret2 != -EAGAIN) {
-			kiocb_done(kiocb, ret2, nxt, s->needs_lock);
+			kiocb_done(kiocb, ret2, nxt, s->in_async);
 		} else {
-			/*
-			 * If ->needs_lock is true, we're already in async
-			 * context.
-			 */
-			if (!s->needs_lock)
+			if (!s->in_async)
 				io_async_list_note(READ, req, iov_count);
 			ret = -EAGAIN;
 		}
@@ -1488,8 +1484,7 @@ static int io_write(struct io_kiocb *req, const struct sqe_submit *s,
 
 	ret = -EAGAIN;
 	if (force_nonblock && !(kiocb->ki_flags & IOCB_DIRECT)) {
-		/* If ->needs_lock is true, we're already in async context. */
-		if (!s->needs_lock)
+		if (!s->in_async)
 			io_async_list_note(WRITE, req, iov_count);
 		goto out_free;
 	}
@@ -1518,13 +1513,9 @@ static int io_write(struct io_kiocb *req, const struct sqe_submit *s,
 		else
 			ret2 = loop_rw_iter(WRITE, file, kiocb, &iter);
 		if (!force_nonblock || ret2 != -EAGAIN) {
-			kiocb_done(kiocb, ret2, nxt, s->needs_lock);
+			kiocb_done(kiocb, ret2, nxt, s->in_async);
 		} else {
-			/*
-			 * If ->needs_lock is true, we're already in async
-			 * context.
-			 */
-			if (!s->needs_lock)
+			if (!s->in_async)
 				io_async_list_note(WRITE, req, iov_count);
 			ret = -EAGAIN;
 		}
@@ -2089,10 +2080,10 @@ static int __io_submit_sqe(struct io_ring_ctx *ctx, struct io_kiocb *req,
 			return -EAGAIN;
 
 		/* workqueue context doesn't hold uring_lock, grab it now */
-		if (s->needs_lock)
+		if (s->in_async)
 			mutex_lock(&ctx->uring_lock);
 		io_iopoll_req_issued(req);
-		if (s->needs_lock)
+		if (s->in_async)
 			mutex_unlock(&ctx->uring_lock);
 	}
 
@@ -2157,7 +2148,7 @@ restart:
 
 		if (!ret) {
 			s->has_user = cur_mm != NULL;
-			s->needs_lock = true;
+			s->in_async = true;
 			do {
 				ret = __io_submit_sqe(ctx, req, s, &nxt, false);
 				/*
@@ -2621,7 +2612,7 @@ out:
 						-EFAULT);
 		} else {
 			sqes[i].has_user = has_user;
-			sqes[i].needs_lock = true;
+			sqes[i].in_async = true;
 			sqes[i].needs_fixed_file = true;
 			io_submit_sqe(ctx, &sqes[i], statep, &link, true);
 			submitted++;
@@ -2807,7 +2798,7 @@ static int io_ring_submit(struct io_ring_ctx *ctx, unsigned int to_submit,
 
 out:
 		s.has_user = true;
-		s.needs_lock = false;
+		s.in_async = false;
 		s.needs_fixed_file = false;
 		submit++;
 
