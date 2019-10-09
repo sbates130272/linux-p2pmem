@@ -669,12 +669,15 @@ mem_init (void)
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG
-int arch_add_memory(int nid, u64 start, u64 size,
+int arch_add_memory(int nid, u64 start, u64 size, pgprot_t prot,
 			struct mhp_restrictions *restrictions)
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 	int ret;
+
+	if (prot != PAGE_KERNEL)
+		return -EINVAL;
 
 	ret = __add_pages(nid, start_pfn, nr_pages, restrictions);
 	if (ret)

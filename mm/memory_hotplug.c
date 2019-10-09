@@ -1055,7 +1055,7 @@ int __ref add_memory_resource(int nid, struct resource *res)
 	new_node = ret;
 
 	/* call arch's memory hotadd */
-	ret = arch_add_memory(nid, start, size, &restrictions);
+	ret = arch_add_memory(nid, start, size, PAGE_KERNEL, &restrictions);
 	if (ret < 0)
 		goto error;
 
