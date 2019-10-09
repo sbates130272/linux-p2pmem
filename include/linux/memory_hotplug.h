@@ -111,7 +111,7 @@ extern void __online_page_free(struct page *page);
 
 extern int try_online_node(int nid);
 
-extern int arch_add_memory(int nid, u64 start, u64 size,
+extern int arch_add_memory(int nid, u64 start, u64 size, pgprot_t prot,
 			struct mhp_restrictions *restrictions);
 extern u64 max_mem_size;
 
