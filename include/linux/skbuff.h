@@ -4144,21 +4144,27 @@ static inline void *skb_ext_find(const struct sk_buff *skb, enum skb_ext_id id)
 
 	return NULL;
 }
+
+static inline void skb_ext_reset(struct sk_buff *skb)
+{
+	if (unlikely(skb->active_extensions)) {
+		__skb_ext_put(skb->extensions);
+		skb->active_extensions = 0;
+	}
+}
 #else
 static inline void skb_ext_put(struct sk_buff *skb) {}
+static inline void skb_ext_reset(struct sk_buff *skb) {}
 static inline void skb_ext_del(struct sk_buff *skb, int unused) {}
 static inline void __skb_ext_copy(struct sk_buff *d, const struct sk_buff *s) {}
 static inline void skb_ext_copy(struct sk_buff *dst, const struct sk_buff *s) {}
 #endif /* CONFIG_SKB_EXTENSIONS */
 
-static inline void nf_reset(struct sk_buff *skb)
+static inline void nf_reset_ct(struct sk_buff *skb)
 {
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(skb_nfct(skb));
 	skb->_nfct = 0;
-#endif
-#if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-	skb_ext_del(skb, SKB_EXT_BRIDGE_NF);
 #endif
 }
 

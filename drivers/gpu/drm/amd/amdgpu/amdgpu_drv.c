@@ -81,9 +81,10 @@
  * - 3.32.0 - Add syncobj timeline support to AMDGPU_CS.
  * - 3.33.0 - Fixes for GDS ENOMEM failures in AMDGPU_CS.
  * - 3.34.0 - Non-DC can flip correctly between buffers with different pitches
+ * - 3.35.0 - Add drm_amdgpu_info_device::tcc_disabled_mask
  */
 #define KMS_DRIVER_MAJOR	3
-#define KMS_DRIVER_MINOR	34
+#define KMS_DRIVER_MINOR	35
 #define KMS_DRIVER_PATCHLEVEL	0
 
 #define AMDGPU_MAX_TIMEOUT_PARAM_LENTH	256
@@ -1012,10 +1013,15 @@ static const struct pci_device_id pciidlist[] = {
 	{0x1002, 0x731B, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI10},
 	{0x1002, 0x731F, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI10},
 	/* Navi14 */
-	{0x1002, 0x7340, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14},
+	{0x1002, 0x7340, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14|AMD_EXP_HW_SUPPORT},
+	{0x1002, 0x7341, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14|AMD_EXP_HW_SUPPORT},
+	{0x1002, 0x7347, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14|AMD_EXP_HW_SUPPORT},
 
 	/* Renoir */
 	{0x1002, 0x1636, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_RENOIR|AMD_IS_APU|AMD_EXP_HW_SUPPORT},
+
+	/* Navi12 */
+	{0x1002, 0x7360, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI12|AMD_EXP_HW_SUPPORT},
 
 	{0, 0, 0}
 };
