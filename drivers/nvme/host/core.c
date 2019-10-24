@@ -4211,6 +4211,48 @@ void nvme_sync_queues(struct nvme_ctrl *ctrl)
 }
 EXPORT_SYMBOL_GPL(nvme_sync_queues);
 
+#ifdef CONFIG_NVME_TARGET_PASSTHRU
+static void nvme_execute_passthru_rq_work(struct work_struct *w)
+{
+	struct nvme_request *req = container_of(w, struct nvme_request, work);
+	struct request *rq = blk_mq_rq_from_pdu(req);
+	rq_end_io_fn *done = rq->end_io;
+	void *end_io_data = rq->end_io_data;
+
+	nvme_execute_passthru_rq(rq);
+
+	if (done) {
+		rq->end_io_data = end_io_data;
+		done(rq, 0);
+	}
+}
+
+void nvme_execute_passthru_rq_nowait(struct request *rq, rq_end_io_fn *done)
+{
+	struct nvme_command *cmd = nvme_req(rq)->cmd;
+	struct nvme_ctrl *ctrl = nvme_req(rq)->ctrl;
+	struct nvme_ns *ns = rq->q->queuedata;
+	struct gendisk *disk = ns ? ns->disk : NULL;
+	u32 effects;
+
+	/*
+	 * This function may be called in interrupt context, so we cannot sleep
+	 * but nvme_passthru_[start|end]() may sleep so we need to execute
+	 * the command in a work queue.
+	 */
+	effects = nvme_command_effects(ctrl, ns, cmd->common.opcode);
+	if (effects) {
+		rq->end_io = done;
+		INIT_WORK(&nvme_req(rq)->work, nvme_execute_passthru_rq_work);
+		queue_work(nvme_wq, &nvme_req(rq)->work);
+		return;
+	}
+
+	blk_execute_rq_nowait(rq->q, disk, rq, 0, done);
+}
+EXPORT_SYMBOL_GPL(nvme_execute_passthru_rq_nowait);
+#endif /* CONFIG_NVME_TARGET_PASSTHRU */
+
 /*
  * Check we didn't inadvertently grow the command structure sizes:
  */
