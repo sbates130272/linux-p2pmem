@@ -128,6 +128,7 @@ struct nvme_request {
 	u8			flags;
 	u16			status;
 	struct nvme_ctrl	*ctrl;
+	struct work_struct	work;
 };
 
 /*
@@ -659,6 +660,7 @@ static inline struct nvme_ns *nvme_get_ns_from_dev(struct device *dev)
  * other things.
  */
 struct nvme_ctrl *nvme_ctrl_get_by_path(const char *path);
+void nvme_execute_passthru_rq_nowait(struct request *rq, rq_end_io_fn *done);
 #endif /* CONFIG_NVME_TARGET_PASSTHRU */
 
 #endif /* _NVME_H */
