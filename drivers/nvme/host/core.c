@@ -886,22 +886,8 @@ out:
 	return ERR_PTR(ret);
 }
 
-static u32 nvme_known_admin_effects(u8 opcode)
-{
-	switch (opcode) {
-	case nvme_admin_format_nvm:
-		return NVME_CMD_EFFECTS_CSUPP | NVME_CMD_EFFECTS_LBCC |
-					NVME_CMD_EFFECTS_CSE_MASK;
-	case nvme_admin_sanitize_nvm:
-		return NVME_CMD_EFFECTS_CSE_MASK;
-	default:
-		break;
-	}
-	return 0;
-}
-
-static u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
-			       u8 opcode)
+static u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
+				u8 opcode)
 {
 	u32 effects = 0;
 
@@ -917,7 +903,24 @@ static u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 
 	if (ctrl->effects)
 		effects = le32_to_cpu(ctrl->effects->acs[opcode]);
-	effects |= nvme_known_admin_effects(opcode);
+
+	switch (opcode) {
+	case nvme_admin_format_nvm:
+		effects |= NVME_CMD_EFFECTS_CSUPP | NVME_CMD_EFFECTS_LBCC |
+					NVME_CMD_EFFECTS_CSE_MASK;
+		break;
+	case nvme_admin_sanitize_nvm:
+		effects |= NVME_CMD_EFFECTS_CSE_MASK;
+		break;
+	default:
+		break;
+	}
+
+	return effects;
+}
+
+static void nvme_passthru_start(struct nvme_ctrl *ctrl, u32 effects)
+{
 
 	/*
 	 * For simplicity, IO to all namespaces is quiesced even if the command
@@ -931,7 +934,6 @@ static u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 		nvme_start_freeze(ctrl);
 		nvme_wait_freeze(ctrl);
 	}
-	return effects;
 }
 
 static void nvme_update_formats(struct nvme_ctrl *ctrl)
@@ -975,7 +977,8 @@ static void nvme_execute_passthru_rq(struct request *rq)
 	struct gendisk *disk = ns ? ns->disk : NULL;
 	u32 effects;
 
-	effects = nvme_passthru_start(ctrl, ns, cmd->common.opcode);
+	effects = nvme_command_effects(ctrl, ns, cmd->common.opcode);
+	nvme_passthru_start(ctrl, effects);
 	blk_execute_rq(rq->q, disk, rq, 0);
 	nvme_passthru_end(ctrl, effects);
 }
