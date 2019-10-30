@@ -1036,7 +1036,7 @@ bool blk_mq_get_driver_tag(struct request *rq)
 	bool shared;
 
 	if (rq->tag != -1)
-		goto done;
+		return true;
 
 	if (blk_mq_tag_is_reserved(data.hctx->sched_tags, rq->internal_tag))
 		data.flags |= BLK_MQ_REQ_RESERVED;
@@ -1051,7 +1051,6 @@ bool blk_mq_get_driver_tag(struct request *rq)
 		data.hctx->tags->rqs[rq->tag] = rq;
 	}
 
-done:
 	return rq->tag != -1;
 }
 
@@ -2761,6 +2760,23 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 	int i, j, end;
 	struct blk_mq_hw_ctx **hctxs = q->queue_hw_ctx;
 
+	if (q->nr_hw_queues < set->nr_hw_queues) {
+		struct blk_mq_hw_ctx **new_hctxs;
+
+		new_hctxs = kcalloc_node(set->nr_hw_queues,
+				       sizeof(*new_hctxs), GFP_KERNEL,
+				       set->numa_node);
+		if (!new_hctxs)
+			return;
+		if (hctxs)
+			memcpy(new_hctxs, hctxs, q->nr_hw_queues *
+			       sizeof(*hctxs));
+		q->queue_hw_ctx = new_hctxs;
+		q->nr_hw_queues = set->nr_hw_queues;
+		kfree(hctxs);
+		hctxs = new_hctxs;
+	}
+
 	/* protect against switching io scheduler  */
 	mutex_lock(&q->sysfs_lock);
 	for (i = 0; i < set->nr_hw_queues; i++) {
@@ -2816,19 +2832,6 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 	mutex_unlock(&q->sysfs_lock);
 }
 
-/*
- * Maximum number of hardware queues we support. For single sets, we'll never
- * have more than the CPUs (software queues). For multiple sets, the tag_set
- * user may have set ->nr_hw_queues larger.
- */
-static unsigned int nr_hw_queues(struct blk_mq_tag_set *set)
-{
-	if (set->nr_maps == 1)
-		return nr_cpu_ids;
-
-	return max(set->nr_hw_queues, nr_cpu_ids);
-}
-
 struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 						  struct request_queue *q,
 						  bool elevator_init)
@@ -2847,12 +2850,6 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
-
-	q->queue_hw_ctx = kcalloc_node(nr_hw_queues(set),
-				       sizeof(*(q->queue_hw_ctx)), GFP_KERNEL,
-				       set->numa_node);
-	if (!q->queue_hw_ctx)
-		goto err_sys_init;
 
 	INIT_LIST_HEAD(&q->unused_hctx_list);
 	spin_lock_init(&q->unused_hctx_lock);
@@ -2901,7 +2898,6 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 err_hctxs:
 	kfree(q->queue_hw_ctx);
 	q->nr_hw_queues = 0;
-err_sys_init:
 	blk_mq_sysfs_deinit(q);
 err_poll:
 	blk_stat_free_callback(q->poll_cb);
@@ -3002,6 +2998,29 @@ static int blk_mq_update_queue_map(struct blk_mq_tag_set *set)
 	}
 }
 
+static int blk_mq_realloc_tag_set_tags(struct blk_mq_tag_set *set,
+				  int cur_nr_hw_queues, int new_nr_hw_queues)
+{
+	struct blk_mq_tags **new_tags;
+
+	if (cur_nr_hw_queues >= new_nr_hw_queues)
+		return 0;
+
+	new_tags = kcalloc_node(new_nr_hw_queues, sizeof(struct blk_mq_tags *),
+				GFP_KERNEL, set->numa_node);
+	if (!new_tags)
+		return -ENOMEM;
+
+	if (set->tags)
+		memcpy(new_tags, set->tags, cur_nr_hw_queues *
+		       sizeof(*set->tags));
+	kfree(set->tags);
+	set->tags = new_tags;
+	set->nr_hw_queues = new_nr_hw_queues;
+
+	return 0;
+}
+
 /*
  * Alloc a tag set to be associated with one or more request queues.
  * May fail with EINVAL for various error conditions. May adjust the
@@ -3055,9 +3074,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	if (set->nr_maps == 1 && set->nr_hw_queues > nr_cpu_ids)
 		set->nr_hw_queues = nr_cpu_ids;
 
-	set->tags = kcalloc_node(nr_hw_queues(set), sizeof(struct blk_mq_tags *),
-				 GFP_KERNEL, set->numa_node);
-	if (!set->tags)
+	if (blk_mq_realloc_tag_set_tags(set, 0, set->nr_hw_queues) < 0)
 		return -ENOMEM;
 
 	ret = -ENOMEM;
@@ -3098,7 +3115,7 @@ void blk_mq_free_tag_set(struct blk_mq_tag_set *set)
 {
 	int i, j;
 
-	for (i = 0; i < nr_hw_queues(set); i++)
+	for (i = 0; i < set->nr_hw_queues; i++)
 		blk_mq_free_map_and_requests(set, i);
 
 	for (j = 0; j < set->nr_maps; j++) {
@@ -3243,10 +3260,6 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	list_for_each_entry(q, &set->tag_list, tag_set_list)
 		blk_mq_freeze_queue(q);
 	/*
-	 * Sync with blk_mq_queue_tag_busy_iter.
-	 */
-	synchronize_rcu();
-	/*
 	 * Switch IO scheduler to 'none', cleaning up the data associated
 	 * with the previous scheduler. We will switch back once we are done
 	 * updating the new sw to hw queue mappings.
@@ -3259,6 +3272,10 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 		blk_mq_debugfs_unregister_hctxs(q);
 		blk_mq_sysfs_unregister(q);
 	}
+
+	if (blk_mq_realloc_tag_set_tags(set, set->nr_hw_queues, nr_hw_queues) <
+	    0)
+		goto reregister;
 
 	prev_nr_hw_queues = set->nr_hw_queues;
 	set->nr_hw_queues = nr_hw_queues;
@@ -3276,6 +3293,7 @@ fallback:
 		blk_mq_map_swqueue(q);
 	}
 
+reregister:
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
 		blk_mq_sysfs_register(q);
 		blk_mq_debugfs_register_hctxs(q);
