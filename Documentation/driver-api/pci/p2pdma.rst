@@ -75,6 +75,11 @@ P2P memory using :c:func:`pci_p2pmem_publish()`. This will allow
 any orchestrator drivers to find and use the memory. When marked in
 this way, the resource must be regular memory with no side effects.
 
+Alternatively, a provider could only remap a BAR (or a portion of a
+BAR) as P2P memory using :c:func:`pci_p2pdma_memremap()`. Providers
+using this method will manage the memory internally without allowing
+Client drivers to allocate memory in P2P mapped region.
+
 For the time being this is fairly rudimentary in that all resources
 are typically going to be P2P memory. Future work will likely expand
 this to include other types of resources like doorbells.
