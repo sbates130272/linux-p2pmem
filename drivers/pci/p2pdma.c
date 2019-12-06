@@ -247,6 +247,7 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 
 out_pool_destroy:
 	gen_pool_destroy(pdev->p2pdma->pool);
+	pdev->p2pdma->pool = NULL;
 out_unmap:
 	devm_memunmap_pages(&pdev->dev, pgmap);
 	devm_kfree(&pdev->dev, pgmap);
@@ -838,15 +839,24 @@ void pci_p2pmem_publish(struct pci_dev *pdev, bool publish)
 EXPORT_SYMBOL_GPL(pci_p2pmem_publish);
 
 static enum pci_p2pdma_map_type pci_p2pdma_map_type(struct pci_dev *provider,
-						    struct pci_dev *client)
+		struct pci_dev *client)
 {
+	enum pci_p2pdma_map_type ret;
+
 	if (!provider->p2pdma)
 		return PCI_P2PDMA_MAP_NOT_SUPPORTED;
 
-	return xa_to_value(xa_load(&provider->p2pdma->map_types,
-				   map_types_idx(client)));
-}
+	ret = xa_to_value(xa_load(&provider->p2pdma->map_types,
+			map_types_idx(client)));
+	if (ret != PCI_P2PDMA_MAP_UNKNOWN)
+		return ret;
 
+	/*
+	 * Lazily resolve the map type and update the xarray if there
+	 * is a mapping:
+	 */
+	return upstream_bridge_distance_warn(provider, client, NULL);
+}
 static int __pci_p2pdma_map_sg(struct pci_p2pdma_pagemap *p2p_pgmap,
 		struct device *dev, struct scatterlist *sg, int nents)
 {
@@ -898,14 +908,12 @@ int pci_p2pdma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 		return 0;
 
 	client = to_pci_dev(dev);
-
 	switch (pci_p2pdma_map_type(p2p_pgmap->provider, client)) {
 	case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
 		return dma_map_sg_attrs(dev, sg, nents, dir, attrs);
 	case PCI_P2PDMA_MAP_BUS_ADDR:
 		return __pci_p2pdma_map_sg(p2p_pgmap, dev, sg, nents);
 	default:
-		WARN_ON_ONCE(1);
 		return 0;
 	}
 }
