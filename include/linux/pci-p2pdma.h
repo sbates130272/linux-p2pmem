@@ -19,6 +19,8 @@ struct scatterlist;
 #ifdef CONFIG_PCI_P2PDMA
 int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 		u64 offset);
+void *pci_p2pdma_memremap(struct pci_dev *pdev, int bar, size_t size,
+			    u64 offset);
 int pci_p2pdma_distance_many(struct pci_dev *provider, struct device **clients,
 			     int num_clients, bool verbose);
 bool pci_has_p2pmem(struct pci_dev *pdev);
@@ -43,6 +45,11 @@ static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)
 {
 	return -EOPNOTSUPP;
+}
+static inline void *pci_p2pdma_memremap(struct pci_dev *pdev, int bar,
+		size_t size, u64 offset)
+{
+	return ERR_PTR(-EOPNOTSUPP);
 }
 static inline int pci_p2pdma_distance_many(struct pci_dev *provider,
 	struct device **clients, int num_clients, bool verbose)

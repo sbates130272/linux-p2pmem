@@ -104,8 +104,10 @@ static void pci_p2pdma_release(void *data)
 	pdev->p2pdma = NULL;
 	synchronize_rcu();
 
-	gen_pool_destroy(p2pdma->pool);
-	sysfs_remove_group(&pdev->dev.kobj, &p2pmem_group);
+	if (p2pdma->pool) {
+		gen_pool_destroy(p2pdma->pool);
+		sysfs_remove_group(&pdev->dev.kobj, &p2pmem_group);
+	}
 	xa_destroy(&p2pdma->map_types);
 }
 
@@ -120,41 +122,31 @@ static int pci_p2pdma_setup(struct pci_dev *pdev)
 
 	xa_init(&p2p->map_types);
 
-	p2p->pool = gen_pool_create(PAGE_SHIFT, dev_to_node(&pdev->dev));
-	if (!p2p->pool)
-		goto out;
-
 	error = devm_add_action_or_reset(&pdev->dev, pci_p2pdma_release, pdev);
 	if (error)
-		goto out_pool_destroy;
+		goto out_error;
 
 	pdev->p2pdma = p2p;
 
-	error = sysfs_create_group(&pdev->dev.kobj, &p2pmem_group);
-	if (error)
-		goto out_pool_destroy;
-
 	return 0;
 
-out_pool_destroy:
+out_error:
 	pdev->p2pdma = NULL;
-	gen_pool_destroy(p2p->pool);
-out:
 	devm_kfree(&pdev->dev, p2p);
 	return error;
 }
 
 /**
- * pci_p2pdma_add_resource - add memory for use as p2p memory
- * @pdev: the device to add the memory to
- * @bar: PCI BAR to add
- * @size: size of the memory to add, may be zero to use the whole BAR
+ * pci_p2pdma_memremap - remap PCI BAR memory for use as p2p memory
+ * @pdev: the device to remap the memory for
+ * @bar: PCI BAR to remap
+ * @size: size of the memory to remap, may be zero to use the whole BAR
  * @offset: offset into the PCI BAR
  *
  * The memory will be given ZONE_DEVICE struct pages so that it may
  * be used with any DMA request.
  */
-int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
+void *pci_p2pdma_memremap(struct pci_dev *pdev, int bar, size_t size,
 			    u64 offset)
 {
 	struct pci_p2pdma_pagemap *p2p_pgmap;
@@ -163,26 +155,26 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 	int error;
 
 	if (!(pci_resource_flags(pdev, bar) & IORESOURCE_MEM))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (offset >= pci_resource_len(pdev, bar))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (!size)
 		size = pci_resource_len(pdev, bar) - offset;
 
 	if (size + offset > pci_resource_len(pdev, bar))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (!pdev->p2pdma) {
 		error = pci_p2pdma_setup(pdev);
 		if (error)
-			return error;
+			return ERR_PTR(error);
 	}
 
 	p2p_pgmap = devm_kzalloc(&pdev->dev, sizeof(*p2p_pgmap), GFP_KERNEL);
 	if (!p2p_pgmap)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	pgmap = &p2p_pgmap->pgmap;
 	pgmap->res.start = pci_resource_start(pdev, bar) + offset;
@@ -195,29 +187,72 @@ int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
 		pci_resource_start(pdev, bar);
 
 	addr = devm_memremap_pages(&pdev->dev, pgmap);
-	if (IS_ERR(addr)) {
-		error = PTR_ERR(addr);
+	if (IS_ERR(addr))
 		goto pgmap_free;
-	}
 
+	pci_info(pdev, "registered peer-to-peer DMA memory %pR\n",
+			&pgmap->res);
+
+	return addr;
+
+pgmap_free:
+	devm_kfree(&pdev->dev, pgmap);
+	return ERR_PTR(error);
+}
+EXPORT_SYMBOL_GPL(pci_p2pdma_memremap);
+
+/**
+ * pci_p2pdma_add_resource - add memory for use as p2p memory
+ * @pdev: the device to add the memory to
+ * @bar: PCI BAR to add
+ * @size: size of the memory to add, may be zero to use the whole BAR
+ * @offset: offset into the PCI BAR
+ *
+ * The memory will be given ZONE_DEVICE struct pages so that it may
+ * be used with any DMA request.
+ */
+int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar, size_t size,
+		u64 offset)
+{
+	struct dev_pagemap *pgmap;
+	void *addr;
+	int error;
+
+	addr = pci_p2pdma_memremap(pdev, bar, size, offset);
+	if (IS_ERR(addr))
+		return PTR_ERR(addr);
+
+	pgmap = virt_to_page(addr)->pgmap;
+
+	if (!pdev->p2pdma->pool) {
+		pdev->p2pdma->pool = gen_pool_create(PAGE_SHIFT,
+				dev_to_node(&pdev->dev));
+		if (!pdev->p2pdma->pool) {
+			error = -ENOMEM;
+			goto out_unmap;
+		}
+
+		error = sysfs_create_group(&pdev->dev.kobj, &p2pmem_group);
+		if (error)
+			goto out_pool_destroy;
+	}
 	error = gen_pool_add_owner(pdev->p2pdma->pool, (unsigned long)addr,
 			pci_bus_address(pdev, bar) + offset,
 			resource_size(&pgmap->res), dev_to_node(&pdev->dev),
 			pgmap->ref);
 	if (error)
-		goto pages_free;
-
-	pci_info(pdev, "added peer-to-peer DMA memory %pR\n",
-		 &pgmap->res);
+		goto out_unmap;
 
 	return 0;
 
-pages_free:
+out_pool_destroy:
+	gen_pool_destroy(pdev->p2pdma->pool);
+out_unmap:
 	devm_memunmap_pages(&pdev->dev, pgmap);
-pgmap_free:
 	devm_kfree(&pdev->dev, pgmap);
 	return error;
 }
+
 EXPORT_SYMBOL_GPL(pci_p2pdma_add_resource);
 
 /*
