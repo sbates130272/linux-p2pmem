@@ -85,6 +85,8 @@
  * its physical address space and the bus address space.
  */
 struct dma_map_ops {
+	unsigned int flags;
+#define DMA_F_PCI_P2PDMA_SUPPORTED	(1 << 0)
 	void* (*alloc)(struct device *dev, size_t size,
 				dma_addr_t *dma_handle, gfp_t gfp,
 				unsigned long attrs);
@@ -225,6 +227,13 @@ static inline void set_dma_ops(struct device *dev,
 {
 }
 #endif /* CONFIG_DMA_OPS */
+
+static inline bool dma_pci_p2pdma_supported(struct device *dev)
+{
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	return !ops || ops->flags & DMA_F_PCI_P2PDMA_SUPPORTED;
+}
 
 static inline int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
