@@ -39,6 +39,10 @@ struct scatterlist {
 #define sg_dma_len(sg)		((sg)->length)
 #endif
 
+#define SG_P2PDMA_FLAG	(1U << 31)
+#define sg_dma_p2pdma_len(sg)	(sg_dma_len(sg) & ~SG_P2PDMA_FLAG)
+#define sg_dma_is_p2pdma(sg)	(sg_dma_len(sg) & SG_P2PDMA_FLAG)
+
 struct sg_table {
 	struct scatterlist *sgl;	/* the list */
 	unsigned int nents;		/* number of mapped entries */
