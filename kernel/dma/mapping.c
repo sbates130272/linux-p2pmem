@@ -178,8 +178,15 @@ void dma_unmap_page_attrs(struct device *dev, dma_addr_t addr, size_t size,
 EXPORT_SYMBOL(dma_unmap_page_attrs);
 
 /*
- * dma_maps_sg_attrs returns 0 on error and > 0 on success.
- * It should never return a value < 0.
+ * dma_maps_sg_attrs returns 0 on any resource error and > 0 on success.
+ *
+ * If 0 is returned, the mapping can be retried and will succeed once
+ * sufficient resources are available.
+ *
+ * If there are P2PDMA pages in the scatterlist then this function may
+ * return -EREMOTEIO to indicate that the pages are not mappable by the
+ * device. In this case, an error should be returned for the IO as it
+ * will never be successfully retried.
  */
 int dma_map_sg_attrs(struct device *dev, struct scatterlist *sg, int nents,
 		enum dma_data_direction dir, unsigned long attrs)
@@ -197,7 +204,7 @@ int dma_map_sg_attrs(struct device *dev, struct scatterlist *sg, int nents,
 		ents = dma_direct_map_sg(dev, sg, nents, dir, attrs);
 	else
 		ents = ops->map_sg(dev, sg, nents, dir, attrs);
-	BUG_ON(ents < 0);
+
 	debug_dma_map_sg(dev, sg, nents, ents, dir);
 
 	return ents;
