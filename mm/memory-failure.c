@@ -1414,8 +1414,8 @@ int memory_failure(unsigned long pfn, int flags)
 	p = pfn_to_online_page(pfn);
 	if (!p) {
 		if (pfn_valid(pfn)) {
-			pgmap = get_dev_pagemap(pfn, NULL);
-			if (pgmap)
+			pgmap = get_dev_pagemap(pfn, NULL, false);
+			if (!IS_ERR_OR_NULL(pgmap))
 				return memory_failure_dev_pagemap(pfn, flags,
 								  pgmap);
 		}
