@@ -68,6 +68,17 @@
 #define DMA_ATTR_PRIVILEGED		(1UL << 9)
 
 /*
+ * DMA_ATTR_P2PDMA: specifies that dma_map_sg() may return p2pdma
+ * bus addresses. Code that specifies this must ensure to
+ * use sg_dma_p2pdma_len() instead of sg_dma_len() as the high
+ * bit of the length will indicate a P2PDMA bus address.
+ *
+ * If this attribute is not set and P2PDMA pages are encountered,
+ * dma_map_sg() will return an error.
+ */
+#define DMA_ATTR_P2PDMA			(1UL << 10)
+
+/*
  * A dma_addr_t can hold any valid DMA or bus address for the platform.
  * It can be given to a device to use as a DMA source or target.  A CPU cannot
  * reference a dma_addr_t directly because there may be translation between
