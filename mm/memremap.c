@@ -251,7 +251,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 			return ERR_PTR(error);
 	}
 
-	conflict_pgmap = get_dev_pagemap(PHYS_PFN(res->start), NULL);
+	conflict_pgmap = get_dev_pagemap(PHYS_PFN(res->start), NULL, true);
 	if (conflict_pgmap) {
 		WARN(1, "Conflicting mapping in same section\n");
 		put_dev_pagemap(conflict_pgmap);
@@ -259,7 +259,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 		goto err_array;
 	}
 
-	conflict_pgmap = get_dev_pagemap(PHYS_PFN(res->end), NULL);
+	conflict_pgmap = get_dev_pagemap(PHYS_PFN(res->end), NULL, true);
 	if (conflict_pgmap) {
 		WARN(1, "Conflicting mapping in same section\n");
 		put_dev_pagemap(conflict_pgmap);
@@ -413,19 +413,20 @@ void vmem_altmap_free(struct vmem_altmap *altmap, unsigned long nr_pfns)
  * get_dev_pagemap() - take a new live reference on the dev_pagemap for @pfn
  * @pfn: page frame number to lookup page_map
  * @pgmap: optional known pgmap that already has a reference
+ * @allow_pci_p2pdma: allow getting a pgmap with the PCI P2PDMA type
  *
  * If @pgmap is non-NULL and covers @pfn it will be returned as-is.  If @pgmap
  * is non-NULL but does not cover @pfn the reference to it will be released.
  */
 struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
-		struct dev_pagemap *pgmap)
+		struct dev_pagemap *pgmap, bool allow_pci_p2pdma)
 {
 	resource_size_t phys = PFN_PHYS(pfn);
 
 	/*
 	 * In the cached case we're already holding a live reference.
 	 */
-	if (pgmap) {
+	if (!IS_ERR_OR_NULL(pgmap)) {
 		if (phys >= pgmap->res.start && phys <= pgmap->res.end)
 			return pgmap;
 		put_dev_pagemap(pgmap);
@@ -437,6 +438,11 @@ struct dev_pagemap *get_dev_pagemap(unsigned long pfn,
 	if (pgmap && !percpu_ref_tryget_live(pgmap->ref))
 		pgmap = NULL;
 	rcu_read_unlock();
+
+	if (!allow_pci_p2pdma && pgmap->type == MEMORY_DEVICE_PCI_P2PDMA) {
+		put_dev_pagemap(pgmap);
+		return ERR_PTR(-EINVAL);
+	}
 
 	return pgmap;
 }
