@@ -132,9 +132,10 @@ bool __generic_fsdax_supported(struct dax_device *dax_dev,
 	} else if (pfn_t_devmap(pfn) && pfn_t_devmap(end_pfn)) {
 		struct dev_pagemap *pgmap, *end_pgmap;
 
-		pgmap = get_dev_pagemap(pfn_t_to_pfn(pfn), NULL);
-		end_pgmap = get_dev_pagemap(pfn_t_to_pfn(end_pfn), NULL);
-		if (pgmap && pgmap == end_pgmap && pgmap->type == MEMORY_DEVICE_FS_DAX
+		pgmap = get_dev_pagemap(pfn_t_to_pfn(pfn), NULL, false);
+		end_pgmap = get_dev_pagemap(pfn_t_to_pfn(end_pfn), NULL, false);
+		if (!IS_ERR_OR_NULL(pgmap) && pgmap == end_pgmap
+				&& pgmap->type == MEMORY_DEVICE_FS_DAX
 				&& pfn_t_to_page(pfn)->pgmap == pgmap
 				&& pfn_t_to_page(end_pfn)->pgmap == pgmap
 				&& pfn_t_to_pfn(pfn) == PHYS_PFN(__pa(kaddr))
