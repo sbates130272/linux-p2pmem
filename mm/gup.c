@@ -522,11 +522,16 @@ retry:
 		 * case since they are only valid while holding the pgmap
 		 * reference.
 		 */
-		*pgmap = get_dev_pagemap(pte_pfn(pte), *pgmap);
-		if (*pgmap)
+		*pgmap = get_dev_pagemap(pte_pfn(pte), *pgmap,
+					 flags & FOLL_PCI_P2PDMA);
+		if (IS_ERR(*pgmap)) {
+			page = ERR_CAST(*pgmap);
+			goto out;
+		} else if (*pgmap) {
 			page = pte_page(pte);
-		else
+		} else {
 			goto no_page;
+		}
 	} else if (unlikely(!page)) {
 		if (flags & FOLL_DUMP) {
 			/* Avoid special (like zero) pages in core dumps */
@@ -846,7 +851,7 @@ struct page *follow_page(struct vm_area_struct *vma, unsigned long address,
 		return NULL;
 
 	page = follow_page_mask(vma, address, foll_flags, &ctx);
-	if (ctx.pgmap)
+	if (!IS_ERR_OR_NULL(ctx.pgmap))
 		put_dev_pagemap(ctx.pgmap);
 	return page;
 }
@@ -1199,7 +1204,7 @@ next_page:
 		nr_pages -= page_increm;
 	} while (nr_pages);
 out:
-	if (ctx.pgmap)
+	if (!IS_ERR_OR_NULL(ctx.pgmap))
 		put_dev_pagemap(ctx.pgmap);
 	return i ? i : ret;
 }
@@ -2149,8 +2154,9 @@ static int gup_pte_range(pmd_t pmd, unsigned long addr, unsigned long end,
 			if (unlikely(flags & FOLL_LONGTERM))
 				goto pte_unmap;
 
-			pgmap = get_dev_pagemap(pte_pfn(pte), pgmap);
-			if (unlikely(!pgmap)) {
+			pgmap = get_dev_pagemap(pte_pfn(pte), pgmap,
+						flags & FOLL_PCI_P2PDMA);
+			if (IS_ERR_OR_NULL(pgmap)) {
 				undo_dev_pagemap(nr, nr_start, flags, pages);
 				goto pte_unmap;
 			}
@@ -2198,7 +2204,7 @@ static int gup_pte_range(pmd_t pmd, unsigned long addr, unsigned long end,
 	ret = 1;
 
 pte_unmap:
-	if (pgmap)
+	if (!IS_ERR_OR_NULL(pgmap))
 		put_dev_pagemap(pgmap);
 	pte_unmap(ptem);
 	return ret;
@@ -2233,8 +2239,8 @@ static int __gup_device_huge(unsigned long pfn, unsigned long addr,
 	do {
 		struct page *page = pfn_to_page(pfn);
 
-		pgmap = get_dev_pagemap(pfn, pgmap);
-		if (unlikely(!pgmap)) {
+		pgmap = get_dev_pagemap(pfn, pgmap, flags & FOLL_PCI_P2PDMA);
+		if (IS_ERR_OR_NULL(pgmap)) {
 			undo_dev_pagemap(nr, nr_start, flags, pages);
 			ret = 0;
 			break;
@@ -2708,7 +2714,7 @@ static int internal_get_user_pages_fast(unsigned long start,
 
 	if (WARN_ON_ONCE(gup_flags & ~(FOLL_WRITE | FOLL_LONGTERM |
 				       FOLL_FORCE | FOLL_PIN | FOLL_GET |
-				       FOLL_FAST_ONLY)))
+				       FOLL_FAST_ONLY | FOLL_PCI_P2PDMA)))
 		return -EINVAL;
 
 	if (gup_flags & FOLL_PIN)
