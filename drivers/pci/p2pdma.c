@@ -16,6 +16,7 @@
 #include <linux/genalloc.h>
 #include <linux/memremap.h>
 #include <linux/percpu-refcount.h>
+#include <linux/pfn_t.h>
 #include <linux/random.h>
 #include <linux/seq_buf.h>
 #include <linux/xarray.h>
@@ -1000,3 +1001,106 @@ ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 	return sprintf(page, "%s\n", pci_name(p2p_dev));
 }
 EXPORT_SYMBOL_GPL(pci_p2pdma_enable_show);
+
+struct pci_p2pdma_map {
+	struct kref ref;
+	struct pci_dev *pdev;
+	void *kaddr;
+	size_t len;
+};
+
+static struct pci_p2pdma_map *pci_p2pdma_map_alloc(struct pci_dev *pdev,
+						   size_t len)
+{
+	struct pci_p2pdma_map *pmap;
+
+	pmap = kzalloc(sizeof(*pmap), GFP_KERNEL);
+	if (!pmap)
+		return NULL;
+
+	kref_init(&pmap->ref);
+	pmap->pdev = pdev;
+	pmap->len = len;
+
+	pmap->kaddr = pci_alloc_p2pmem(pdev, len);
+	if (!pmap->kaddr) {
+		kfree(pmap);
+		return NULL;
+	}
+
+	return pmap;
+}
+
+static void pci_p2pdma_map_free(struct kref *ref)
+{
+	struct pci_p2pdma_map *pmap =
+		container_of(ref, struct pci_p2pdma_map, ref);
+
+	pci_free_p2pmem(pmap->pdev, pmap->kaddr, pmap->len);
+	kfree(pmap);
+}
+
+static void pci_p2pdma_vma_open(struct vm_area_struct *vma)
+{
+	struct pci_p2pdma_map *pmap = vma->vm_private_data;
+
+	kref_get(&pmap->ref);
+}
+
+static void pci_p2pdma_vma_close(struct vm_area_struct *vma)
+{
+	struct pci_p2pdma_map *pmap = vma->vm_private_data;
+
+	kref_put(&pmap->ref, pci_p2pdma_map_free);
+}
+
+static const struct vm_operations_struct pci_p2pdma_vmops = {
+	.open = pci_p2pdma_vma_open,
+	.close = pci_p2pdma_vma_close,
+};
+
+/**
+ * pci_mmap_p2pmem - allocate peer-to-peer DMA memory
+ * @pdev: the device to allocate memory from
+ * @vma: the userspace vma to map the memory to
+ *
+ * Returns 0 on success, or a negative error code on failure
+ */
+int pci_mmap_p2pmem(struct pci_dev *pdev, struct vm_area_struct *vma)
+{
+	struct pci_p2pdma_map *pmap;
+	unsigned long addr, pfn;
+	vm_fault_t ret;
+
+	/* prevent private mappings from being established */
+	if ((vma->vm_flags & VM_MAYSHARE) != VM_MAYSHARE) {
+		pci_info_ratelimited(pdev,
+				     "%s: fail, attempted private mapping\n",
+				     current->comm);
+		return -EINVAL;
+	}
+
+	pmap = pci_p2pdma_map_alloc(pdev, vma->vm_end - vma->vm_start);
+	if (!pmap)
+		return -ENOMEM;
+
+	vma->vm_flags |= VM_MIXEDMAP;
+	vma->vm_private_data = pmap;
+	vma->vm_ops = &pci_p2pdma_vmops;
+
+	pfn = virt_to_phys(pmap->kaddr) >> PAGE_SHIFT;
+	for (addr = vma->vm_start; addr < vma->vm_end; addr += PAGE_SIZE) {
+		ret = vmf_insert_mixed(vma, addr,
+				       __pfn_to_pfn_t(pfn, PFN_DEV | PFN_MAP));
+		if (ret & VM_FAULT_ERROR)
+			goto out_error;
+		pfn++;
+	}
+
+	return 0;
+
+out_error:
+	kref_put(&pmap->ref, pci_p2pdma_map_free);
+	return -EFAULT;
+}
+EXPORT_SYMBOL_GPL(pci_mmap_p2pmem);
