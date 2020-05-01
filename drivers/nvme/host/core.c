@@ -3180,6 +3180,7 @@ static int nvme_dev_open(struct inode *inode, struct file *file)
 {
 	struct nvme_ctrl *ctrl =
 		container_of(inode->i_cdev, struct nvme_ctrl, cdev);
+	int ret = -EINVAL;
 
 	switch (ctrl->state) {
 	case NVME_CTRL_LIVE:
@@ -3189,13 +3190,25 @@ static int nvme_dev_open(struct inode *inode, struct file *file)
 	}
 
 	nvme_get_ctrl(ctrl);
-	if (!try_module_get(ctrl->ops->module)) {
-		nvme_put_ctrl(ctrl);
-		return -EINVAL;
-	}
+	if (!try_module_get(ctrl->ops->module))
+		goto err_put_ctrl;
 
 	file->private_data = ctrl;
+
+	if (ctrl->ops->cdev_file_open) {
+		ret = ctrl->ops->cdev_file_open(ctrl, file);
+		if (ret)
+			goto err_put_mod;
+	}
+
 	return 0;
+
+err_put_mod:
+	module_put(ctrl->ops->module);
+err_put_ctrl:
+	nvme_put_ctrl(ctrl);
+	return ret;
+
 }
 
 static int nvme_dev_release(struct inode *inode, struct file *file)
@@ -3203,9 +3216,22 @@ static int nvme_dev_release(struct inode *inode, struct file *file)
 	struct nvme_ctrl *ctrl =
 		container_of(inode->i_cdev, struct nvme_ctrl, cdev);
 
+	if (ctrl->ops->cdev_file_release)
+		ctrl->ops->cdev_file_release(file);
+
 	module_put(ctrl->ops->module);
 	nvme_put_ctrl(ctrl);
 	return 0;
+}
+
+static int nvme_dev_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct nvme_ctrl *ctrl = file->private_data;
+
+	if (!ctrl->ops->mmap_cmb)
+		return -ENODEV;
+
+	return ctrl->ops->mmap_cmb(ctrl, vma);
 }
 
 static const struct file_operations nvme_dev_fops = {
@@ -3215,6 +3241,7 @@ static const struct file_operations nvme_dev_fops = {
 	.unlocked_ioctl	= nvme_dev_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.uring_cmd	= nvme_dev_uring_cmd,
+	.mmap		= nvme_dev_mmap,
 };
 
 static ssize_t nvme_sysfs_reset(struct device *dev,
