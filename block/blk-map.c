@@ -258,6 +258,7 @@ static struct bio *bio_map_user_iov(struct request_queue *q,
 		struct iov_iter *iter, gfp_t gfp_mask)
 {
 	unsigned int max_sectors = queue_max_hw_sectors(q);
+	unsigned int flags = 0;
 	int j;
 	struct bio *bio;
 	int ret;
@@ -269,13 +270,17 @@ static struct bio *bio_map_user_iov(struct request_queue *q,
 	if (!bio)
 		return ERR_PTR(-ENOMEM);
 
+	if (blk_queue_pci_p2pdma(q))
+		flags |= FOLL_PCI_P2PDMA;
+
 	while (iov_iter_count(iter)) {
 		struct page **pages;
 		ssize_t bytes;
 		size_t offs, added = 0;
 		int npages;
 
-		bytes = iov_iter_get_pages_alloc(iter, &pages, LONG_MAX, &offs);
+		bytes = iov_iter_get_pages_alloc_flags(iter, &pages, LONG_MAX,
+						       &offs, flags);
 		if (unlikely(bytes <= 0)) {
 			ret = bytes ? bytes : -EFAULT;
 			goto out_unmap;
