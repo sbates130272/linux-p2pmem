@@ -34,6 +34,9 @@ int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 			    bool *use_p2pdma);
 ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
 			       bool use_p2pdma);
+int pci_p2pdma_file_open(struct pci_dev *pdev, struct file *file);
+void pci_p2pdma_file_release(struct file *file);
+int pci_mmap_p2pmem(struct pci_dev *pdev, struct vm_area_struct *vma);
 #else /* CONFIG_PCI_P2PDMA */
 static inline int pci_p2pdma_add_resource(struct pci_dev *pdev, int bar,
 		size_t size, u64 offset)
@@ -89,6 +92,19 @@ static inline ssize_t pci_p2pdma_enable_show(char *page,
 		struct pci_dev *p2p_dev, bool use_p2pdma)
 {
 	return sprintf(page, "none\n");
+}
+static inline int pci_p2pdma_file_open(struct pci_dev *pdev,
+				       struct file *file)
+{
+	return 0;
+}
+static inline void pci_p2pdma_file_release(struct file *file)
+{
+}
+static inline int pci_mmap_p2pmem(struct pci_dev *pdev,
+				  struct vm_area_struct *vma)
+{
+	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_PCI_P2PDMA */
 
