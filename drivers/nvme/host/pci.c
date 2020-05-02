@@ -2166,7 +2166,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 
 	if (nr_io_queues == 0)
 		return 0;
-	
+
 	clear_bit(NVMEQ_ENABLED, &adminq->flags);
 
 	if (dev->cmb_use_sqes) {
@@ -2762,6 +2762,36 @@ static int nvme_pci_mmap_cmb(struct nvme_ctrl *ctrl,
 	return pci_mmap_p2pmem(pdev, vma);
 }
 
+static int nvme_pci_test_map(struct nvme_ctrl *ctrl, struct request *req)
+{
+	struct nvme_dev *dev = to_nvme_dev(ctrl);
+	struct scatterlist *sg, *s;
+	int nents, nr_mapped = 0;
+	int i;
+
+	sg = mempool_alloc(dev->iod_mempool, GFP_ATOMIC);
+	if (!sg)
+		return -ENOMEM;
+
+	sg_init_table(sg, blk_rq_nr_phys_segments(req));
+	nents = blk_rq_map_sg(req->q, req, sg);
+	if (!nents)
+		goto out;
+
+	nr_mapped = dma_map_sg_p2pdma(dev->dev, sg, nents, DMA_TO_DEVICE);
+
+	for_each_sg(sg, s, nr_mapped, i) {
+		dev_info(dev->ctrl.device, "%03d %pad %x %d\n",
+			 i, &sg_dma_address(s), sg_dma_len(s),
+			 !!sg_is_pci_p2pdma(s));
+	}
+
+	dma_unmap_sg(dev->dev, sg, nents, DMA_TO_DEVICE);
+out:
+	mempool_free(sg, dev->iod_mempool);
+	return nr_mapped;
+}
+
 static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.name			= "pcie",
 	.module			= THIS_MODULE,
@@ -2774,6 +2804,7 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.get_address		= nvme_pci_get_address,
 	.supports_pci_p2pdma	= nvme_pci_supports_pci_p2pdma,
 	.mmap_cmb		= nvme_pci_mmap_cmb,
+	.test_map		= nvme_pci_test_map,
 };
 
 static int nvme_dev_map(struct nvme_dev *dev)

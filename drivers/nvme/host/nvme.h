@@ -482,6 +482,7 @@ struct nvme_ctrl_ops {
 	int (*get_address)(struct nvme_ctrl *ctrl, char *buf, int size);
 	bool (*supports_pci_p2pdma)(struct nvme_ctrl *ctrl);
 	int (*mmap_cmb)(struct nvme_ctrl *ctrl, struct vm_area_struct *vma);
+	int (*test_map)(struct nvme_ctrl *ctrl, struct request *req);
 };
 
 #ifdef CONFIG_FAULT_INJECTION_DEBUG_FS
