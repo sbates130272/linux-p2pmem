@@ -213,7 +213,7 @@ struct nvme_ctrl {
 	struct mutex scan_lock;
 	const struct nvme_ctrl_ops *ops;
 	struct request_queue *admin_q;
-	struct request_queue *connect_q;
+	struct request_queue *passthrough_q;
 	struct request_queue *fabrics_q;
 	struct device *dev;
 	int instance;

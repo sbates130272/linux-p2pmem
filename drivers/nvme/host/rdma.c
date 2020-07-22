@@ -941,7 +941,7 @@ static void nvme_rdma_destroy_io_queues(struct nvme_rdma_ctrl *ctrl,
 		bool remove)
 {
 	if (remove) {
-		blk_cleanup_queue(ctrl->ctrl.connect_q);
+		blk_cleanup_queue(ctrl->ctrl.passthrough_q);
 		blk_mq_free_tag_set(ctrl->ctrl.tagset);
 	}
 	nvme_rdma_free_io_queues(ctrl);
@@ -962,9 +962,9 @@ static int nvme_rdma_configure_io_queues(struct nvme_rdma_ctrl *ctrl, bool new)
 			goto out_free_io_queues;
 		}
 
-		ctrl->ctrl.connect_q = blk_mq_init_queue(&ctrl->tag_set);
-		if (IS_ERR(ctrl->ctrl.connect_q)) {
-			ret = PTR_ERR(ctrl->ctrl.connect_q);
+		ctrl->ctrl.passthrough_q = blk_mq_init_queue(&ctrl->tag_set);
+		if (IS_ERR(ctrl->ctrl.passthrough_q)) {
+			ret = PTR_ERR(ctrl->ctrl.passthrough_q);
 			goto out_free_tag_set;
 		}
 	} else {
@@ -974,13 +974,13 @@ static int nvme_rdma_configure_io_queues(struct nvme_rdma_ctrl *ctrl, bool new)
 
 	ret = nvme_rdma_start_io_queues(ctrl);
 	if (ret)
-		goto out_cleanup_connect_q;
+		goto out_cleanup_passthrough_q;
 
 	return 0;
 
-out_cleanup_connect_q:
+out_cleanup_passthrough_q:
 	if (new)
-		blk_cleanup_queue(ctrl->ctrl.connect_q);
+		blk_cleanup_queue(ctrl->ctrl.passthrough_q);
 out_free_tag_set:
 	if (new)
 		blk_mq_free_tag_set(ctrl->ctrl.tagset);
