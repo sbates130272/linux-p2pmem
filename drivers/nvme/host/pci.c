@@ -2280,6 +2280,14 @@ static void nvme_dev_add(struct nvme_dev *dev)
 				"IO queues tagset allocation failed %d\n", ret);
 			return;
 		}
+
+		dev->ctrl.passthrough_q = blk_mq_init_queue(&dev->tagset);
+		if (IS_ERR(dev->ctrl.passthrough_q)) {
+			ret = PTR_ERR(dev->ctrl.passthrough_q);
+			dev_warn(dev->ctrl.device,
+				 "passthrough queue allocation failed %d\n", ret);
+		}
+
 		dev->ctrl.tagset = &dev->tagset;
 	} else {
 		blk_mq_update_nr_hw_queues(&dev->tagset, dev->online_queues - 1);
