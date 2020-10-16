@@ -22,11 +22,12 @@ static DEFINE_XARRAY(passthru_subsystems);
 
 static u16 nvmet_passthru_override_id_ctrl(struct nvmet_req *req)
 {
+	const int PG_TO_SECTOR = PAGE_SHIFT - SECTOR_SHIFT;
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	struct nvme_ctrl *pctrl = ctrl->subsys->passthru_ctrl;
 	u16 status = NVME_SC_SUCCESS;
 	struct nvme_id_ctrl *id;
-	u32 max_hw_sectors;
+	int max_hw_sectors;
 	int page_shift;
 
 	id = kzalloc(sizeof(*id), GFP_KERNEL);
@@ -45,8 +46,15 @@ static u16 nvmet_passthru_override_id_ctrl(struct nvmet_req *req)
 	 * which depends on the host's memory fragementation. To solve this,
 	 * ensure mdts is limited to the pages equal to the number of segments.
 	 */
-	max_hw_sectors = min_not_zero(pctrl->max_segments << (PAGE_SHIFT - 9),
+	max_hw_sectors = min_not_zero(pctrl->max_segments << PG_TO_SECTOR,
 				      pctrl->max_hw_sectors);
+
+	/*
+	 * nvmet_passthru_map_sg is limitted to using a single bio so limit
+	 * the mdts based on BIO_MAX_PAGES as well
+	 */
+	max_hw_sectors = min_not_zero(BIO_MAX_PAGES << PG_TO_SECTOR,
+				      max_hw_sectors);
 
 	page_shift = NVME_CAP_MPSMIN(ctrl->cap) + 12;
 
