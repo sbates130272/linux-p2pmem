@@ -142,6 +142,13 @@ typedef u8 __bitwise blk_status_t;
  */
 #define BLK_STS_ZONE_ACTIVE_RESOURCE	((__force blk_status_t)16)
 
+/*
+ * BLK_STS_P2PDMA is returned from the driver if P2PDMA memory fails to be
+ * mapped to the target device. This is a permanent error and the request
+ * should not be retried.
+ */
+#define BLK_STS_P2PDMA		((__force blk_status_t)17)
+
 /**
  * blk_path_error - returns true if error may be path related
  * @error: status the request was completed with
