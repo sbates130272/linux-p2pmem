@@ -916,6 +916,52 @@ void pci_p2pdma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 EXPORT_SYMBOL_GPL(pci_p2pdma_unmap_sg_attrs);
 
 /**
+ * pci_p2pdma_map_segment - helper function for dma_map_sg() implementations
+ * @state: State structure that should be declared on the stack outside of
+ *	of the for_each_sg() loop and initialized to zero.
+ * @dev: DMA device that's doing the mapping operation
+ * @sg: scatterlist segment to map
+ * @attrs: dma mapping attributes
+ *
+ * Attempt to map a single segment in an SGL with the PCI bus address.
+ * The segment must point to a PCI P2PDMA page and thus must be
+ * wrapped in a is_pci_p2pdma_page(sg_page(sg)) check.
+ *
+ * Returns 1 if the segment was mapped, 0 if the segment should be mapped
+ * directly (or through the IOMMU) and -EREMOTEIO if the segment should not
+ * be mapped at all.
+ */
+int pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state,
+			   struct device *dev, struct dev_pagemap *pgmap,
+			   struct scatterlist *sg, unsigned long attrs)
+{
+	if (pgmap != state->pgmap) {
+		/*
+		 * Ensure dma_map_sg_p2pdma() was used if a P2PDMA page is
+		 * found in the scatterlist.
+		 */
+		WARN_ONCE(!(attrs & __DMA_ATTR_PCI_P2PDMA),
+			  "PCI P2PDMA pages were mapped with dma_map_sg()");
+
+		state->pgmap = pgmap;
+		state->map = pci_p2pdma_map_type(pgmap, dev);
+		state->bus_off = to_p2p_pgmap(pgmap)->bus_offset;
+	}
+
+	switch (state->map) {
+	case PCI_P2PDMA_MAP_BUS_ADDR:
+		sg->dma_address = sg_phys(sg) + state->bus_off;
+		sg_dma_len(sg) = sg->length;
+		sg_mark_pci_p2pdma(sg);
+		return 1;
+	case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
+		return 0;
+	default:
+		return -EREMOTEIO;
+	}
+}
+
+/**
  * pci_p2pdma_enable_store - parse a configfs/sysfs attribute store
  *		to enable p2pdma
  * @page: contents of the value to be stored
