@@ -13,6 +13,12 @@
 
 #include <linux/pci.h>
 
+struct pci_p2pdma_map_state {
+	struct dev_pagemap *pgmap;
+	int map;
+	u64 bus_off;
+};
+
 struct block_device;
 struct scatterlist;
 
@@ -43,6 +49,11 @@ int pci_p2pdma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 		int nents, enum dma_data_direction dir, unsigned long attrs);
 void pci_p2pdma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 		int nents, enum dma_data_direction dir, unsigned long attrs);
+int pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state,
+		struct device *dev, struct scatterlist *sg,
+		unsigned long dma_attrs);
+void pci_p2pdma_map_bus_segment(struct scatterlist *pg_sg,
+				struct scatterlist *dma_sg);
 int pci_p2pdma_enable_store(const char *page, struct pci_dev **p2p_dev,
 			    bool *use_p2pdma);
 ssize_t pci_p2pdma_enable_show(char *page, struct pci_dev *p2p_dev,
@@ -107,6 +118,16 @@ static inline int pci_p2pdma_map_sg_attrs(struct device *dev,
 static inline void pci_p2pdma_unmap_sg_attrs(struct device *dev,
 		struct scatterlist *sg, int nents, enum dma_data_direction dir,
 		unsigned long attrs)
+{
+}
+static inline int pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state,
+		struct device *dev, struct scatterlist *sg,
+		unsigned long dma_attrs)
+{
+	return 0;
+}
+static inline void pci_p2pdma_map_bus_segment(struct scatterlist *pg_sg,
+					      struct scatterlist *dma_sg)
 {
 }
 static inline int pci_p2pdma_enable_store(const char *page,
