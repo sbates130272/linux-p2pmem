@@ -4028,6 +4028,17 @@ static inline int ib_dma_map_sg_attrs(struct ib_device *dev,
 				dma_attrs);
 }
 
+static inline int ib_dma_map_sg_p2pdma_attrs(struct ib_device *dev,
+					     struct scatterlist *sg, int nents,
+					     enum dma_data_direction direction,
+					     unsigned long dma_attrs)
+{
+	if (ib_uses_virt_dma(dev))
+		return ib_dma_virt_map_sg(dev, sg, nents);
+	return dma_map_sg_p2pdma_attrs(dev->dma_device, sg, nents, direction,
+				       dma_attrs);
+}
+
 static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
 					 struct scatterlist *sg, int nents,
 					 enum dma_data_direction direction,
@@ -4050,6 +4061,27 @@ static inline int ib_dma_map_sg(struct ib_device *dev,
 				enum dma_data_direction direction)
 {
 	return ib_dma_map_sg_attrs(dev, sg, nents, direction, 0);
+}
+
+/**
+ * ib_dma_map_sg_p2pdma - Map a scatter/gather list to DMA addresses
+ * @dev: The device for which the DMA addresses are to be created
+ * @sg: The array of scatter/gather entries
+ * @nents: The number of scatter/gather entries
+ * @direction: The direction of the DMA
+ *
+ * Map an scatter/gather list that might contain P2PDMA pages.
+ * Unlike ib_dma_map_sg() it will return either a negative errno or
+ * a positive value indicating the number of dma segments. See
+ * dma_map_sg_p2pdma_attrs() for details.
+ *
+ * The resulting list should be unmapped with ib_dma_unmap_sg().
+ */
+static inline int ib_dma_map_sg_p2pdma(struct ib_device *dev,
+				       struct scatterlist *sg, int nents,
+				       enum dma_data_direction direction)
+{
+	return ib_dma_map_sg_p2pdma_attrs(dev, sg, nents, direction, 0);
 }
 
 /**
