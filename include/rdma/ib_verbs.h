@@ -4096,6 +4096,25 @@ static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
 				   dma_attrs);
 }
 
+static inline int ib_dma_map_sgtable(struct ib_device *dev,
+				     struct sg_table *sgt,
+				     enum dma_data_direction direction,
+				     unsigned long dma_attrs)
+{
+	if (ib_uses_virt_dma(dev))
+		return ib_dma_virt_map_sg(dev, sgt->sgl, sgt->orig_nents);
+	return dma_map_sgtable(dev->dma_device, sgt, direction, dma_attrs);
+}
+
+static inline void ib_dma_unmap_sgtable(struct ib_device *dev,
+					struct sg_table *sgt,
+					enum dma_data_direction direction,
+					unsigned long dma_attrs)
+{
+	if (!ib_uses_virt_dma(dev))
+		dma_unmap_sgtable(dev->dma_device, sgt, direction, dma_attrs);
+}
+
 /**
  * ib_dma_map_sgtable_attrs - Map a scatter/gather table to DMA addresses
  * @dev: The device for which the DMA addresses are to be created
