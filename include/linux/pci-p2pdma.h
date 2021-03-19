@@ -45,10 +45,6 @@ void pci_p2pmem_free_sgl(struct pci_dev *pdev, struct scatterlist *sgl);
 void pci_p2pmem_publish(struct pci_dev *pdev, bool publish);
 enum pci_p2pdma_map_type pci_p2pdma_map_type(struct dev_pagemap *pgmap,
 		struct device *dev, unsigned long dma_attrs);
-int pci_p2pdma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
-		int nents, enum dma_data_direction dir, unsigned long attrs);
-void pci_p2pdma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
-		int nents, enum dma_data_direction dir, unsigned long attrs);
 int pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state,
 		struct device *dev, struct scatterlist *sg,
 		unsigned long dma_attrs);
@@ -109,17 +105,6 @@ static inline enum pci_p2pdma_map_type pci_p2pdma_map_type(
 {
 	return PCI_P2PDMA_MAP_NOT_SUPPORTED;
 }
-static inline int pci_p2pdma_map_sg_attrs(struct device *dev,
-		struct scatterlist *sg, int nents, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-	return 0;
-}
-static inline void pci_p2pdma_unmap_sg_attrs(struct device *dev,
-		struct scatterlist *sg, int nents, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-}
 static inline int pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state,
 		struct device *dev, struct scatterlist *sg,
 		unsigned long dma_attrs)
@@ -153,18 +138,6 @@ static inline int pci_p2pdma_distance(struct pci_dev *provider,
 static inline struct pci_dev *pci_p2pmem_find(struct device *client)
 {
 	return pci_p2pmem_find_many(&client, 1);
-}
-
-static inline int pci_p2pdma_map_sg(struct device *dev, struct scatterlist *sg,
-				    int nents, enum dma_data_direction dir)
-{
-	return pci_p2pdma_map_sg_attrs(dev, sg, nents, dir, 0);
-}
-
-static inline void pci_p2pdma_unmap_sg(struct device *dev,
-		struct scatterlist *sg, int nents, enum dma_data_direction dir)
-{
-	pci_p2pdma_unmap_sg_attrs(dev, sg, nents, dir, 0);
 }
 
 #endif /* _LINUX_PCI_P2P_H */
