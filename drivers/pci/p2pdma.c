@@ -354,7 +354,7 @@ static bool host_bridge_whitelist(struct pci_dev *a, struct pci_dev *b)
 }
 
 static enum pci_p2pdma_map_type
-__upstream_bridge_distance(struct pci_dev *provider, struct pci_dev *client,
+__calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 		int *dist, bool *acs_redirects, struct seq_buf *acs_list)
 {
 	struct pci_dev *a = provider, *b = client, *bb;
@@ -433,17 +433,18 @@ static unsigned long map_types_idx(struct pci_dev *client)
 }
 
 /*
- * Find the distance through the nearest common upstream bridge between
- * two PCI devices.
+ * Calculate the P2PDMA mapping type and distance between two PCI devices.
  *
- * If the two devices are the same device then 0 will be returned.
+ * If the two devices are the same device then PCI_P2PDMA_MAP_BUS_ADDR
+ * and a distance of 0 will be returned.
  *
  * If there are two virtual functions of the same device behind the same
- * bridge port then 2 will be returned (one step down to the PCIe switch,
- * then one step back to the same device).
+ * bridge port then PCI_P2PDMA_MAP_BUS_ADDR and a distance of 2 will be
+ * returned (one step down to the PCIe switch, then one step back to the
+ * same device).
  *
  * In the case where two devices are connected to the same PCIe switch, the
- * value 4 will be returned. This corresponds to the following PCI tree:
+ * distance of 4 will be returned. This corresponds to the following PCI tree:
  *
  *     -+  Root Port
  *      \+ Switch Upstream Port
@@ -454,31 +455,31 @@ static unsigned long map_types_idx(struct pci_dev *client)
  *
  * The distance is 4 because we traverse from Device A through the downstream
  * port of the switch, to the common upstream port, back up to the second
- * downstream port and then to Device B.
- *
- * Any two devices that cannot communicate using p2pdma will return
- * PCI_P2PDMA_MAP_NOT_SUPPORTED.
+ * downstream port and then to Device B. The mapping type returned will depend
+ * on the ACS redirection setting of the bridges along the path. If ACS
+ * redirect is set on any bridge port in the path then the TLPs will go through
+ * the host bridge. Otherwise PCI_P2PDMA_MAP_BUS_ADDR is returned.
  *
  * Any two devices that have a data path that goes through the host bridge
- * will consult a whitelist. If the host bridges are on the whitelist,
- * this function will return PCI_P2PDMA_MAP_THRU_HOST_BRIDGE.
+ * will consult a whitelist. If the host bridge is in the whitelist,
+ * this function will return PCI_P2PDMA_MAP_THRU_HOST_BRIDGE with the
+ * distance set to the number of ports per above. If the device is not
+ * in the whitelist the type will be returned PCI_P2PDMA_MAP_NOT_SUPPORTED.
  *
- * If either bridge is not on the whitelist this function returns
- * PCI_P2PDMA_MAP_NOT_SUPPORTED.
- *
- * If a bridge which has any ACS redirection bits set is in the path,
- * acs_redirects will be set to true. In this case, a list of all infringing
- * bridge addresses will be populated in acs_list (assuming it's non-null)
- * for printk purposes.
+ * If any ACS redirect bits are set, then the acs_redirects boolean will be
+ * set to true and their pci device name will be appended to the acs_list
+ * seq_buf. This seq_buf is used to print a warning informing the user
+ * how to disable ACS using a command line parameter.
+ * (See calc_map_type_and_dist_warn() below)
  */
 static enum pci_p2pdma_map_type
-upstream_bridge_distance(struct pci_dev *provider, struct pci_dev *client,
+calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 		int *dist, bool *acs_redirects, struct seq_buf *acs_list)
 {
 	enum pci_p2pdma_map_type map_type;
 
-	map_type = __upstream_bridge_distance(provider, client, dist,
-					      acs_redirects, acs_list);
+	map_type = __calc_map_type_and_dist(provider, client, dist,
+					    acs_redirects, acs_list);
 
 	if (map_type == PCI_P2PDMA_MAP_THRU_HOST_BRIDGE) {
 		if (!cpu_supports_p2pdma() &&
@@ -494,8 +495,8 @@ upstream_bridge_distance(struct pci_dev *provider, struct pci_dev *client,
 }
 
 static enum pci_p2pdma_map_type
-upstream_bridge_distance_warn(struct pci_dev *provider, struct pci_dev *client,
-			      int *dist)
+calc_map_type_and_dist_warn(struct pci_dev *provider, struct pci_dev *client,
+			    int *dist)
 {
 	struct seq_buf acs_list;
 	bool acs_redirects;
@@ -505,8 +506,8 @@ upstream_bridge_distance_warn(struct pci_dev *provider, struct pci_dev *client,
 	if (!acs_list.buffer)
 		return -ENOMEM;
 
-	ret = upstream_bridge_distance(provider, client, dist, &acs_redirects,
-				       &acs_list);
+	ret = calc_map_type_and_dist(provider, client, dist, &acs_redirects,
+				     &acs_list);
 	if (acs_redirects) {
 		pci_warn(client, "ACS redirect is set between the client and provider (%s)\n",
 			 pci_name(provider));
@@ -565,11 +566,11 @@ int pci_p2pdma_distance_many(struct pci_dev *provider, struct device **clients,
 		}
 
 		if (verbose)
-			ret = upstream_bridge_distance_warn(provider,
-					pci_client, &distance);
+			ret = calc_map_type_and_dist_warn(provider, pci_client,
+							  &distance);
 		else
-			ret = upstream_bridge_distance(provider, pci_client,
-						       &distance, NULL, NULL);
+			ret = calc_map_type_and_dist(provider, pci_client,
+						     &distance, NULL, NULL);
 
 		pci_dev_put(pci_client);
 
