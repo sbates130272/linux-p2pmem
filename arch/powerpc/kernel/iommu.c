@@ -469,11 +469,12 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 	unsigned int align;
 	unsigned long handle;
 	unsigned int max_seg_size;
+	int ret;
 
 	BUG_ON(direction == DMA_NONE);
 
 	if ((nelems == 0) || !tbl)
-		return 0;
+		return -EINVAL;
 
 	outs = s = segstart = &sglist[0];
 	outcount = 1;
@@ -515,6 +516,7 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 				dev_info(dev, "iommu_alloc failed, tbl %p "
 					 "vaddr %lx npages %lu\n", tbl, vaddr,
 					 npages);
+			ret = entry;
 			goto failure;
 		}
 
@@ -530,8 +532,10 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 		build_fail = tbl->it_ops->set(tbl, entry, npages,
 					      vaddr & IOMMU_PAGE_MASK(tbl),
 					      direction, attrs);
-		if(unlikely(build_fail))
+		if (unlikely(build_fail)) {
+			ret = -EINVAL;
 			goto failure;
+		}
 
 		/* If we are in an open segment, try merging */
 		if (segstart != s) {
@@ -600,7 +604,7 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 		if (s == outs)
 			break;
 	}
-	return 0;
+	return ret;
 }
 
 
