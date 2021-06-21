@@ -201,12 +201,12 @@ static inline bool should_fail_iommu(struct device *dev)
 }
 #endif
 
-static unsigned long iommu_range_alloc(struct device *dev,
-				       struct iommu_table *tbl,
-                                       unsigned long npages,
-                                       unsigned long *handle,
-                                       unsigned long mask,
-                                       unsigned int align_order)
+static long iommu_range_alloc(struct device *dev,
+			      struct iommu_table *tbl,
+			      unsigned long npages,
+			      unsigned long *handle,
+			      unsigned long mask,
+			      unsigned int align_order)
 { 
 	unsigned long n, end, start;
 	unsigned long limit;
@@ -225,11 +225,11 @@ static unsigned long iommu_range_alloc(struct device *dev,
 	if (unlikely(npages == 0)) {
 		if (printk_ratelimit())
 			WARN_ON(1);
-		return DMA_MAPPING_ERROR;
+		return -EINVAL;
 	}
 
 	if (should_fail_iommu(dev))
-		return DMA_MAPPING_ERROR;
+		return -ENODEV;
 
 	/*
 	 * We don't need to disable preemption here because any CPU can
@@ -308,7 +308,7 @@ again:
 		} else {
 			/* Give up */
 			spin_unlock_irqrestore(&(pool->lock), flags);
-			return DMA_MAPPING_ERROR;
+			return -ENOMEM;
 		}
 	}
 
@@ -339,13 +339,13 @@ static dma_addr_t iommu_alloc(struct device *dev, struct iommu_table *tbl,
 			      unsigned long mask, unsigned int align_order,
 			      unsigned long attrs)
 {
-	unsigned long entry;
+	long entry;
 	dma_addr_t ret = DMA_MAPPING_ERROR;
 	int build_fail;
 
 	entry = iommu_range_alloc(dev, tbl, npages, NULL, mask, align_order);
 
-	if (unlikely(entry == DMA_MAPPING_ERROR))
+	if (unlikely(entry < 0))
 		return DMA_MAPPING_ERROR;
 
 	entry += tbl->it_offset;	/* Offset into real TCE table */
@@ -487,7 +487,8 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 
 	max_seg_size = dma_get_max_seg_size(dev);
 	for_each_sg(sglist, s, nelems, i) {
-		unsigned long vaddr, npages, entry, slen;
+		unsigned long vaddr, npages, slen;
+		long entry;
 
 		slen = s->length;
 		/* Sanity check */
@@ -508,7 +509,7 @@ int ppc_iommu_map_sg(struct device *dev, struct iommu_table *tbl,
 		DBG("  - vaddr: %lx, size: %lx\n", vaddr, slen);
 
 		/* Handle failure */
-		if (unlikely(entry == DMA_MAPPING_ERROR)) {
+		if (unlikely(entry < 0)) {
 			if (!(attrs & DMA_ATTR_NO_WARN) &&
 			    printk_ratelimit())
 				dev_info(dev, "iommu_alloc failed, tbl %p "
