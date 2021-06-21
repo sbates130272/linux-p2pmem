@@ -298,7 +298,7 @@ pci_map_single_1(struct pci_dev *pdev, void *cpu_addr, size_t size,
 	   use direct_map above, it now must be considered an error. */
 	if (! alpha_mv.mv_pci_tbi) {
 		printk_once(KERN_WARNING "pci_map_single: no HW sg\n");
-		return DMA_MAPPING_ERROR;
+		return -ENODEV;
 	}
 
 	arena = hose->sg_pci;
@@ -314,7 +314,7 @@ pci_map_single_1(struct pci_dev *pdev, void *cpu_addr, size_t size,
 	if (dma_ofs < 0) {
 		printk(KERN_WARNING "pci_map_single failed: "
 		       "could not allocate dma page tables\n");
-		return DMA_MAPPING_ERROR;
+		return -ENOMEM;
 	}
 
 	paddr &= PAGE_MASK;
@@ -361,12 +361,16 @@ static dma_addr_t alpha_pci_map_page(struct device *dev, struct page *page,
 {
 	struct pci_dev *pdev = alpha_gendev_to_pci(dev);
 	int dac_allowed;
+	dma_addr_t addr;
 
 	BUG_ON(dir == PCI_DMA_NONE);
 
 	dac_allowed = pdev ? pci_dac_dma_supported(pdev, pdev->dma_mask) : 0; 
-	return pci_map_single_1(pdev, (char *)page_address(page) + offset, 
+	addr = pci_map_single_1(pdev, (char *)page_address(page) + offset,
 				size, dac_allowed);
+	if ((int) addr < 0)
+		return DMA_MAPPING_ERROR;
+	return addr;
 }
 
 /* Unmap a single streaming mode DMA translation.  The DMA_ADDR and
@@ -462,7 +466,7 @@ try_again:
 	memset(cpu_addr, 0, size);
 
 	*dma_addrp = pci_map_single_1(pdev, cpu_addr, size, 0);
-	if (*dma_addrp == DMA_MAPPING_ERROR) {
+	if ((int) *dma_addrp < 0) {
 		free_pages((unsigned long)cpu_addr, order);
 		if (alpha_mv.mv_pci_tbi || (gfp & GFP_DMA))
 			return NULL;
@@ -678,7 +682,7 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 		sg->dma_address
 		  = pci_map_single_1(pdev, SG_ENT_VIRT_ADDRESS(sg),
 				     sg->length, dac_allowed);
-		return sg->dma_address != DMA_MAPPING_ERROR;
+		return ((int) sg->dma_address) < 0;
 	}
 
 	start = sg;
