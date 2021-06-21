@@ -486,7 +486,7 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 
 	iommu = dev->archdata.iommu;
 	if (nelems == 0 || !iommu)
-		return 0;
+		return -EINVAL;
 	atu = iommu->atu;
 
 	prot = HV_PCI_MAP_ATTR_READ;
@@ -539,6 +539,7 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 		if (unlikely(entry < 0)) {
 			pr_err_ratelimited("iommu_alloc failed, iommu %p paddr %lx npages %lx\n",
 					   tbl, paddr, npages);
+			err = entry;
 			goto iommu_map_failed;
 		}
 
@@ -621,7 +622,7 @@ iommu_map_failed:
 	}
 	local_irq_restore(flags);
 
-	return 0;
+	return err;
 }
 
 static void dma_4v_unmap_sg(struct device *dev, struct scatterlist *sglist,

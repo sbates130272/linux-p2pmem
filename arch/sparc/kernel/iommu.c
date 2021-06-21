@@ -438,7 +438,7 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 	dma_addr_t dma_next = 0, dma_addr;
 	unsigned int max_seg_size;
 	unsigned long seg_boundary_size;
-	int outcount, incount, i;
+	int outcount, incount, i, err;
 	struct strbuf *strbuf;
 	struct iommu *iommu;
 	unsigned long base_shift;
@@ -448,7 +448,7 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 	iommu = dev->archdata.iommu;
 	strbuf = dev->archdata.stc;
 	if (nelems == 0 || !iommu)
-		return 0;
+		return -EINVAL;
 
 	spin_lock_irqsave(&iommu->lock, flags);
 
@@ -496,6 +496,7 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 			if (printk_ratelimit())
 				printk(KERN_INFO "iommu_alloc failed, iommu %p paddr %lx"
 				       " npages %lx\n", iommu, paddr, npages);
+			err = entry;
 			goto iommu_map_failed;
 		}
 
@@ -581,7 +582,7 @@ iommu_map_failed:
 	}
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
-	return 0;
+	return err;
 }
 
 /* If contexts are being used, they are the same in all of the mappings
