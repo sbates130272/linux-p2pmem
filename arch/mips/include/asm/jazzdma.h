@@ -8,7 +8,7 @@
 /*
  * Prototypes and macros
  */
-extern unsigned long vdma_alloc(unsigned long paddr, unsigned long size);
+extern long vdma_alloc(unsigned long paddr, unsigned long size);
 extern int vdma_free(unsigned long laddr);
 extern unsigned long vdma_phys2log(unsigned long paddr);
 extern unsigned long vdma_log2phys(unsigned long laddr);

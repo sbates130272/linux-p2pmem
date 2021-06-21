@@ -92,7 +92,7 @@ arch_initcall(vdma_init);
 /*
  * Allocate DMA pagetables using a simple first-fit algorithm
  */
-unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
+long vdma_alloc(unsigned long paddr, unsigned long size)
 {
 	int first, last, pages, frame, i;
 	unsigned long laddr, flags;
@@ -103,12 +103,12 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
 		if (vdma_debug)
 			printk("vdma_alloc: Invalid physical address: %08lx\n",
 			       paddr);
-		return DMA_MAPPING_ERROR;	/* invalid physical address */
+		return -EINVAL;	/* invalid physical address */
 	}
 	if (size > 0x400000 || size == 0) {
 		if (vdma_debug)
 			printk("vdma_alloc: Invalid size: %08lx\n", size);
-		return DMA_MAPPING_ERROR;	/* invalid physical address */
+		return -EINVAL;	/* invalid physical address */
 	}
 
 	spin_lock_irqsave(&vdma_lock, flags);
@@ -122,7 +122,7 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
 		       first < VDMA_PGTBL_ENTRIES) first++;
 		if (first + pages > VDMA_PGTBL_ENTRIES) {	/* nothing free */
 			spin_unlock_irqrestore(&vdma_lock, flags);
-			return DMA_MAPPING_ERROR;
+			return -ENOMEM;
 		}
 
 		last = first + 1;
@@ -503,7 +503,7 @@ static void *jazz_dma_alloc(struct device *dev, size_t size,
 		return NULL;
 	ret = page_address(page);
 	memset(ret, 0, size);
-	*dma_handle = vdma_alloc(virt_to_phys(ret), size);
+	*dma_handle = (unsigned long) vdma_alloc(virt_to_phys(ret), size);
 	if (*dma_handle == DMA_MAPPING_ERROR)
 		goto out_free_pages;
 	arch_dma_prep_coherent(page, size);
@@ -529,7 +529,7 @@ static dma_addr_t jazz_dma_map_page(struct device *dev, struct page *page,
 
 	if (!(attrs & DMA_ATTR_SKIP_CPU_SYNC))
 		arch_sync_dma_for_device(phys, size, dir);
-	return vdma_alloc(phys, size);
+	return (unsigned long) vdma_alloc(phys, size);
 }
 
 static void jazz_dma_unmap_page(struct device *dev, dma_addr_t dma_addr,
@@ -551,7 +551,7 @@ static int jazz_dma_map_sg(struct device *dev, struct scatterlist *sglist,
 			arch_sync_dma_for_device(sg_phys(sg), sg->length,
 				dir);
 		sg->dma_address = vdma_alloc(sg_phys(sg), sg->length);
-		if (sg->dma_address == DMA_MAPPING_ERROR)
+		if ((int) sg->sg_dma_address < 0)
 			return 0;
 		sg_dma_len(sg) = sg->length;
 	}
