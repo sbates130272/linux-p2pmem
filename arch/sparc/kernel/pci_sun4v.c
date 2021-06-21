@@ -111,7 +111,7 @@ static long iommu_batch_flush(struct iommu_batch *p, u64 mask)
 						   HV_PCI_TSBID(0, entry),
 						   npages, prot, __pa(pglist),
 						   num);
-				return -1;
+				return num;
 			}
 		} else {
 			index_count = HV_PCI_IOTSB_INDEX_COUNT(npages, entry),
@@ -128,7 +128,7 @@ static long iommu_batch_flush(struct iommu_batch *p, u64 mask)
 						   devhandle, iotsb_num,
 						   index_count, prot,
 						   __pa(pglist), ret);
-				return -1;
+				return num;
 			}
 		}
 		entry += num;
