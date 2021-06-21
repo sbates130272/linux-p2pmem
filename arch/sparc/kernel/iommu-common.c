@@ -94,12 +94,12 @@ void iommu_tbl_pool_init(struct iommu_map_table *iommu,
 	p->end = num_entries;
 }
 
-unsigned long iommu_tbl_range_alloc(struct device *dev,
-				struct iommu_map_table *iommu,
-				unsigned long npages,
-				unsigned long *handle,
-				unsigned long mask,
-				unsigned int align_order)
+long iommu_tbl_range_alloc(struct device *dev,
+			   struct iommu_map_table *iommu,
+			   unsigned long npages,
+			   unsigned long *handle,
+			   unsigned long mask,
+			   unsigned int align_order)
 {
 	unsigned int pool_hash = __this_cpu_read(iommu_hash_common);
 	unsigned long n, end, start, limit, boundary_size;

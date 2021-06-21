@@ -157,14 +157,14 @@ static inline iopte_t *alloc_npages(struct device *dev,
 				    struct iommu *iommu,
 				    unsigned long npages)
 {
-	unsigned long entry;
+	long entry;
 
 	entry = iommu_tbl_range_alloc(dev, &iommu->tbl, npages, NULL,
 				      (unsigned long)(-1), 0);
-	if (unlikely(entry == IOMMU_ERROR_CODE))
+	if (unlikely(entry < 0))
 		return NULL;
 
-	return iommu->page_table + entry;
+	return iommu->page_table + (unsigned long) entry;
 }
 
 static int iommu_alloc_ctx(struct iommu *iommu)
@@ -475,7 +475,8 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 	seg_boundary_size = dma_get_seg_boundary_nr_pages(dev, IO_PAGE_SHIFT);
 	base_shift = iommu->tbl.table_map_base >> IO_PAGE_SHIFT;
 	for_each_sg(sglist, s, nelems, i) {
-		unsigned long paddr, npages, entry, out_entry = 0, slen;
+		unsigned long paddr, npages, out_entry = 0, slen;
+		long entry;
 		iopte_t *base;
 
 		slen = s->length;
@@ -491,18 +492,18 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 					      &handle, (unsigned long)(-1), 0);
 
 		/* Handle failure */
-		if (unlikely(entry == IOMMU_ERROR_CODE)) {
+		if (unlikely(entry < 0)) {
 			if (printk_ratelimit())
 				printk(KERN_INFO "iommu_alloc failed, iommu %p paddr %lx"
 				       " npages %lx\n", iommu, paddr, npages);
 			goto iommu_map_failed;
 		}
 
-		base = iommu->page_table + entry;
+		base = iommu->page_table + (unsigned long) entry;
 
 		/* Convert entry to a dma_addr_t */
 		dma_addr = iommu->tbl.table_map_base +
-			(entry << IO_PAGE_SHIFT);
+			((unsigned long) entry << IO_PAGE_SHIFT);
 		dma_addr |= (s->offset & ~IO_PAGE_MASK);
 
 		/* Insert into HW table */
@@ -535,7 +536,7 @@ static int dma_4u_map_sg(struct device *dev, struct scatterlist *sglist,
 			/* This is a new segment, fill entries */
 			outs->dma_address = dma_addr;
 			outs->dma_length = slen;
-			out_entry = entry;
+			out_entry = (unsigned long) entry;
 		}
 
 		/* Calculate next page pointer for contiguous check */

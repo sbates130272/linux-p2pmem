@@ -39,12 +39,12 @@ extern void iommu_tbl_pool_init(struct iommu_map_table *iommu,
 				bool large_pool, u32 npools,
 				bool skip_span_boundary_check);
 
-extern unsigned long iommu_tbl_range_alloc(struct device *dev,
-					   struct iommu_map_table *iommu,
-					   unsigned long npages,
-					   unsigned long *handle,
-					   unsigned long mask,
-					   unsigned int align_order);
+extern long iommu_tbl_range_alloc(struct device *dev,
+				  struct iommu_map_table *iommu,
+				  unsigned long npages,
+				  unsigned long *handle,
+				  unsigned long mask,
+				  unsigned int align_order);
 
 extern void iommu_tbl_range_free(struct iommu_map_table *iommu,
 				 u64 dma_addr, unsigned long npages,

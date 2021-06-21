@@ -219,7 +219,7 @@ static void *dma_4v_alloc_coherent(struct device *dev, size_t size,
 	entry = iommu_tbl_range_alloc(dev, tbl, npages, NULL,
 				      (unsigned long)(-1), 0);
 
-	if (unlikely(entry == IOMMU_ERROR_CODE))
+	if (unlikely(entry < 0))
 		goto range_alloc_fail;
 
 	*dma_addrp = (tbl->table_map_base + (entry << IO_PAGE_SHIFT));
@@ -385,7 +385,7 @@ static dma_addr_t dma_4v_map_page(struct device *dev, struct page *page,
 	entry = iommu_tbl_range_alloc(dev, tbl, npages, NULL,
 				      (unsigned long)(-1), 0);
 
-	if (unlikely(entry == IOMMU_ERROR_CODE))
+	if (unlikely(entry < 0))
 		goto bad;
 
 	bus_addr = (tbl->table_map_base + (entry << IO_PAGE_SHIFT));
@@ -520,7 +520,8 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 	base_shift = tbl->table_map_base >> IO_PAGE_SHIFT;
 
 	for_each_sg(sglist, s, nelems, i) {
-		unsigned long paddr, npages, entry, out_entry = 0, slen;
+		unsigned long paddr, npages, out_entry = 0, slen;
+		long entry;
 
 		slen = s->length;
 		/* Sanity check */
@@ -535,16 +536,17 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 					      &handle, (unsigned long)(-1), 0);
 
 		/* Handle failure */
-		if (unlikely(entry == IOMMU_ERROR_CODE)) {
+		if (unlikely(entry < 0)) {
 			pr_err_ratelimited("iommu_alloc failed, iommu %p paddr %lx npages %lx\n",
 					   tbl, paddr, npages);
 			goto iommu_map_failed;
 		}
 
-		iommu_batch_new_entry(entry, mask);
+		iommu_batch_new_entry((unsigned long) entry, mask);
 
 		/* Convert entry to a dma_addr_t */
-		dma_addr = tbl->table_map_base + (entry << IO_PAGE_SHIFT);
+		dma_addr = tbl->table_map_base +
+			((unsigned long) entry << IO_PAGE_SHIFT);
 		dma_addr |= (s->offset & ~IO_PAGE_MASK);
 
 		/* Insert into HW table */
@@ -578,7 +580,7 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 			/* This is a new segment, fill entries */
 			outs->dma_address = dma_addr;
 			outs->dma_length = slen;
-			out_entry = entry;
+			out_entry = (unsigned long) entry;
 		}
 
 		/* Calculate next page pointer for contiguous check */
