@@ -386,7 +386,7 @@ static int gart_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	unsigned int max_seg_size;
 
 	if (nents == 0)
-		return 0;
+		return -EINVAL;
 
 	out		= 0;
 	start		= 0;
@@ -458,7 +458,7 @@ error:
 	iommu_full(dev, pages << PAGE_SHIFT, dir);
 	for_each_sg(sg, s, nents, i)
 		s->dma_address = DMA_MAPPING_ERROR;
-	return 0;
+	return -EINVAL;
 }
 
 /* allocate and map a coherent mapping */
