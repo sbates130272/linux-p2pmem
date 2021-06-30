@@ -42,11 +42,9 @@ struct dma_map_ops {
 			unsigned long attrs);
 	/*
 	 * map_sg should return a negative error code on error.
-	 * dma_map_sgtable() will return the error code returned and convert
-	 * a zero return (for legacy implementations) into -EINVAL.
-	 *
-	 * dma_map_sg() will always return zero on any negative or zero
-	 * return to satisfy its own calling convention.
+	 * dma_map_sgtable() will return the error code returned by the
+	 * operation and dma_map_sg() will always convert any error to zero
+	 * to satisfy its own calling convention.
 	 */
 	int (*map_sg)(struct device *dev, struct scatterlist *sg, int nents,
 			enum dma_data_direction dir, unsigned long attrs);
