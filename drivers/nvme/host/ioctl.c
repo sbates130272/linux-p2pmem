@@ -282,11 +282,55 @@ static int nvme_user_cmd64(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 
 static bool is_ctrl_ioctl(unsigned int cmd)
 {
-	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD)
+	if (cmd == NVME_IOCTL_ADMIN_CMD || cmd == NVME_IOCTL_ADMIN64_CMD ||
+	    cmd == NVME_IOCTL_TEST_CMD)
 		return true;
 	if (is_sed_ioctl(cmd))
 		return true;
 	return false;
+}
+
+static int nvme_ioctl_test(struct nvme_ctrl *ctrl,
+			   struct nvme_test_map __user *umap)
+{
+	struct nvme_command cmd = {.common.opcode = nvme_admin_identify};
+	struct nvme_ns *ns = list_first_entry(&ctrl->namespaces,
+					      struct nvme_ns, list);
+	struct nvme_test_map map;
+	struct request_queue *q;
+	struct request *req;
+	int ret;
+
+	if (!ctrl->ops->test_map)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&map, umap, sizeof(map)))
+		return -EFAULT;
+
+	pr_info("MAP TEST: ptr=%llx len=%llx admin_q=%d\n", map.ptr, map.len,
+		map.admin_q);
+
+	if (map.admin_q)
+		q = ctrl->admin_q;
+	else
+		q = ns->queue;
+
+	req = nvme_alloc_request(q, &cmd, 0);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	ret = blk_rq_map_user(q, req, NULL, (void *__user)map.ptr,
+			      map.len, GFP_KERNEL);
+	if (ret)
+		goto out;
+
+	ret = ctrl->ops->test_map(ctrl, req);
+
+	if (req->bio)
+		blk_rq_unmap_user(req->bio);
+out:
+	blk_mq_free_request(req);
+	return ret;
 }
 
 static int nvme_ctrl_ioctl(struct nvme_ctrl *ctrl, unsigned int cmd,
@@ -297,6 +341,9 @@ static int nvme_ctrl_ioctl(struct nvme_ctrl *ctrl, unsigned int cmd,
 		return nvme_user_cmd(ctrl, NULL, argp);
 	case NVME_IOCTL_ADMIN64_CMD:
 		return nvme_user_cmd64(ctrl, NULL, argp);
+	case NVME_IOCTL_TEST_CMD:
+		return nvme_ioctl_test(ctrl, argp);
+
 	default:
 		return sed_ioctl(ctrl->opal_dev, cmd, argp);
 	}
@@ -491,6 +538,8 @@ long nvme_dev_ioctl(struct file *file, unsigned int cmd,
 	case NVME_IOCTL_RESCAN:
 		nvme_queue_scan(ctrl);
 		return 0;
+	case NVME_IOCTL_TEST_CMD:
+		return nvme_ioctl_test(ctrl, argp);
 	default:
 		return -ENOTTY;
 	}

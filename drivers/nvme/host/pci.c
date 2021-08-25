@@ -2886,6 +2886,40 @@ static int nvme_pci_mmap_cmb(struct nvme_ctrl *ctrl,
 	return pci_mmap_p2pmem(pdev, vma);
 }
 
+static int nvme_pci_test_map(struct nvme_ctrl *ctrl, struct request *req)
+{
+	struct nvme_dev *dev = to_nvme_dev(ctrl);
+	struct scatterlist *s;
+	struct sg_table sgt;
+	int i, ret = -EINVAL;
+
+	sgt.sgl = mempool_alloc(dev->iod_mempool, GFP_ATOMIC);
+	if (!sgt.sgl)
+		return -ENOMEM;
+
+	sg_init_table(sgt.sgl, blk_rq_nr_phys_segments(req));
+	sgt.orig_nents = blk_rq_map_sg(req->q, req, sgt.sgl);
+	if (!sgt.orig_nents)
+		goto out;
+
+	ret = dma_map_sgtable(dev->dev, &sgt, DMA_TO_DEVICE, 0);
+	if (ret)
+		goto out;
+
+	for_each_sgtable_sg(&sgt, s, i) {
+		dev_info(dev->ctrl.device, "%03d %pad %x %d\n",
+			 i, &sg_dma_address(s), sg_dma_len(s),
+			 !!sg_is_dma_pci_p2pdma(s));
+	}
+
+	dma_unmap_sgtable(dev->dev, &sgt, DMA_TO_DEVICE, 0);
+	ret = 0;
+
+out:
+	mempool_free(sgt.sgl, dev->iod_mempool);
+	return ret;
+}
+
 static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.name			= "pcie",
 	.module			= THIS_MODULE,
@@ -2899,6 +2933,7 @@ static const struct nvme_ctrl_ops nvme_pci_ctrl_ops = {
 	.supports_pci_p2pdma	= nvme_pci_supports_pci_p2pdma,
 	.mmap_file_open		= nvme_pci_mmap_file_open,
 	.mmap_cmb		= nvme_pci_mmap_cmb,
+	.test_map               = nvme_pci_test_map,
 };
 
 static int nvme_dev_map(struct nvme_dev *dev)

@@ -487,6 +487,7 @@ struct nvme_ctrl_ops {
 	bool (*supports_pci_p2pdma)(struct nvme_ctrl *ctrl);
 	void (*mmap_file_open)(struct nvme_ctrl *ctrl, struct file *file);
 	int (*mmap_cmb)(struct nvme_ctrl *ctrl, struct vm_area_struct *vma);
+	int (*test_map)(struct nvme_ctrl *ctrl, struct request *req);
 };
 
 /*

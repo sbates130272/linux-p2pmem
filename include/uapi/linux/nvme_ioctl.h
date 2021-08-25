@@ -79,4 +79,12 @@ struct nvme_passthru_cmd64 {
 #define NVME_IOCTL_ADMIN64_CMD	_IOWR('N', 0x47, struct nvme_passthru_cmd64)
 #define NVME_IOCTL_IO64_CMD	_IOWR('N', 0x48, struct nvme_passthru_cmd64)
 
+struct nvme_test_map {
+	__u64 ptr;
+	__u64 len;
+	__u32 admin_q;
+};
+
+#define NVME_IOCTL_TEST_CMD     _IOWR('N', 0x49, struct nvme_test_map)
+
 #endif /* _UAPI_LINUX_NVME_IOCTL_H */
