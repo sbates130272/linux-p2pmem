@@ -111,4 +111,12 @@ struct nvme_uring_cmd {
 #define NVME_URING_CMD_ADMIN	_IOWR('N', 0x82, struct nvme_uring_cmd)
 #define NVME_URING_CMD_ADMIN_VEC _IOWR('N', 0x83, struct nvme_uring_cmd)
 
+struct nvme_test_map {
+	__u64 ptr;
+	__u64 len;
+	__u32 admin_q;
+};
+
+#define NVME_IOCTL_TEST_CMD     _IOWR('N', 0x49, struct nvme_test_map)
+
 #endif /* _UAPI_LINUX_NVME_IOCTL_H */

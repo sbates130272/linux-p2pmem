@@ -506,6 +506,7 @@ struct nvme_ctrl_ops {
 	int (*cdev_file_open)(struct nvme_ctrl *ctrl, struct file *file);
 	void (*cdev_file_release)(struct file *file);
 	int (*mmap_cmb)(struct nvme_ctrl *ctrl, struct vm_area_struct *vma);
+	int (*test_map)(struct nvme_ctrl *ctrl, struct request *req);
 };
 
 /*
