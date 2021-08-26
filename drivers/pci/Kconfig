@@ -165,6 +165,7 @@ config PCI_P2PDMA
 	bool "PCI peer-to-peer transfer support"
 	depends on ZONE_DEVICE && 64BIT
 	select GENERIC_ALLOCATOR
+	select DEV_PAGEMAP_OPS
 	help
 	  Enableѕ drivers to do PCI peer-to-peer transactions to and from
 	  BARs that are exposed in other devices that are the part of

@@ -1163,6 +1163,7 @@ static inline bool page_is_devmap_managed(struct page *page)
 	switch (page->pgmap->type) {
 	case MEMORY_DEVICE_PRIVATE:
 	case MEMORY_DEVICE_FS_DAX:
+	case MEMORY_DEVICE_PCI_P2PDMA:
 		return true;
 	default:
 		break;

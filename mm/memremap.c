@@ -44,14 +44,16 @@ EXPORT_SYMBOL(devmap_managed_key);
 static void devmap_managed_enable_put(struct dev_pagemap *pgmap)
 {
 	if (pgmap->type == MEMORY_DEVICE_PRIVATE ||
-	    pgmap->type == MEMORY_DEVICE_FS_DAX)
+	    pgmap->type == MEMORY_DEVICE_FS_DAX ||
+	    pgmap->type == MEMORY_DEVICE_PCI_P2PDMA)
 		static_branch_dec(&devmap_managed_key);
 }
 
 static void devmap_managed_enable_get(struct dev_pagemap *pgmap)
 {
 	if (pgmap->type == MEMORY_DEVICE_PRIVATE ||
-	    pgmap->type == MEMORY_DEVICE_FS_DAX)
+	    pgmap->type == MEMORY_DEVICE_FS_DAX ||
+	    pgmap->type == MEMORY_DEVICE_PCI_P2PDMA)
 		static_branch_inc(&devmap_managed_key);
 }
 #else
@@ -355,6 +357,10 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
 	case MEMORY_DEVICE_GENERIC:
 		break;
 	case MEMORY_DEVICE_PCI_P2PDMA:
+		if (!pgmap->ops->page_free) {
+			WARN(1, "Missing page_free method\n");
+			return ERR_PTR(-EINVAL);
+		}
 		params.pgprot = pgprot_noncached(params.pgprot);
 		break;
 	default:
@@ -504,7 +510,7 @@ EXPORT_SYMBOL_GPL(get_dev_pagemap);
 void free_devmap_managed_page(struct page *page)
 {
 	/* notify page idle for dax */
-	if (!is_device_private_page(page)) {
+	if (!is_device_private_page(page) && !is_pci_p2pdma_page(page)) {
 		wake_up_var(&page->_refcount);
 		return;
 	}
