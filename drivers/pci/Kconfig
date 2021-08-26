@@ -170,6 +170,7 @@ config PCI_P2PDMA
 	#
 	select NEED_SG_DMA_BUS_ADDR_FLAG
 	select GENERIC_ALLOCATOR
+	select DEV_PAGEMAP_OPS
 	help
 	  Enableѕ drivers to do PCI peer-to-peer transactions to and from
 	  BARs that are exposed in other devices that are the part of
