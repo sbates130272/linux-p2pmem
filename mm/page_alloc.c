@@ -6589,6 +6589,9 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 
 	__init_single_page(page, pfn, zone_idx, nid);
 
+	/* ZONE_DEVICE pages start with a zero reference count. */
+	set_page_count(page, 0);
+
 	/*
 	 * Mark page reserved as it will need to wait for onlining
 	 * phase for it to be fully associated with a zone.
