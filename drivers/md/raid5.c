@@ -815,7 +815,8 @@ static bool stripe_can_batch(struct stripe_head *sh)
 }
 
 /* we only do back search */
-static void stripe_add_to_batch_list(struct r5conf *conf, struct stripe_head *sh)
+static void stripe_add_to_batch_list(struct r5conf *conf,
+		struct stripe_head *sh, struct stripe_head *last_sh)
 {
 	struct stripe_head *head;
 	sector_t head_sector, tmp_sec;
@@ -828,15 +829,20 @@ static void stripe_add_to_batch_list(struct r5conf *conf, struct stripe_head *sh
 		return;
 	head_sector = sh->sector - RAID5_STRIPE_SECTORS(conf);
 
-	hash = stripe_hash_locks_hash(conf, head_sector);
-	spin_lock_irq(conf->hash_locks + hash);
-	head = __find_stripe(conf, head_sector, conf->generation, hash);
-	spin_unlock_irq(conf->hash_locks + hash);
-
-	if (!head)
-		return;
-	if (!stripe_can_batch(head))
-		goto out;
+	if (last_sh && head_sector == last_sh->sector) {
+		head = last_sh;
+		atomic_inc(&head->count);
+	} else {
+		hash = stripe_hash_locks_hash(conf, head_sector);
+		spin_lock_irq(conf->hash_locks + hash);
+		head = __find_stripe(conf, head_sector, conf->generation,
+				     hash);
+		spin_unlock_irq(conf->hash_locks + hash);
+		if (!head)
+			return;
+		if (!stripe_can_batch(head))
+			goto out;
+	}
 
 	lock_two_stripes(head, sh);
 	/* clear_batch_ready clear the flag */
@@ -5750,6 +5756,7 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 
 static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 {
+	struct stripe_head *batch_last = NULL;
 	struct r5conf *conf = mddev->private;
 	int dd_idx;
 	sector_t new_sector;
@@ -5911,8 +5918,13 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			goto retry;
 		}
 
-		if (stripe_can_batch(sh))
-			stripe_add_to_batch_list(conf, sh);
+		if (stripe_can_batch(sh)) {
+			stripe_add_to_batch_list(conf, sh, batch_last);
+			if (batch_last)
+				raid5_release_stripe(batch_last);
+			atomic_inc(&sh->count);
+			batch_last = sh;
+		}
 
 		if (do_flush) {
 			set_bit(STRIPE_R5C_PREFLUSH, &sh->state);
@@ -5930,6 +5942,9 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		release_stripe_plug(mddev, sh);
 	}
 	finish_wait(&conf->wait_for_overlap, &w);
+
+	if (batch_last)
+		raid5_release_stripe(batch_last);
 
 	if (rw == WRITE)
 		md_write_end(mddev);
