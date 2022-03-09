@@ -3523,6 +3523,48 @@ static int add_stripe_bio(struct stripe_head *sh, struct bio *bi,
 	return 1;
 }
 
+static int add_all_stripe_bios(struct stripe_head *sh, struct bio *bi,
+		sector_t first_logical_sector, sector_t last_sector,
+		int forwrite, int previous)
+{
+	int dd_idx;
+	int ret = 1;
+
+	spin_lock_irq(&sh->stripe_lock);
+
+	for (dd_idx = 0; dd_idx < sh->disks; dd_idx++) {
+		struct r5dev *dev = &sh->dev[dd_idx];
+
+		clear_bit(R5_BioReady, &dev->flags);
+
+		if (dd_idx == sh->pd_idx)
+			continue;
+
+		if (dev->sector < first_logical_sector ||
+		    dev->sector >= last_sector)
+			continue;
+
+		if (stripe_bio_overlaps(sh, bi, dd_idx, forwrite)) {
+			set_bit(R5_Overlap, &dev->flags);
+			ret = 0;
+			continue;
+		}
+
+		set_bit(R5_BioReady, &dev->flags);
+	}
+
+	if (!ret)
+		goto out;
+
+	for (dd_idx = 0; dd_idx < sh->disks; dd_idx++)
+		if (test_bit(R5_BioReady, &sh->dev[dd_idx].flags))
+			__add_stripe_bio(sh, bi, dd_idx, forwrite, previous);
+
+out:
+	spin_unlock_irq(&sh->stripe_lock);
+	return ret;
+}
+
 static void end_reshape(struct r5conf *conf);
 
 static void stripe_set_idx(sector_t stripe, struct r5conf *conf, int previous,
@@ -5796,7 +5838,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	struct stripe_head *batch_last = NULL;
 	struct r5conf *conf = mddev->private;
 	int dd_idx;
-	sector_t new_sector;
+	sector_t new_sector, disk_sector = MaxSector;
 	sector_t logical_sector, last_sector;
 	struct stripe_head *sh;
 	const int rw = bio_data_dir(bi);
@@ -5855,6 +5897,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			md_write_end(mddev);
 		return true;
 	}
+
 	md_account_bio(mddev, &bi);
 	prepare_to_wait(&conf->wait_for_overlap, &w, TASK_UNINTERRUPTIBLE);
 	for (; logical_sector < last_sector; logical_sector += RAID5_STRIPE_SECTORS(conf)) {
@@ -5892,6 +5935,9 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		new_sector = raid5_compute_sector(conf, logical_sector,
 						  previous,
 						  &dd_idx, NULL);
+		if (disk_sector != MaxSector && new_sector <= disk_sector)
+			continue;
+
 		pr_debug("raid456: raid5_make_request, sector %llu logical %llu\n",
 			(unsigned long long)new_sector,
 			(unsigned long long)logical_sector);
@@ -5924,7 +5970,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		}
 
 		if (test_bit(STRIPE_EXPANDING, &sh->state) ||
-		    !add_stripe_bio(sh, bi, dd_idx, rw, previous)) {
+		    !add_all_stripe_bios(sh, bi, logical_sector,
+					 last_sector, rw, previous)) {
 			/*
 			 * Stripe is busy expanding or add failed due to
 			 * overlap. Flush everything and wait a while.
@@ -5933,6 +5980,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			raid5_release_stripe(sh);
 			goto schedule_and_retry;
 		}
+
+		disk_sector = new_sector;
 
 		if (stripe_can_batch(sh)) {
 			stripe_add_to_batch_list(conf, sh, batch_last);
