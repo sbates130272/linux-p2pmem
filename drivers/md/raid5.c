@@ -2905,7 +2905,7 @@ sector_t raid5_compute_sector(struct r5conf *conf, sector_t r_sector,
 	sector_t stripe, stripe2;
 	sector_t chunk_number;
 	unsigned int chunk_offset;
-	int pd_idx, qd_idx;
+	int pd_idx, qd_idx, dd_idx2;
 	int ddf_layout = 0;
 	sector_t new_sector;
 	int algorithm = previous ? conf->prev_algo
@@ -2928,8 +2928,13 @@ sector_t raid5_compute_sector(struct r5conf *conf, sector_t r_sector,
 	 * Compute the stripe number
 	 */
 	stripe = chunk_number;
-	*dd_idx = sector_div(stripe, data_disks);
+	dd_idx2 = sector_div(stripe, data_disks);
 	stripe2 = stripe;
+
+	if (!dd_idx)
+		goto out;
+	*dd_idx = dd_idx2;
+
 	/*
 	 * Select the parity disk based on the user selected algorithm.
 	 */
@@ -3096,6 +3101,7 @@ sector_t raid5_compute_sector(struct r5conf *conf, sector_t r_sector,
 	/*
 	 * Finally, compute the new sector number
 	 */
+out:
 	new_sector = (sector_t)stripe * sectors_per_chunk + chunk_offset;
 	return new_sector;
 }
