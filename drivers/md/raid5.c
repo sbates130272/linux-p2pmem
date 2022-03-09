@@ -3106,25 +3106,38 @@ out:
 	return new_sector;
 }
 
+static sector_t __raid5_compute_blocknr(struct r5conf *conf, int raid_disks,
+		sector_t disk_sector, int i, int previous)
+{
+	int sectors_per_chunk = previous ? conf->prev_chunk_sectors
+					 : conf->chunk_sectors;
+	sector_t chunk_number, stripe;
+	int data_disks, chunk_offset;
+
+	if (raid_disks < 0)
+		raid_disks = previous ? conf->previous_raid_disks
+				      : conf->raid_disks;
+
+	data_disks = raid_disks - conf->max_degraded;
+
+	chunk_offset = sector_div(disk_sector, sectors_per_chunk);
+	stripe = disk_sector;
+
+	chunk_number = stripe * data_disks + i;
+	return chunk_number * sectors_per_chunk + chunk_offset;
+}
+
 sector_t raid5_compute_blocknr(struct stripe_head *sh, int i, int previous)
 {
 	struct r5conf *conf = sh->raid_conf;
 	int raid_disks = sh->disks;
 	int data_disks = raid_disks - conf->max_degraded;
-	sector_t new_sector = sh->sector, check;
-	int sectors_per_chunk = previous ? conf->prev_chunk_sectors
-					 : conf->chunk_sectors;
+	sector_t check;
 	int algorithm = previous ? conf->prev_algo
 				 : conf->algorithm;
-	sector_t stripe;
-	int chunk_offset;
-	sector_t chunk_number;
 	int dummy1, dd_idx = i;
 	sector_t r_sector;
 	struct stripe_head sh2;
-
-	chunk_offset = sector_div(new_sector, sectors_per_chunk);
-	stripe = new_sector;
 
 	if (i == sh->pd_idx)
 		return 0;
@@ -3212,8 +3225,8 @@ sector_t raid5_compute_blocknr(struct stripe_head *sh, int i, int previous)
 		break;
 	}
 
-	chunk_number = stripe * data_disks + i;
-	r_sector = chunk_number * sectors_per_chunk + chunk_offset;
+	r_sector = __raid5_compute_blocknr(conf, raid_disks, sh->sector, i,
+					   previous);
 
 	check = raid5_compute_sector(conf, r_sector,
 				     previous, &dummy1, &sh2);
