@@ -3571,6 +3571,48 @@ static bool add_stripe_bio(struct stripe_head *sh, struct bio *bi,
 	return true;
 }
 
+static int add_all_stripe_bios(struct stripe_head *sh, struct bio *bi,
+		sector_t first_logical_sector, sector_t last_sector,
+		int forwrite, int previous)
+{
+	int dd_idx;
+	int ret = 1;
+
+	spin_lock_irq(&sh->stripe_lock);
+
+	for (dd_idx = 0; dd_idx < sh->disks; dd_idx++) {
+		struct r5dev *dev = &sh->dev[dd_idx];
+
+		clear_bit(R5_BioReady, &dev->flags);
+
+		if (dd_idx == sh->pd_idx)
+			continue;
+
+		if (dev->sector < first_logical_sector ||
+		    dev->sector >= last_sector)
+			continue;
+
+		if (stripe_bio_overlaps(sh, bi, dd_idx, forwrite)) {
+			set_bit(R5_Overlap, &dev->flags);
+			ret = 0;
+			continue;
+		}
+
+		set_bit(R5_BioReady, &dev->flags);
+	}
+
+	if (!ret)
+		goto out;
+
+	for (dd_idx = 0; dd_idx < sh->disks; dd_idx++)
+		if (test_bit(R5_BioReady, &sh->dev[dd_idx].flags))
+			__add_stripe_bio(sh, bi, dd_idx, forwrite, previous);
+
+out:
+	spin_unlock_irq(&sh->stripe_lock);
+	return ret;
+}
+
 static void end_reshape(struct r5conf *conf);
 
 static void stripe_set_idx(sector_t stripe, struct r5conf *conf, int previous,
@@ -5869,6 +5911,10 @@ enum stripe_result {
 struct stripe_request_ctx {
 	bool do_flush;
 	struct stripe_head *batch_last;
+	sector_t disk_sector_done;
+	sector_t start_disk_sector;
+	bool first_wrap;
+	sector_t last_sector;
 };
 
 static enum stripe_result make_stripe_request(struct mddev *mddev,
@@ -5908,6 +5954,36 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 
 	new_sector = raid5_compute_sector(conf, logical_sector, previous,
 					  &dd_idx, NULL);
+
+	/*
+	 * This is a tricky algorithm to figure out which stripe_heads that
+	 * have already been visited and exit early if the stripe_head has
+	 * already been done. (Seeing all disks are added to a stripe_head
+	 * once in add_all_stripe_bios().
+	 *
+	 * To start with, the disk sector of the last stripe that has been
+	 * completed is stored in ctx->disk_sector_done. If the new_sector is
+	 * less than this value, the stripe_head has already been done.
+	 *
+	 * There's one issue with this: if the request starts in the middle of
+	 * a chunk, all the stripe heads before the starting offset will be
+	 * missed. To account for this, set the first_wrap boolean to true
+	 * if new_sector is less than the starting sector. Clear the
+	 * boolean once the start sector is hit for the second time.
+	 * When first_wrap is set, ignore the disk_sector_done.
+	 */
+	if (ctx->start_disk_sector == MaxSector) {
+		ctx->start_disk_sector = new_sector;
+	} else if (new_sector < ctx->start_disk_sector) {
+		ctx->first_wrap = true;
+	} else if (new_sector == ctx->start_disk_sector) {
+		ctx->first_wrap = false;
+		ctx->start_disk_sector = 0;
+		return STRIPE_SUCCESS;
+	} else if (!ctx->first_wrap && new_sector <= ctx->disk_sector_done) {
+		return STRIPE_SUCCESS;
+	}
+
 	pr_debug("raid456: %s, sector %llu logical %llu\n", __func__,
 		 new_sector, logical_sector);
 
@@ -5939,7 +6015,8 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 	}
 
 	if (test_bit(STRIPE_EXPANDING, &sh->state) ||
-	    !add_stripe_bio(sh, bi, dd_idx, rw, previous)) {
+	    !add_all_stripe_bios(sh, bi, logical_sector, ctx->last_sector, rw,
+				 previous)) {
 		/*
 		 * Stripe is busy expanding or add failed due to
 		 * overlap. Flush everything and wait a while.
@@ -5948,6 +6025,9 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 		raid5_release_stripe(sh);
 		return STRIPE_SCHEDULE_AND_RETRY;
 	}
+
+	if (new_sector > ctx->disk_sector_done)
+		ctx->disk_sector_done = new_sector;
 
 	if (stripe_can_batch(sh)) {
 		stripe_add_to_batch_list(conf, sh, ctx->batch_last);
@@ -5977,8 +6057,10 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 {
 	struct r5conf *conf = mddev->private;
-	sector_t logical_sector, last_sector;
-	struct stripe_request_ctx ctx = {};
+	sector_t logical_sector;
+	struct stripe_request_ctx ctx = {
+		.start_disk_sector = MaxSector,
+	};
 	const int rw = bio_data_dir(bi);
 	enum stripe_result res;
 	DEFINE_WAIT(w);
@@ -6021,7 +6103,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	}
 
 	logical_sector = bi->bi_iter.bi_sector & ~((sector_t)RAID5_STRIPE_SECTORS(conf)-1);
-	last_sector = bio_end_sector(bi);
+	ctx.last_sector = bio_end_sector(bi);
 	bi->bi_next = NULL;
 
 	/* Bail out if conflicts with reshape and REQ_NOWAIT is set */
@@ -6036,7 +6118,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	}
 	md_account_bio(mddev, &bi);
 	prepare_to_wait(&conf->wait_for_overlap, &w, TASK_UNINTERRUPTIBLE);
-	while (logical_sector < last_sector) {
+	while (logical_sector < ctx.last_sector) {
 		res = make_stripe_request(mddev, conf, &ctx, logical_sector,
 					  bi);
 		if (res == STRIPE_FAIL) {
