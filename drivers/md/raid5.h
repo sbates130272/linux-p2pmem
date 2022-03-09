@@ -308,6 +308,7 @@ enum r5dev_flags {
 	R5_Wantwrite,
 	R5_Overlap,	/* There is a pending overlapping request
 			 * on this block */
+	R5_BioReady,    /* The current bio can be added to this disk */
 	R5_ReadNoMerge, /* prevent bio from merging in block-layer */
 	R5_ReadError,	/* seen a read error here recently */
 	R5_ReWrite,	/* have tried to over-write the readerror */
