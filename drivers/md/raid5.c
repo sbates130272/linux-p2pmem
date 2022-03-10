@@ -3132,12 +3132,8 @@ sector_t raid5_compute_blocknr(struct stripe_head *sh, int i, int previous)
 	struct r5conf *conf = sh->raid_conf;
 	int raid_disks = sh->disks;
 	int data_disks = raid_disks - conf->max_degraded;
-	sector_t check;
 	int algorithm = previous ? conf->prev_algo
 				 : conf->algorithm;
-	int dummy1, dd_idx = i;
-	sector_t r_sector;
-	struct stripe_head sh2;
 
 	if (i == sh->pd_idx)
 		return 0;
@@ -3225,18 +3221,8 @@ sector_t raid5_compute_blocknr(struct stripe_head *sh, int i, int previous)
 		break;
 	}
 
-	r_sector = __raid5_compute_blocknr(conf, raid_disks, sh->sector, i,
-					   previous);
-
-	check = raid5_compute_sector(conf, r_sector,
-				     previous, &dummy1, &sh2);
-	if (check != sh->sector || dummy1 != dd_idx || sh2.pd_idx != sh->pd_idx
-		|| sh2.qd_idx != sh->qd_idx) {
-		pr_warn("md/raid:%s: compute_blocknr: map not correct\n",
-			mdname(conf->mddev));
-		return 0;
-	}
-	return r_sector;
+	return __raid5_compute_blocknr(conf, raid_disks, sh->sector, i,
+				       previous);
 }
 
 /*
