@@ -725,6 +725,24 @@ static int has_failed(struct r5conf *conf)
 	return 0;
 }
 
+/*
+ * Block until another thread clears R5_INACTIVE_BLOCKED or
+ * there are fewer than 3/4 the maximum number of active stripes
+ * and there is an inactive stripe available.
+ */
+static bool is_inactive_blocked(struct r5conf *conf, int hash)
+{
+	int active = atomic_read(&conf->active_stripes);
+
+	if (!test_bit(R5_INACTIVE_BLOCKED, &conf->cache_state))
+		return true;
+
+	if (list_empty(conf->inactive_list + hash))
+		return false;
+
+	return active < (conf->max_nr_stripes * 3 / 4);
+}
+
 struct stripe_head *
 raid5_get_active_stripe(struct r5conf *conf, sector_t sector,
 			int previous, int noblock, int noquiesce)
@@ -766,11 +784,7 @@ wait_for_stripe:
 	set_bit(R5_INACTIVE_BLOCKED, &conf->cache_state);
 	r5l_wake_reclaim(conf->log, 0);
 	wait_event_lock_irq(conf->wait_for_stripe,
-			    !list_empty(conf->inactive_list + hash) &&
-			    (atomic_read(&conf->active_stripes)
-				  < (conf->max_nr_stripes * 3 / 4)
-				 || !test_bit(R5_INACTIVE_BLOCKED,
-					      &conf->cache_state)),
+			    is_inactive_blocked(conf, hash),
 			    *(conf->hash_locks + hash));
 	clear_bit(R5_INACTIVE_BLOCKED, &conf->cache_state);
 	goto retry;
