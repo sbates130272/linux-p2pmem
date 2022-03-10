@@ -7276,7 +7276,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	int i;
 	int group_cnt;
 	struct r5worker_group *new_group;
-	int ret;
+	int ret = -ENOMEM;
 
 	if (mddev->new_level != 5
 	    && mddev->new_level != 4
@@ -7335,6 +7335,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	spin_lock_init(&conf->device_lock);
 	seqcount_spinlock_init(&conf->gen_lock, &conf->device_lock);
 	mutex_init(&conf->cache_size_mutex);
+
 	init_waitqueue_head(&conf->wait_for_quiescent);
 	init_waitqueue_head(&conf->wait_for_stripe);
 	init_waitqueue_head(&conf->wait_for_overlap);
@@ -7412,7 +7413,8 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 
 	conf->level = mddev->new_level;
 	conf->chunk_sectors = mddev->new_chunk_sectors;
-	if (raid5_alloc_percpu(conf) != 0)
+	ret = raid5_alloc_percpu(conf);
+	if (ret)
 		goto abort;
 
 	pr_debug("raid456: run(%s) called.\n", mdname(mddev));
@@ -7424,6 +7426,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 			continue;
 		disk = conf->disks + raid_disk;
 
+		ret = -EIO;
 		if (test_bit(Replacement, &rdev->flags)) {
 			if (disk->replacement)
 				goto abort;
@@ -7480,6 +7483,7 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	if (grow_stripes(conf, conf->min_nr_stripes)) {
 		pr_warn("md/raid:%s: couldn't allocate %dkB for buffers\n",
 			mdname(mddev), memory);
+		ret = -ENOMEM;
 		goto abort;
 	} else
 		pr_debug("md/raid:%s: allocated %dkB\n", mdname(mddev), memory);
@@ -7493,7 +7497,8 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	conf->shrinker.count_objects = raid5_cache_count;
 	conf->shrinker.batch = 128;
 	conf->shrinker.flags = 0;
-	if (register_shrinker(&conf->shrinker)) {
+	ret = register_shrinker(&conf->shrinker);
+	if (ret) {
 		pr_warn("md/raid:%s: couldn't register shrinker.\n",
 			mdname(mddev));
 		goto abort;
@@ -7504,17 +7509,16 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	if (!conf->thread) {
 		pr_warn("md/raid:%s: couldn't allocate thread.\n",
 			mdname(mddev));
+		ret = -ENOMEM;
 		goto abort;
 	}
 
 	return conf;
 
  abort:
-	if (conf) {
+	if (conf)
 		free_conf(conf);
-		return ERR_PTR(-EIO);
-	} else
-		return ERR_PTR(-ENOMEM);
+	return ERR_PTR(ret);
 }
 
 static int only_parity(int raid_disk, int algo, int raid_disks, int max_degraded)
