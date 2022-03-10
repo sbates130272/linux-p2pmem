@@ -90,24 +90,6 @@ static inline void unlock_device_hash_lock(struct r5conf *conf, int hash)
 	spin_unlock_irq(conf->hash_locks + hash);
 }
 
-static inline void lock_all_device_hash_locks_irq(struct r5conf *conf)
-{
-	int i;
-	spin_lock_irq(conf->hash_locks);
-	for (i = 1; i < NR_STRIPE_HASH_LOCKS; i++)
-		spin_lock_nest_lock(conf->hash_locks + i, conf->hash_locks);
-	spin_lock(&conf->device_lock);
-}
-
-static inline void unlock_all_device_hash_locks_irq(struct r5conf *conf)
-{
-	int i;
-	spin_unlock(&conf->device_lock);
-	for (i = NR_STRIPE_HASH_LOCKS - 1; i; i--)
-		spin_unlock(conf->hash_locks + i);
-	spin_unlock_irq(conf->hash_locks);
-}
-
 /* Find first data disk in a raid6 stripe */
 static inline int raid6_d0(struct stripe_head *sh)
 {
@@ -725,6 +707,15 @@ static int has_failed(struct r5conf *conf)
 	return 0;
 }
 
+static void wait_for_quiescent(struct r5conf *conf)
+{
+	lockdep_assert_held_read(&conf->quiesce_sem);
+
+	wait_event_cmd(conf->wait_for_quiescent, !conf->quiesce,
+		       percpu_up_read(&conf->quiesce_sem),
+		       percpu_down_read(&conf->quiesce_sem));
+}
+
 /*
  * Block until another thread clears R5_INACTIVE_BLOCKED or
  * there are fewer than 3/4 the maximum number of active stripes
@@ -752,12 +743,12 @@ raid5_get_active_stripe(struct r5conf *conf, sector_t sector,
 
 	pr_debug("get_stripe, sector %llu\n", (unsigned long long)sector);
 
-	spin_lock_irq(conf->hash_locks + hash);
-
+	percpu_down_read(&conf->quiesce_sem);
 retry:
-	wait_event_lock_irq(conf->wait_for_quiescent,
-			    conf->quiesce == 0 || noquiesce,
-			    *(conf->hash_locks + hash));
+	if (!noquiesce)
+		wait_for_quiescent(conf);
+
+	spin_lock_irq(conf->hash_locks + hash);
 	sh = __find_stripe(conf, sector, conf->generation - previous, hash);
 	if (sh)
 		goto out;
@@ -787,10 +778,12 @@ wait_for_stripe:
 			    is_inactive_blocked(conf, hash),
 			    *(conf->hash_locks + hash));
 	clear_bit(R5_INACTIVE_BLOCKED, &conf->cache_state);
+	spin_unlock_irq(conf->hash_locks + hash);
 	goto retry;
 
 out:
 	spin_unlock_irq(conf->hash_locks + hash);
+	percpu_up_read(&conf->quiesce_sem);
 	return sh;
 }
 
@@ -5476,7 +5469,6 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 	sector_t sector, end_sector, first_bad;
 	int bad_sectors, dd_idx;
 	struct md_io_acct *md_io_acct;
-	bool did_inc;
 
 	if (!in_chunk_boundary(mddev, raid_bio)) {
 		pr_debug("%s: non aligned\n", __func__);
@@ -5528,24 +5520,10 @@ static int raid5_read_one_chunk(struct mddev *mddev, struct bio *raid_bio)
 	/* No reshape active, so we can trust rdev->data_offset */
 	align_bio->bi_iter.bi_sector += rdev->data_offset;
 
-	did_inc = false;
-	if (conf->quiesce == 0) {
-		atomic_inc(&conf->active_aligned_reads);
-		did_inc = true;
-	}
-	/* need a memory barrier to detect the race with raid5_quiesce() */
-	if (!did_inc || smp_load_acquire(&conf->quiesce) != 0) {
-		/* quiesce is in progress, so we need to undo io activation and wait
-		 * for it to finish
-		 */
-		if (did_inc && atomic_dec_and_test(&conf->active_aligned_reads))
-			wake_up(&conf->wait_for_quiescent);
-		spin_lock_irq(&conf->device_lock);
-		wait_event_lock_irq(conf->wait_for_quiescent, conf->quiesce == 0,
-				    conf->device_lock);
-		atomic_inc(&conf->active_aligned_reads);
-		spin_unlock_irq(&conf->device_lock);
-	}
+	percpu_down_read(&conf->quiesce_sem);
+	wait_for_quiescent(conf);
+	atomic_inc(&conf->active_aligned_reads);
+	percpu_up_read(&conf->quiesce_sem);
 
 	if (mddev->gendisk)
 		trace_block_bio_remap(align_bio, disk_devt(mddev->gendisk),
@@ -7192,6 +7170,7 @@ static void free_conf(struct r5conf *conf)
 	unregister_shrinker(&conf->shrinker);
 	free_thread_groups(conf);
 	shrink_stripes(conf);
+	percpu_free_rwsem(&conf->quiesce_sem);
 	raid5_free_percpu(conf);
 	for (i = 0; i < conf->pool_size; i++)
 		if (conf->disks[i].extra_page)
@@ -7414,6 +7393,10 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 	conf->level = mddev->new_level;
 	conf->chunk_sectors = mddev->new_chunk_sectors;
 	ret = raid5_alloc_percpu(conf);
+	if (ret)
+		goto abort;
+
+	ret = percpu_init_rwsem(&conf->quiesce_sem);
 	if (ret)
 		goto abort;
 
@@ -8478,37 +8461,59 @@ static void raid5_finish_reshape(struct mddev *mddev)
 	}
 }
 
+static void lock_for_quiesce(struct r5conf *conf)
+	__acquires(&conf->device_lock)
+{
+	/*
+	 * stop all new stripes being activated in raid5_get_active_stripe()
+	 * and raid5_read_one_chunk()
+	 */
+	percpu_down_write(&conf->quiesce_sem);
+
+	/*
+	 * device lock is needed to sync with conf->quiese usage in
+	 * do_release_stripe() and also for r5c_flush_cache().
+	 */
+	spin_lock(&conf->device_lock);
+}
+
+static void unlock_for_quiesce(struct r5conf *conf)
+	__releases(&conf->device_lock)
+{
+	spin_unlock(&conf->device_lock);
+	percpu_up_write(&conf->quiesce_sem);
+}
+
 static void raid5_quiesce(struct mddev *mddev, int quiesce)
 {
 	struct r5conf *conf = mddev->private;
 
 	if (quiesce) {
-		/* stop all writes */
-		lock_all_device_hash_locks_irq(conf);
-		/* '2' tells resync/reshape to pause so that all
-		 * active stripes can drain
-		 */
+		lock_for_quiesce(conf);
 		r5c_flush_cache(conf, INT_MAX);
-		/* need a memory barrier to make sure read_one_chunk() sees
-		 * quiesce started and reverts to slow (locked) path.
+
+		/*
+		 * '2' tells resync/reshape to pause so that all active stripes
+		 * can drain
 		 */
-		smp_store_release(&conf->quiesce, 2);
+		conf->quiesce = 2;
+
 		wait_event_cmd(conf->wait_for_quiescent,
-				    atomic_read(&conf->active_stripes) == 0 &&
-				    atomic_read(&conf->active_aligned_reads) == 0,
-				    unlock_all_device_hash_locks_irq(conf),
-				    lock_all_device_hash_locks_irq(conf));
+			       atomic_read(&conf->active_stripes) == 0 &&
+			       atomic_read(&conf->active_aligned_reads) == 0,
+			       unlock_for_quiesce(conf),
+			       lock_for_quiesce(conf));
 		conf->quiesce = 1;
-		unlock_all_device_hash_locks_irq(conf);
+		unlock_for_quiesce(conf);
 		/* allow reshape to continue */
 		wake_up(&conf->wait_for_overlap);
 	} else {
 		/* re-enable writes */
-		lock_all_device_hash_locks_irq(conf);
+		lock_for_quiesce(conf);
 		conf->quiesce = 0;
 		wake_up(&conf->wait_for_quiescent);
 		wake_up(&conf->wait_for_overlap);
-		unlock_all_device_hash_locks_irq(conf);
+		unlock_for_quiesce(conf);
 	}
 	log_quiesce(conf, quiesce);
 }
