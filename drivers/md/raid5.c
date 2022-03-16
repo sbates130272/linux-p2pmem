@@ -353,6 +353,24 @@ static struct stripe_head *alloc_stripe(struct kmem_cache *sc, gfp_t gfp,
 	return sh;
 }
 
+static inline void remove_hash(struct stripe_head *sh)
+{
+	pr_debug("remove_hash(), stripe %llu\n",
+		 (unsigned long long)sh->sector);
+
+	hlist_del_init(&sh->hash);
+}
+
+static inline void insert_hash(struct r5conf *conf, struct stripe_head *sh)
+{
+	struct hlist_head *hp = stripe_hash(conf, sh->sector);
+
+	pr_debug("insert_hash(), stripe %llu\n",
+		 (unsigned long long)sh->sector);
+
+	hlist_add_head(&sh->hash, hp);
+}
+
 static void do_release_stripe(struct r5conf *conf, struct stripe_head *sh,
 			      struct list_head *temp_inactive_list)
 {
@@ -552,24 +570,6 @@ slow_path:
 		spin_unlock_irqrestore(&conf->device_lock, flags);
 		release_inactive_stripe_list(conf, &list, hash);
 	}
-}
-
-static inline void remove_hash(struct stripe_head *sh)
-{
-	pr_debug("remove_hash(), stripe %llu\n",
-		(unsigned long long)sh->sector);
-
-	hlist_del_init(&sh->hash);
-}
-
-static inline void insert_hash(struct r5conf *conf, struct stripe_head *sh)
-{
-	struct hlist_head *hp = stripe_hash(conf, sh->sector);
-
-	pr_debug("insert_hash(), stripe %llu\n",
-		(unsigned long long)sh->sector);
-
-	hlist_add_head(&sh->hash, hp);
 }
 
 /* find an idle stripe, make sure it is unhashed, and return it. */
