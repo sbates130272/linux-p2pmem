@@ -2354,6 +2354,7 @@ static int grow_one_stripe(struct r5conf *conf, gfp_t gfp)
 
 static int grow_stripes(struct r5conf *conf, int num)
 {
+	struct stripe_head *sh;
 	struct kmem_cache *sc;
 	size_t namelen = sizeof(conf->cache_name[0]);
 	int devs = max(conf->raid_disks, conf->previous_raid_disks);
@@ -2368,8 +2369,7 @@ static int grow_stripes(struct r5conf *conf, int num)
 
 	conf->active_name = 0;
 	sc = kmem_cache_create(conf->cache_name[conf->active_name],
-			       sizeof(struct stripe_head)+(devs-1)*sizeof(struct r5dev),
-			       0, 0, NULL);
+			       struct_size(sh, dev, devs), 0, 0, NULL);
 	if (!sc)
 		return 1;
 	conf->slab_cache = sc;
@@ -2494,8 +2494,7 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 
 	/* Step 1 */
 	sc = kmem_cache_create(conf->cache_name[1-conf->active_name],
-			       sizeof(struct stripe_head)+(newsize-1)*sizeof(struct r5dev),
-			       0, 0, NULL);
+			       struct_size(osh, dev, newsize), 0, 0, NULL);
 	if (!sc)
 		return -ENOMEM;
 
