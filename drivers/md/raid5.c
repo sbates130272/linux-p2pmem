@@ -2457,6 +2457,34 @@ static int resize_chunks(struct r5conf *conf, int new_disks, int new_sectors)
 	return err;
 }
 
+static int drop_one_stripe(struct r5conf *conf)
+{
+	struct stripe_head *sh;
+	int hash = (conf->max_nr_stripes - 1) & STRIPE_HASH_LOCKS_MASK;
+
+	spin_lock_irq(conf->hash_locks + hash);
+	sh = get_free_stripe(conf, hash);
+	spin_unlock_irq(conf->hash_locks + hash);
+	if (!sh)
+		return 0;
+	BUG_ON(atomic_read(&sh->count));
+	shrink_buffers(sh);
+	free_stripe(conf->slab_cache, sh);
+	atomic_dec(&conf->active_stripes);
+	conf->max_nr_stripes--;
+	return 1;
+}
+
+static void shrink_stripes(struct r5conf *conf)
+{
+	while (conf->max_nr_stripes &&
+	       drop_one_stripe(conf))
+		;
+
+	kmem_cache_destroy(conf->slab_cache);
+	conf->slab_cache = NULL;
+}
+
 static int resize_stripes(struct r5conf *conf, int newsize)
 {
 	/* Make all the stripes able to hold 'newsize' devices.
@@ -2628,34 +2656,6 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	mutex_unlock(&conf->cache_size_mutex);
 
 	return err;
-}
-
-static int drop_one_stripe(struct r5conf *conf)
-{
-	struct stripe_head *sh;
-	int hash = (conf->max_nr_stripes - 1) & STRIPE_HASH_LOCKS_MASK;
-
-	spin_lock_irq(conf->hash_locks + hash);
-	sh = get_free_stripe(conf, hash);
-	spin_unlock_irq(conf->hash_locks + hash);
-	if (!sh)
-		return 0;
-	BUG_ON(atomic_read(&sh->count));
-	shrink_buffers(sh);
-	free_stripe(conf->slab_cache, sh);
-	atomic_dec(&conf->active_stripes);
-	conf->max_nr_stripes--;
-	return 1;
-}
-
-static void shrink_stripes(struct r5conf *conf)
-{
-	while (conf->max_nr_stripes &&
-	       drop_one_stripe(conf))
-		;
-
-	kmem_cache_destroy(conf->slab_cache);
-	conf->slab_cache = NULL;
 }
 
 static void raid5_end_read_request(struct bio * bi)
