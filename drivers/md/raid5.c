@@ -2492,15 +2492,14 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	 *
 	 * This happens in stages:
 	 * 1/ create a new kmem_cache and allocate the required number of
-	 *    stripe_heads.
+	 *    stripe_heads; and pre-allocate a new conf->disks.
 	 * 2/ gather all the old stripe_heads and transfer the pages across
 	 *    to the new stripe_heads.  This will have the side effect of
 	 *    freezing the array as once all stripe_heads have been collected,
 	 *    no IO will be possible.  Old stripe heads are freed once their
 	 *    pages have been transferred over, and the old kmem_cache is
 	 *    freed when all stripes are done.
-	 * 3/ reallocate conf->disks to be suitable bigger.  If this fails,
-	 *    we simple return a failure status - no need to clean anything up.
+	 * 3/ swap in the new conf->disks array that was pre-allocated
 	 * 4/ allocate new pages for the new slots in the new stripe_heads.
 	 *    If this fails, we don't bother trying the shrink the
 	 *    stripe_heads down again, we just leave them as they are.
@@ -2526,6 +2525,27 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	if (!sc)
 		return -ENOMEM;
 
+	ndisks = kcalloc(newsize, sizeof(struct disk_info), GFP_KERNEL);
+	if (!ndisks)  {
+		kmem_cache_destroy(sc);
+		return -ENOMEM;
+	}
+
+	for (i = conf->pool_size; i < newsize; i++) {
+		ndisks[i].extra_page = alloc_page(GFP_KERNEL);
+		if (!ndisks[i].extra_page)
+			err = -ENOMEM;
+	}
+
+	if (err) {
+		for (i = conf->pool_size; i < newsize; i++)
+			if (ndisks[i].extra_page)
+				put_page(ndisks[i].extra_page);
+		kfree(ndisks);
+		kmem_cache_destroy(sc);
+		return -ENOMEM;
+	}
+
 	/* Need to ensure auto-resizing doesn't interfere */
 	mutex_lock(&conf->cache_size_mutex);
 
@@ -2543,6 +2563,7 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 			list_del(&nsh->lru);
 			free_stripe(sc, nsh);
 		}
+		kfree(ndisks);
 		kmem_cache_destroy(sc);
 		mutex_unlock(&conf->cache_size_mutex);
 		return -ENOMEM;
@@ -2589,28 +2610,10 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	 * is completely stalled, so now is a good time to resize
 	 * conf->disks and the scribble region
 	 */
-	ndisks = kcalloc(newsize, sizeof(struct disk_info), GFP_NOIO);
-	if (ndisks) {
-		for (i = 0; i < conf->pool_size; i++)
-			ndisks[i] = conf->disks[i];
-
-		for (i = conf->pool_size; i < newsize; i++) {
-			ndisks[i].extra_page = alloc_page(GFP_NOIO);
-			if (!ndisks[i].extra_page)
-				err = -ENOMEM;
-		}
-
-		if (err) {
-			for (i = conf->pool_size; i < newsize; i++)
-				if (ndisks[i].extra_page)
-					put_page(ndisks[i].extra_page);
-			kfree(ndisks);
-		} else {
-			kfree(conf->disks);
-			conf->disks = ndisks;
-		}
-	} else
-		err = -ENOMEM;
+	for (i = 0; i < conf->pool_size; i++)
+		ndisks[i] = conf->disks[i];
+	kfree(conf->disks);
+	conf->disks = ndisks;
 
 	conf->slab_cache = sc;
 	conf->active_name = 1-conf->active_name;
