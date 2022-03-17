@@ -2158,14 +2158,10 @@ r5c_recovery_analyze_meta_block(struct r5l_log *log,
 					mdname(mddev),
 					new_size);
 				ret = raid5_set_cache_size(mddev, new_size);
-				if (conf->min_nr_stripes <= new_size / 2) {
-					pr_err("md/raid:%s: Cannot increase cache size, ret=%d, new_size=%d, min_nr_stripes=%d, max_nr_stripes=%d\n",
-						mdname(mddev),
-						ret,
-						new_size,
-						conf->min_nr_stripes,
-						conf->max_nr_stripes);
-					return -ENOMEM;
+				if (ret) {
+					pr_err("md/raid:%s: Cannot increase cache size, ret=%d, new_size=%d\n",
+					       mdname(mddev), ret, new_size);
+					return ret;
 				}
 				sh = r5c_recovery_alloc_stripe(
 					conf, stripe_sect, 0);
