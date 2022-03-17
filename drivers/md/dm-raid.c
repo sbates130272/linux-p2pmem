@@ -1555,7 +1555,7 @@ static int rs_set_raid456_stripe_cache(struct raid_set *rs)
 	}
 
 	/* Try setting number of stripes in raid456 stripe cache */
-	if (conf->min_nr_stripes != nr_stripes) {
+	if (atomic_read(&conf->max_allocated_stripes) != nr_stripes) {
 		r = raid5_set_cache_size(mddev, nr_stripes);
 		if (r) {
 			rs->ti->error = "Failed to set raid4/5/6 stripe cache size";
@@ -3513,7 +3513,8 @@ static void raid_status(struct dm_target *ti, status_type_t type,
 	struct raid_set *rs = ti->private;
 	struct mddev *mddev = &rs->md;
 	struct r5conf *conf = mddev->private;
-	int i, max_nr_stripes = conf ? conf->max_nr_stripes : 0;
+	int i, max_nr_stripes = conf ?
+		atomic_read(&conf->max_allocated_stripes) : 0;
 	unsigned long recovery;
 	unsigned int raid_param_cnt = 1; /* at least 1 for chunksize */
 	unsigned int sz = 0;

@@ -36,7 +36,8 @@
 /* wake up reclaim thread periodically */
 #define R5C_RECLAIM_WAKEUP_INTERVAL (30 * HZ)
 /* start flush with these full stripes */
-#define R5C_FULL_STRIPE_FLUSH_BATCH(conf) (conf->max_nr_stripes / 4)
+#define R5C_FULL_STRIPE_FLUSH_BATCH(conf) \
+	(atomic_read(&(conf)->max_allocated_stripes) / 4)
 /* reclaim stripes in groups */
 #define R5C_RECLAIM_STRIPE_GROUP (NR_STRIPE_HASH_LOCKS * 2)
 
@@ -337,13 +338,11 @@ void r5c_check_stripe_cache_usage(struct r5conf *conf)
 	/*
 	 * The following condition is true for either of the following:
 	 *   - stripe cache pressure high:
-	 *          total_cached > 3/4 min_nr_stripes ||
-	 *          empty_inactive_list_nr > 0
+	 *          total_cached > 3/4 max_allocated_stripes
 	 *   - stripe cache pressure moderate:
-	 *          total_cached > 1/2 min_nr_stripes
+	 *          total_cached > 1/2 max_allocated_stripes
 	 */
-	if (total_cached > conf->min_nr_stripes * 1 / 2 ||
-	    atomic_read(&conf->empty_inactive_list_nr) > 0)
+	if (total_cached > atomic_read(&conf->max_allocated_stripes) * 1 / 2)
 		r5l_wake_reclaim(conf->log, 0);
 }
 
@@ -1425,7 +1424,7 @@ static void r5c_do_reclaim(struct r5conf *conf)
 	struct stripe_head *sh;
 	int count = 0;
 	unsigned long flags;
-	int total_cached;
+	int total_cached, max_stripes;
 	int stripes_to_flush;
 	int flushing_partial, flushing_full;
 
@@ -1437,15 +1436,15 @@ static void r5c_do_reclaim(struct r5conf *conf)
 	total_cached = atomic_read(&conf->r5c_cached_partial_stripes) +
 		atomic_read(&conf->r5c_cached_full_stripes) -
 		flushing_full - flushing_partial;
+	max_stripes = atomic_read(&conf->max_allocated_stripes);
 
-	if (total_cached > conf->min_nr_stripes * 3 / 4 ||
-	    atomic_read(&conf->empty_inactive_list_nr) > 0)
+	if (total_cached > max_stripes * 3 / 4)
 		/*
 		 * if stripe cache pressure high, flush all full stripes and
 		 * some partial stripes
 		 */
 		stripes_to_flush = R5C_RECLAIM_STRIPE_GROUP;
-	else if (total_cached > conf->min_nr_stripes * 1 / 2 ||
+	else if (total_cached > max_stripes * 1 / 2 ||
 		 atomic_read(&conf->r5c_cached_full_stripes) - flushing_full >
 		 R5C_FULL_STRIPE_FLUSH_BATCH(conf))
 		/*
@@ -2153,7 +2152,8 @@ r5c_recovery_analyze_meta_block(struct r5l_log *log,
 					conf, stripe_sect, 1);
 			}
 			if (!sh) {
-				int new_size = conf->min_nr_stripes * 2;
+				int max = atomic_read(&conf->max_allocated_stripes);
+				int new_size = max * 2;
 				pr_debug("md/raid:%s: Increasing stripe cache size to %d to recovery data on journal.\n",
 					mdname(mddev),
 					new_size);

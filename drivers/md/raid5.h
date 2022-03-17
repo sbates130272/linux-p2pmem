@@ -502,7 +502,7 @@ struct disk_info {
 struct r5worker {
 	struct work_struct work;
 	struct r5worker_group *group;
-	struct list_head temp_inactive_list[NR_STRIPE_HASH_LOCKS];
+	struct list_head temp_inactive_list;
 	bool working;
 };
 
@@ -528,13 +528,9 @@ enum r5_cache_state {
 	R5_INACTIVE_BLOCKED,	/* release of inactive stripes blocked,
 				 * waiting for 25% to be free
 				 */
-	R5_ALLOC_MORE,		/* It might help to allocate another
-				 * stripe.
-				 */
-	R5_DID_ALLOC,		/* A stripe was allocated, don't allocate
-				 * more until at least one has been
-				 * released.  This avoids flooding
-				 * the cache.
+	R5_DRAIN_EXISTING,	/* stop allocating new stripes and free
+				 * inactive stripes instead of putting them
+				 * in the percpu cache
 				 */
 	R5C_LOG_TIGHT,		/* log device space tight, need to
 				 * prioritize stripes at last_checkpoint
@@ -564,6 +560,12 @@ struct raid5_percpu {
 				     */
 	int             scribble_obj_size;
 	local_lock_t    lock;
+
+	spinlock_t		inactive_list_lock;
+	bool			inactive_list_alive;
+	struct list_head	inactive_list;
+	int			inactive_cnt;
+	int			max_inactive;
 };
 
 struct r5conf {
@@ -575,8 +577,7 @@ struct r5conf {
 	int			level, algorithm, rmw_level;
 	int			max_degraded;
 	int			raid_disks;
-	int			max_nr_stripes;
-	int			min_nr_stripes;
+	atomic_t		max_allocated_stripes;
 #if PAGE_SIZE != DEFAULT_STRIPE_SIZE
 	unsigned long	stripe_size;
 	unsigned int	stripe_shift;
@@ -630,7 +631,6 @@ struct r5conf {
 	int			active_name;
 	char			cache_name[2][32];
 	struct kmem_cache	*slab_cache; /* for allocating stripes */
-	struct mutex		cache_size_mutex; /* Protect changes to cache size */
 
 	int			seq_flush, seq_write;
 
@@ -651,8 +651,8 @@ struct r5conf {
 	/*
 	 * Free stripes pool
 	 */
+	atomic_t		allocated_stripes;
 	atomic_t		active_stripes;
-	struct list_head	inactive_list[NR_STRIPE_HASH_LOCKS];
 
 	atomic_t		r5c_cached_full_stripes;
 	struct list_head	r5c_full_stripe_list;
@@ -661,7 +661,6 @@ struct r5conf {
 	atomic_t		r5c_flushing_full_stripes;
 	atomic_t		r5c_flushing_partial_stripes;
 
-	atomic_t		empty_inactive_list_nr;
 	struct llist_head	released_stripes;
 	wait_queue_head_t	wait_for_quiescent;
 	wait_queue_head_t	wait_for_stripe;
@@ -677,7 +676,7 @@ struct r5conf {
 	 * the new thread here until we fully activate the array.
 	 */
 	struct md_thread	*thread;
-	struct list_head	temp_inactive_list[NR_STRIPE_HASH_LOCKS];
+	struct list_head	temp_inactive_list;
 	struct r5worker_group	*worker_groups;
 	int			group_cnt;
 	int			worker_cnt_per_group;
