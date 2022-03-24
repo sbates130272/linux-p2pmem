@@ -5742,7 +5742,6 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	struct stripe_head *sh;
 	const int rw = bio_data_dir(bi);
 	DEFINE_WAIT(w);
-	bool do_prepare;
 	bool do_flush = false;
 
 	if (unlikely(bi->bi_opf & REQ_PREFLUSH)) {
@@ -5803,13 +5802,9 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		int previous;
 		int seq;
 
-		do_prepare = false;
 	retry:
 		seq = read_seqcount_begin(&conf->gen_lock);
 		previous = 0;
-		if (do_prepare)
-			prepare_to_wait(&conf->wait_for_overlap, &w,
-				TASK_UNINTERRUPTIBLE);
 		if (unlikely(conf->reshape_progress != MaxSector)) {
 			/* spinlock is needed as reshape_progress may be
 			 * 64bit on a 32bit platform, and so it might be
@@ -5829,9 +5824,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 				    ? logical_sector < conf->reshape_safe
 				    : logical_sector >= conf->reshape_safe) {
 					spin_unlock_irq(&conf->device_lock);
-					schedule();
-					do_prepare = true;
-					goto retry;
+					goto schedule_and_retry;
 				}
 			}
 			spin_unlock_irq(&conf->device_lock);
@@ -5872,9 +5865,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			spin_unlock_irq(&conf->device_lock);
 			if (must_retry) {
 				raid5_release_stripe(sh);
-				schedule();
-				do_prepare = true;
-				goto retry;
+				goto schedule_and_retry;
 			}
 		}
 		if (read_seqcount_retry(&conf->gen_lock, seq)) {
@@ -5891,9 +5882,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			 */
 			md_wakeup_thread(mddev->thread);
 			raid5_release_stripe(sh);
-			schedule();
-			do_prepare = true;
-			goto retry;
+			goto schedule_and_retry;
 		}
 
 		if (stripe_can_batch(sh))
@@ -5913,6 +5902,13 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			atomic_inc(&conf->preread_active_stripes);
 
 		release_stripe_plug(mddev, sh);
+		continue;
+
+schedule_and_retry:
+		schedule();
+		prepare_to_wait(&conf->wait_for_overlap, &w,
+				TASK_UNINTERRUPTIBLE);
+		goto retry;
 	}
 	finish_wait(&conf->wait_for_overlap, &w);
 
