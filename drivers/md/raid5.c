@@ -5764,6 +5764,33 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 	bio_endio(bi);
 }
 
+static bool stripe_ahead_of_reshape(struct mddev *mddev, struct r5conf *conf,
+				    struct stripe_head *sh)
+{
+	sector_t max_sector = 0, min_sector = MaxSector;
+	int dd_idx, ret = 0;
+
+	for (dd_idx = 0; dd_idx < sh->disks; dd_idx++) {
+		if (dd_idx == sh->pd_idx)
+			continue;
+
+		min_sector = min(min_sector, sh->dev[dd_idx].sector);
+		max_sector = min(max_sector, sh->dev[dd_idx].sector);
+	}
+
+	spin_lock_irq(&conf->device_lock);
+
+	if (mddev->reshape_backwards
+	    ? max_sector >= conf->reshape_progress
+	    : min_sector < conf->reshape_progress)
+		/* mismatch, need to try again */
+		ret = 1;
+
+	spin_unlock_irq(&conf->device_lock);
+
+	return ret;
+}
+
 static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 {
 	struct stripe_head *batch_last = NULL;
@@ -5877,28 +5904,18 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			break;
 		}
 
-		if (unlikely(previous)) {
+		if (unlikely(previous) &&
+		    stripe_ahead_of_reshape(mddev, conf, sh)) {
 			/*
-			 * Expansion might have moved on while waiting for a
-			 * stripe, so we must do the range check again.
+			 * Expansion moved on while waiting for a stripe.
 			 * Expansion could still move past after this
 			 * test, but as we are holding a reference to
 			 * 'sh', we know that if that happens,
 			 *  STRIPE_EXPANDING will get set and the expansion
 			 * won't proceed until we finish with the stripe.
 			 */
-			int must_retry = 0;
-			spin_lock_irq(&conf->device_lock);
-			if (mddev->reshape_backwards
-			    ? logical_sector >= conf->reshape_progress
-			    : logical_sector < conf->reshape_progress)
-				/* mismatch, need to try again */
-				must_retry = 1;
-			spin_unlock_irq(&conf->device_lock);
-			if (must_retry) {
-				raid5_release_stripe(sh);
-				goto schedule_and_retry;
-			}
+			raid5_release_stripe(sh);
+			goto schedule_and_retry;
 		}
 		if (read_seqcount_retry(&conf->gen_lock, seq)) {
 			/* Might have got the wrong stripe_head by accident */
