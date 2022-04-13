@@ -5787,6 +5787,15 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 	bio_endio(bi);
 }
 
+static bool ahead_of_reshape(struct mddev *mddev, sector_t sector,
+			     sector_t reshape_sector)
+{
+	if (mddev->reshape_backwards)
+		return sector < reshape_sector;
+	else
+		return sector >= reshape_sector;
+}
+
 static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 {
 	struct r5conf *conf = mddev->private;
@@ -5843,9 +5852,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	/* Bail out if conflicts with reshape and REQ_NOWAIT is set */
 	if ((bi->bi_opf & REQ_NOWAIT) &&
 	    (conf->reshape_progress != MaxSector) &&
-	    (mddev->reshape_backwards
-	    ? (logical_sector > conf->reshape_progress && logical_sector <= conf->reshape_safe)
-	    : (logical_sector >= conf->reshape_safe && logical_sector < conf->reshape_progress))) {
+	    !ahead_of_reshape(mddev, logical_sector, conf->reshape_progress) &&
+	    ahead_of_reshape(mddev, logical_sector, conf->reshape_safe)) {
 		bio_wouldblock_error(bi);
 		if (rw == WRITE)
 			md_write_end(mddev);
@@ -5874,14 +5882,12 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 			 * to check again.
 			 */
 			spin_lock_irq(&conf->device_lock);
-			if (mddev->reshape_backwards
-			    ? logical_sector < conf->reshape_progress
-			    : logical_sector >= conf->reshape_progress) {
+			if (ahead_of_reshape(mddev, logical_sector,
+					     conf->reshape_progress)) {
 				previous = 1;
 			} else {
-				if (mddev->reshape_backwards
-				    ? logical_sector < conf->reshape_safe
-				    : logical_sector >= conf->reshape_safe) {
+				if (ahead_of_reshape(mddev, logical_sector,
+						     conf->reshape_safe)) {
 					spin_unlock_irq(&conf->device_lock);
 					schedule();
 					do_prepare = true;
@@ -5912,9 +5918,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 				 */
 				int must_retry = 0;
 				spin_lock_irq(&conf->device_lock);
-				if (mddev->reshape_backwards
-				    ? logical_sector >= conf->reshape_progress
-				    : logical_sector < conf->reshape_progress)
+				if (!ahead_of_reshape(mddev, logical_sector,
+						      conf->reshape_progress))
 					/* mismatch, need to try again */
 					must_retry = 1;
 				spin_unlock_irq(&conf->device_lock);
