@@ -411,13 +411,9 @@ void r5c_check_cached_full_stripe(struct r5conf *conf)
  *     (stripe_in_journal_count) * (max_degraded + 1) +
  *     (group_cnt + 1) * (raid_disks - max_degraded)
  */
-static sector_t r5c_log_required_to_flush_cache(struct r5conf *conf)
+static sector_t r5c_log_required_to_flush_cache(struct r5conf *conf,
+						struct r5l_log *log)
 {
-	struct r5l_log *log = conf->log;
-
-	if (!r5c_is_writeback(conf))
-		return 0;
-
 	return BLOCK_SECTORS *
 		((conf->max_degraded + 1) * atomic_read(&log->stripe_in_journal_count) +
 		 (conf->raid_disks - conf->max_degraded) * (conf->group_cnt + 1));
@@ -442,7 +438,7 @@ static inline void r5c_update_log_state(struct r5l_log *log)
 
 	free_space = r5l_ring_distance(log, log->log_start,
 				       log->last_checkpoint);
-	reclaim_space = r5c_log_required_to_flush_cache(conf);
+	reclaim_space = r5c_log_required_to_flush_cache(conf, log);
 	if (free_space < 2 * reclaim_space)
 		set_bit(R5C_LOG_CRITICAL, &conf->cache_state);
 	else {
