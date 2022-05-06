@@ -6430,7 +6430,7 @@ static int handle_active_stripes(struct r5conf *conf, int group,
 	release_inactive_stripe_list(conf, temp_inactive_list,
 				     NR_STRIPE_HASH_LOCKS);
 
-	r5l_flush_stripe_to_raid(conf->log);
+	r5l_flush_stripe_to_raid(conf);
 	if (release_inactive) {
 		spin_lock_irq(&conf->device_lock);
 		return 0;
@@ -6486,7 +6486,7 @@ static void raid5_do_work(struct work_struct *work)
 
 	flush_deferred_bios(conf);
 
-	r5l_flush_stripe_to_raid(conf->log);
+	r5l_flush_stripe_to_raid(conf);
 
 	async_tx_issue_pending_all();
 	blk_finish_plug(&plug);
@@ -6573,7 +6573,7 @@ static void raid5d(struct md_thread *thread)
 
 	flush_deferred_bios(conf);
 
-	r5l_flush_stripe_to_raid(conf->log);
+	r5l_flush_stripe_to_raid(conf);
 
 	async_tx_issue_pending_all();
 	blk_finish_plug(&plug);

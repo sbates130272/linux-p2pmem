@@ -1287,8 +1287,9 @@ static void r5l_log_flush_endio(struct bio *bio)
  * only write stripes of an io_unit to raid disks till the io_unit is the first
  * one whose data/parity is in log.
  */
-void r5l_flush_stripe_to_raid(struct r5l_log *log)
+void r5l_flush_stripe_to_raid(struct r5conf *conf)
 {
+	struct r5l_log *log = conf->log;
 	bool do_flush;
 
 	if (!log || !log->need_cache_flush)
