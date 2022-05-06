@@ -325,7 +325,20 @@ void r5c_handle_cached_data_endio(struct r5conf *conf,
 	}
 }
 
-void r5l_wake_reclaim(struct r5l_log *log, sector_t space);
+static void __r5l_wake_reclaim(struct r5l_log *log, sector_t space)
+{
+	unsigned long target;
+	unsigned long new = (unsigned long)space; /* overflow in theory */
+
+	if (!log)
+		return;
+	do {
+		target = log->reclaim_target;
+		if (new < target)
+			return;
+	} while (cmpxchg(&log->reclaim_target, target, new) != target);
+	md_wakeup_thread(log->reclaim_thread);
+}
 
 /* Check whether we should flush some stripes to free up stripe cache */
 void r5c_check_stripe_cache_usage(struct r5conf *conf)
@@ -348,7 +361,7 @@ void r5c_check_stripe_cache_usage(struct r5conf *conf)
 	 */
 	if (total_cached > conf->min_nr_stripes * 1 / 2 ||
 	    atomic_read(&conf->empty_inactive_list_nr) > 0)
-		r5l_wake_reclaim(conf->log, 0);
+		__r5l_wake_reclaim(conf->log, 0);
 }
 
 /*
@@ -367,7 +380,7 @@ void r5c_check_cached_full_stripe(struct r5conf *conf)
 	if (atomic_read(&conf->r5c_cached_full_stripes) >=
 	    min(R5C_FULL_STRIPE_FLUSH_BATCH(conf),
 		conf->chunk_sectors >> RAID5_STRIPE_SHIFT(conf)))
-		r5l_wake_reclaim(conf->log, 0);
+		__r5l_wake_reclaim(conf->log, 0);
 }
 
 /*
@@ -443,7 +456,7 @@ static inline void r5c_update_log_state(struct r5l_log *log)
 		clear_bit(R5C_LOG_TIGHT, &conf->cache_state);
 
 	if (wake_reclaim)
-		r5l_wake_reclaim(log, 0);
+		__r5l_wake_reclaim(log, 0);
 }
 
 /*
@@ -1085,7 +1098,7 @@ int r5l_write_stripe(struct r5l_log *log, struct stripe_head *sh)
 
 	mutex_unlock(&log->io_mutex);
 	if (wake_reclaim)
-		r5l_wake_reclaim(log, reserve);
+		__r5l_wake_reclaim(log, reserve);
 	return 0;
 }
 
@@ -1237,7 +1250,7 @@ static void __r5l_stripe_write_finished(struct r5l_io_unit *io)
 
 	if (r5l_reclaimable_space(log) > log->max_free_space ||
 	    test_bit(R5C_LOG_TIGHT, &conf->cache_state))
-		r5l_wake_reclaim(log, 0);
+		__r5l_wake_reclaim(log, 0);
 
 	spin_unlock_irqrestore(&log->io_list_lock, flags);
 	wake_up(&log->iounit_wait);
@@ -1562,19 +1575,9 @@ static void r5l_reclaim_thread(struct md_thread *thread)
 	r5l_do_reclaim(log);
 }
 
-void r5l_wake_reclaim(struct r5l_log *log, sector_t space)
+void r5l_wake_reclaim(struct r5conf *conf, sector_t space)
 {
-	unsigned long target;
-	unsigned long new = (unsigned long)space; /* overflow in theory */
-
-	if (!log)
-		return;
-	do {
-		target = log->reclaim_target;
-		if (new < target)
-			return;
-	} while (cmpxchg(&log->reclaim_target, target, new) != target);
-	md_wakeup_thread(log->reclaim_thread);
+	__r5l_wake_reclaim(conf->log, space);
 }
 
 void r5l_quiesce(struct r5l_log *log, int quiesce)
@@ -1586,7 +1589,7 @@ void r5l_quiesce(struct r5l_log *log, int quiesce)
 		mddev = log->rdev->mddev;
 		wake_up(&mddev->sb_wait);
 		kthread_park(log->reclaim_thread->tsk);
-		r5l_wake_reclaim(log, MaxSector);
+		__r5l_wake_reclaim(log, MaxSector);
 		r5l_do_reclaim(log);
 	} else
 		kthread_unpark(log->reclaim_thread->tsk);
