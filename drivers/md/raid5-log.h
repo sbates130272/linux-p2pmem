@@ -18,7 +18,7 @@ void r5c_finish_stripe_write_out(struct r5conf *conf, struct stripe_head *sh,
 				 struct stripe_head_state *s);
 void r5c_release_extra_page(struct stripe_head *sh);
 void r5c_use_extra_page(struct stripe_head *sh);
-void r5l_wake_reclaim(struct r5l_log *log, sector_t space);
+void r5l_wake_reclaim(struct r5conf *conf, sector_t space);
 void r5c_handle_cached_data_endio(struct r5conf *conf,
 				  struct stripe_head *sh, int disks);
 int r5c_cache_data(struct r5l_log *log, struct stripe_head *sh);
