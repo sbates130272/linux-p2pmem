@@ -29,7 +29,7 @@ void r5c_check_cached_full_stripe(struct r5conf *conf);
 extern struct md_sysfs_entry r5c_journal_mode;
 void r5c_update_on_rdev_error(struct mddev *mddev, struct md_rdev *rdev);
 bool r5c_big_stripe_cached(struct r5conf *conf, sector_t sect);
-int r5l_start(struct r5l_log *log);
+int r5l_start(struct r5conf *conf);
 
 struct dma_async_tx_descriptor *
 ops_run_partial_parity(struct stripe_head *sh, struct raid5_percpu *percpu,

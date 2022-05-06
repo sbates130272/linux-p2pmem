@@ -8040,7 +8040,7 @@ static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		if (ret)
 			return ret;
 
-		ret = r5l_start(conf->log);
+		ret = r5l_start(conf);
 		if (ret)
 			return ret;
 
@@ -8743,7 +8743,7 @@ static int raid5_start(struct mddev *mddev)
 {
 	struct r5conf *conf = mddev->private;
 
-	return r5l_start(conf->log);
+	return r5l_start(conf);
 }
 
 static struct md_personality raid6_personality =
