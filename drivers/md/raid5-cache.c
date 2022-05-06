@@ -247,10 +247,14 @@ enum r5l_io_unit_state {
 	IO_UNIT_STRIPE_END = 3,	/* stripes data finished writing to raid */
 };
 
-bool r5c_is_writeback(struct r5l_log *log)
+static bool __r5c_is_writeback(struct r5l_log *log)
 {
-	return (log != NULL &&
-		log->r5c_journal_mode == R5C_JOURNAL_MODE_WRITE_BACK);
+	return log && log->r5c_journal_mode == R5C_JOURNAL_MODE_WRITE_BACK;
+}
+
+bool r5c_is_writeback(struct r5conf *conf)
+{
+	return __r5c_is_writeback(conf->log);
 }
 
 static sector_t r5l_ring_add(struct r5l_log *log, sector_t start, sector_t inc)
@@ -328,7 +332,7 @@ void r5c_check_stripe_cache_usage(struct r5conf *conf)
 {
 	int total_cached;
 
-	if (!r5c_is_writeback(conf->log))
+	if (!r5c_is_writeback(conf))
 		return;
 
 	total_cached = atomic_read(&conf->r5c_cached_partial_stripes) +
@@ -353,7 +357,7 @@ void r5c_check_stripe_cache_usage(struct r5conf *conf)
  */
 void r5c_check_cached_full_stripe(struct r5conf *conf)
 {
-	if (!r5c_is_writeback(conf->log))
+	if (!r5c_is_writeback(conf))
 		return;
 
 	/*
@@ -398,7 +402,7 @@ static sector_t r5c_log_required_to_flush_cache(struct r5conf *conf)
 {
 	struct r5l_log *log = conf->log;
 
-	if (!r5c_is_writeback(log))
+	if (!r5c_is_writeback(conf))
 		return 0;
 
 	return BLOCK_SECTORS *
@@ -420,7 +424,7 @@ static inline void r5c_update_log_state(struct r5l_log *log)
 	sector_t reclaim_space;
 	bool wake_reclaim = false;
 
-	if (!r5c_is_writeback(log))
+	if (!__r5c_is_writeback(log))
 		return;
 
 	free_space = r5l_ring_distance(log, log->log_start,
@@ -449,9 +453,8 @@ static inline void r5c_update_log_state(struct r5l_log *log)
 void r5c_make_stripe_write_out(struct stripe_head *sh)
 {
 	struct r5conf *conf = sh->raid_conf;
-	struct r5l_log *log = conf->log;
 
-	BUG_ON(!r5c_is_writeback(log));
+	BUG_ON(!r5c_is_writeback(conf));
 
 	WARN_ON(!test_bit(STRIPE_R5C_CACHING, &sh->state));
 	clear_bit(STRIPE_R5C_CACHING, &sh->state);
@@ -1429,7 +1432,7 @@ static void r5c_do_reclaim(struct r5conf *conf)
 	int stripes_to_flush;
 	int flushing_partial, flushing_full;
 
-	if (!r5c_is_writeback(log))
+	if (!r5c_is_writeback(conf))
 		return;
 
 	flushing_partial = atomic_read(&conf->r5c_flushing_partial_stripes);
@@ -2644,7 +2647,7 @@ int r5c_try_caching_write(struct r5conf *conf,
 	int ret;
 	uintptr_t refcount;
 
-	BUG_ON(!r5c_is_writeback(log));
+	BUG_ON(!__r5c_is_writeback(log));
 
 	if (!test_bit(STRIPE_R5C_CACHING, &sh->state)) {
 		/*

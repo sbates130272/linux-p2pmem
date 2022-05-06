@@ -11,7 +11,7 @@ void r5l_stripe_write_finished(struct stripe_head *sh);
 int r5l_handle_flush_request(struct r5l_log *log, struct bio *bio);
 void r5l_quiesce(struct r5l_log *log, int quiesce);
 bool r5l_log_disk_error(struct r5conf *conf);
-bool r5c_is_writeback(struct r5l_log *log);
+bool r5c_is_writeback(struct r5conf *conf);
 int r5c_try_caching_write(struct r5conf *conf, struct stripe_head *sh,
 			  struct stripe_head_state *s, int disks);
 void r5c_finish_stripe_write_out(struct r5conf *conf, struct stripe_head *sh,

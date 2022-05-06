@@ -224,7 +224,7 @@ static void do_release_stripe(struct r5conf *conf, struct stripe_head *sh,
 	BUG_ON(!list_empty(&sh->lru));
 	BUG_ON(atomic_read(&conf->active_stripes)==0);
 
-	if (r5c_is_writeback(conf->log))
+	if (r5c_is_writeback(conf))
 		for (i = sh->disks; i--; )
 			if (test_bit(R5_InJournal, &sh->dev[i].flags))
 				injournal++;
@@ -236,7 +236,7 @@ static void do_release_stripe(struct r5conf *conf, struct stripe_head *sh,
 	 *   2. when resync is requested fot the stripe.
 	 */
 	if (test_bit(STRIPE_SYNC_REQUESTED, &sh->state) ||
-	    (conf->quiesce && r5c_is_writeback(conf->log) &&
+	    (conf->quiesce && r5c_is_writeback(conf) &&
 	     !test_bit(STRIPE_HANDLE, &sh->state) && injournal != 0)) {
 		if (test_bit(STRIPE_R5C_CACHING, &sh->state))
 			r5c_make_stripe_write_out(sh);
@@ -274,7 +274,7 @@ static void do_release_stripe(struct r5conf *conf, struct stripe_head *sh,
 				md_wakeup_thread(conf->mddev->thread);
 		atomic_dec(&conf->active_stripes);
 		if (!test_bit(STRIPE_EXPANDING, &sh->state)) {
-			if (!r5c_is_writeback(conf->log))
+			if (!r5c_is_writeback(conf))
 				list_add_tail(&sh->lru, temp_inactive_list);
 			else {
 				WARN_ON(test_bit(R5_InJournal, &sh->dev[sh->pd_idx].flags));
@@ -1786,7 +1786,7 @@ static void ops_complete_prexor(void *stripe_head_ref)
 	pr_debug("%s: stripe %llu\n", __func__,
 		(unsigned long long)sh->sector);
 
-	if (r5c_is_writeback(sh->raid_conf->log))
+	if (r5c_is_writeback(sh->raid_conf))
 		/*
 		 * raid5-cache write back uses orig_page during prexor.
 		 * After prexor, it is time to free orig_page
@@ -1905,9 +1905,9 @@ again:
 					tx = async_copy_data(1, wbi, &dev->page,
 							     dev->offset,
 							     dev->sector, tx, sh,
-							     r5c_is_writeback(conf->log));
+							     r5c_is_writeback(conf));
 					if (dev->page != dev->orig_page &&
-					    !r5c_is_writeback(conf->log)) {
+					    !r5c_is_writeback(conf)) {
 						set_bit(R5_SkipCopy, &dev->flags);
 						clear_bit(R5_UPTODATE, &dev->flags);
 						clear_bit(R5_OVERWRITE, &dev->flags);
@@ -5088,7 +5088,7 @@ static void handle_stripe(struct stripe_head *sh)
 	 */
 
 	if (!sh->reconstruct_state && !sh->check_state && !sh->log_io) {
-		if (!r5c_is_writeback(conf->log)) {
+		if (!r5c_is_writeback(conf)) {
 			if (s.to_write)
 				handle_stripe_dirtying(conf, sh, &s, disks);
 		} else { /* write back cache */
@@ -5536,7 +5536,7 @@ static struct stripe_head *__get_priority_stripe(struct r5conf *conf, int group)
 	struct stripe_head *sh, *tmp;
 	struct list_head *handle_list = NULL;
 	struct r5worker_group *wg;
-	bool second_try = !r5c_is_writeback(conf->log) &&
+	bool second_try = !r5c_is_writeback(conf) &&
 		!r5l_log_disk_error(conf);
 	bool try_loprio = test_bit(R5C_LOG_TIGHT, &conf->cache_state) ||
 		r5l_log_disk_error(conf);
