@@ -7944,18 +7944,9 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 
 	print_raid5_conf(conf);
 	if (test_bit(Journal, &rdev->flags) && conf->log) {
-		/*
-		 * we can't wait pending write here, as this is called in
-		 * raid5d, wait will deadlock.
-		 * neilb: there is no locking about new writes here,
-		 * so this cannot be safe.
-		 */
-		if (atomic_read(&conf->active_stripes) ||
-		    atomic_read(&conf->r5c_cached_full_stripes) ||
-		    atomic_read(&conf->r5c_cached_partial_stripes)) {
-			return -EBUSY;
-		}
+		mddev_suspend(mddev);
 		log_exit(conf);
+		mddev_resume(mddev);
 		return 0;
 	}
 	if (rdev == rcu_access_pointer(p->rdev))
@@ -8703,8 +8694,11 @@ static int raid5_change_consistency_policy(struct mddev *mddev, const char *buf)
 			err = log_init(conf, NULL, true);
 			if (!err) {
 				err = resize_stripes(conf, conf->pool_size);
-				if (err)
+				if (err) {
+					mddev_suspend(mddev);
 					log_exit(conf);
+					mddev_resume(mddev);
+				}
 			}
 		} else
 			err = -EINVAL;
