@@ -1004,9 +1004,9 @@ static inline void r5l_add_no_space_stripe(struct r5l_log *log,
  * running in raid5d, where reclaim could wait for raid5d too (when it flushes
  * data from log to raid disks), so we shouldn't wait for reclaim here
  */
-int r5l_write_stripe(struct r5l_log *log, struct stripe_head *sh)
+int r5l_write_stripe(struct r5conf *conf, struct stripe_head *sh)
 {
-	struct r5conf *conf = sh->raid_conf;
+	struct r5l_log *log = conf->log;
 	int write_disks = 0;
 	int data_pages, parity_pages;
 	int reserve;
@@ -1102,8 +1102,9 @@ int r5l_write_stripe(struct r5l_log *log, struct stripe_head *sh)
 	return 0;
 }
 
-void r5l_write_stripe_run(struct r5l_log *log)
+void r5l_write_stripe_run(struct r5conf *conf)
 {
+	struct r5l_log *log = conf->log;
 	if (!log)
 		return;
 	mutex_lock(&log->io_mutex);
@@ -1111,8 +1112,10 @@ void r5l_write_stripe_run(struct r5l_log *log)
 	mutex_unlock(&log->io_mutex);
 }
 
-int r5l_handle_flush_request(struct r5l_log *log, struct bio *bio)
+int r5l_handle_flush_request(struct r5conf *conf, struct bio *bio)
 {
+	struct r5l_log *log = conf->log;
+
 	if (log->r5c_journal_mode == R5C_JOURNAL_MODE_WRITE_THROUGH) {
 		/*
 		 * in write through (journal only)
@@ -1580,8 +1583,9 @@ void r5l_wake_reclaim(struct r5conf *conf, sector_t space)
 	__r5l_wake_reclaim(conf->log, space);
 }
 
-void r5l_quiesce(struct r5l_log *log, int quiesce)
+void r5l_quiesce(struct r5conf *conf, int quiesce)
 {
+	struct r5l_log *log = conf->log;
 	struct mddev *mddev;
 
 	if (quiesce) {
@@ -2890,9 +2894,9 @@ void r5c_finish_stripe_write_out(struct r5conf *conf,
 		set_bit(STRIPE_HANDLE, &sh->state);
 }
 
-int r5c_cache_data(struct r5l_log *log, struct stripe_head *sh)
+int r5c_cache_data(struct r5conf *conf, struct stripe_head *sh)
 {
-	struct r5conf *conf = sh->raid_conf;
+	struct r5l_log *log = conf->log;
 	int pages = 0;
 	int reserve;
 	int i;

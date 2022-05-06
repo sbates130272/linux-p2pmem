@@ -4,12 +4,12 @@
 
 int r5l_init_log(struct r5conf *conf, struct md_rdev *rdev);
 void r5l_exit_log(struct r5conf *conf);
-int r5l_write_stripe(struct r5l_log *log, struct stripe_head *head_sh);
-void r5l_write_stripe_run(struct r5l_log *log);
+int r5l_write_stripe(struct r5conf *conf, struct stripe_head *head_sh);
+void r5l_write_stripe_run(struct r5conf *conf);
 void r5l_flush_stripe_to_raid(struct r5conf *conf);
 void r5l_stripe_write_finished(struct stripe_head *sh);
-int r5l_handle_flush_request(struct r5l_log *log, struct bio *bio);
-void r5l_quiesce(struct r5l_log *log, int quiesce);
+int r5l_handle_flush_request(struct r5conf *conf, struct bio *bio);
+void r5l_quiesce(struct r5conf *conf, int quiesce);
 bool r5l_log_disk_error(struct r5conf *conf);
 bool r5c_is_writeback(struct r5conf *conf);
 int r5c_try_caching_write(struct r5conf *conf, struct stripe_head *sh,
@@ -21,7 +21,7 @@ void r5c_use_extra_page(struct stripe_head *sh);
 void r5l_wake_reclaim(struct r5conf *conf, sector_t space);
 void r5c_handle_cached_data_endio(struct r5conf *conf,
 				  struct stripe_head *sh, int disks);
-int r5c_cache_data(struct r5l_log *log, struct stripe_head *sh);
+int r5c_cache_data(struct r5conf *conf, struct stripe_head *sh);
 void r5c_make_stripe_write_out(struct stripe_head *sh);
 void r5c_flush_cache(struct r5conf *conf, int num);
 void r5c_check_stripe_cache_usage(struct r5conf *conf);
@@ -63,10 +63,10 @@ static inline int log_stripe(struct stripe_head *sh, struct stripe_head_state *s
 			/* writing out phase */
 			if (s->waiting_extra_page)
 				return 0;
-			return r5l_write_stripe(conf->log, sh);
+			return r5l_write_stripe(conf, sh);
 		} else if (test_bit(STRIPE_LOG_TRAPPED, &sh->state)) {
 			/* caching phase */
-			return r5c_cache_data(conf->log, sh);
+			return r5c_cache_data(conf, sh);
 		}
 	} else if (raid5_has_ppl(conf)) {
 		return ppl_write_stripe(conf, sh);
@@ -88,7 +88,7 @@ static inline void log_stripe_write_finished(struct stripe_head *sh)
 static inline void log_write_stripe_run(struct r5conf *conf)
 {
 	if (conf->log)
-		r5l_write_stripe_run(conf->log);
+		r5l_write_stripe_run(conf);
 	else if (raid5_has_ppl(conf))
 		ppl_write_stripe_run(conf);
 }
@@ -106,7 +106,7 @@ static inline int log_handle_flush_request(struct r5conf *conf, struct bio *bio)
 	int ret = -ENODEV;
 
 	if (conf->log)
-		ret = r5l_handle_flush_request(conf->log, bio);
+		ret = r5l_handle_flush_request(conf, bio);
 	else if (raid5_has_ppl(conf))
 		ret = ppl_handle_flush_request(conf->log, bio);
 
@@ -116,7 +116,7 @@ static inline int log_handle_flush_request(struct r5conf *conf, struct bio *bio)
 static inline void log_quiesce(struct r5conf *conf, int quiesce)
 {
 	if (conf->log)
-		r5l_quiesce(conf->log, quiesce);
+		r5l_quiesce(conf, quiesce);
 	else if (raid5_has_ppl(conf))
 		ppl_quiesce(conf, quiesce);
 }
