@@ -7943,7 +7943,7 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	struct md_rdev *tmp;
 
 	print_raid5_conf(conf);
-	if (test_bit(Journal, &rdev->flags) && conf->log) {
+	if (test_bit(Journal, &rdev->flags) && rcu_access_pointer(conf->log)) {
 		mddev_suspend(mddev);
 		log_exit(conf);
 		mddev_resume(mddev);
@@ -8025,7 +8025,7 @@ static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 	int last = conf->raid_disks - 1;
 
 	if (test_bit(Journal, &rdev->flags)) {
-		if (conf->log)
+		if (rcu_access_pointer(conf->log))
 			return -EBUSY;
 
 		rdev->raid_disk = 0;

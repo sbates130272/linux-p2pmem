@@ -58,7 +58,7 @@ static inline int log_stripe(struct stripe_head *sh, struct stripe_head_state *s
 {
 	struct r5conf *conf = sh->raid_conf;
 
-	if (conf->log) {
+	if (rcu_access_pointer(conf->log)) {
 		if (!test_bit(STRIPE_R5C_CACHING, &sh->state)) {
 			/* writing out phase */
 			if (s->waiting_extra_page)
@@ -79,7 +79,7 @@ static inline void log_stripe_write_finished(struct stripe_head *sh)
 {
 	struct r5conf *conf = sh->raid_conf;
 
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		r5l_stripe_write_finished(sh);
 	else if (raid5_has_ppl(conf))
 		ppl_stripe_write_finished(sh);
@@ -87,7 +87,7 @@ static inline void log_stripe_write_finished(struct stripe_head *sh)
 
 static inline void log_write_stripe_run(struct r5conf *conf)
 {
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		r5l_write_stripe_run(conf);
 	else if (raid5_has_ppl(conf))
 		ppl_write_stripe_run(conf);
@@ -95,7 +95,7 @@ static inline void log_write_stripe_run(struct r5conf *conf)
 
 static inline void log_flush_stripe_to_raid(struct r5conf *conf)
 {
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		r5l_flush_stripe_to_raid(conf);
 	else if (raid5_has_ppl(conf))
 		ppl_write_stripe_run(conf);
@@ -105,7 +105,7 @@ static inline int log_handle_flush_request(struct r5conf *conf, struct bio *bio)
 {
 	int ret = -ENODEV;
 
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		ret = r5l_handle_flush_request(conf, bio);
 	else if (raid5_has_ppl(conf))
 		ret = ppl_handle_flush_request(bio);
@@ -115,7 +115,7 @@ static inline int log_handle_flush_request(struct r5conf *conf, struct bio *bio)
 
 static inline void log_quiesce(struct r5conf *conf, int quiesce)
 {
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		r5l_quiesce(conf, quiesce);
 	else if (raid5_has_ppl(conf))
 		ppl_quiesce(conf, quiesce);
@@ -123,7 +123,7 @@ static inline void log_quiesce(struct r5conf *conf, int quiesce)
 
 static inline void log_exit(struct r5conf *conf)
 {
-	if (conf->log)
+	if (rcu_access_pointer(conf->log))
 		r5l_exit_log(conf);
 	else if (raid5_has_ppl(conf))
 		ppl_exit_log(conf);
