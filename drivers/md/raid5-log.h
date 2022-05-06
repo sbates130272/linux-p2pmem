@@ -6,7 +6,7 @@ int r5l_init_log(struct r5conf *conf, struct md_rdev *rdev);
 void r5l_exit_log(struct r5conf *conf);
 int r5l_write_stripe(struct r5l_log *log, struct stripe_head *head_sh);
 void r5l_write_stripe_run(struct r5l_log *log);
-void r5l_flush_stripe_to_raid(struct r5l_log *log);
+void r5l_flush_stripe_to_raid(struct r5conf *conf);
 void r5l_stripe_write_finished(struct stripe_head *sh);
 int r5l_handle_flush_request(struct r5l_log *log, struct bio *bio);
 void r5l_quiesce(struct r5l_log *log, int quiesce);
@@ -96,7 +96,7 @@ static inline void log_write_stripe_run(struct r5conf *conf)
 static inline void log_flush_stripe_to_raid(struct r5conf *conf)
 {
 	if (conf->log)
-		r5l_flush_stripe_to_raid(conf->log);
+		r5l_flush_stripe_to_raid(conf);
 	else if (raid5_has_ppl(conf))
 		ppl_write_stripe_run(conf);
 }
