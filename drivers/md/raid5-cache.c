@@ -247,10 +247,15 @@ enum r5l_io_unit_state {
 	IO_UNIT_STRIPE_END = 3,	/* stripes data finished writing to raid */
 };
 
-bool r5c_is_writeback(struct r5l_log *log)
+static bool r5c_is_writeback(struct r5l_log *log)
 {
 	return (log != NULL &&
 		log->r5c_journal_mode == R5C_JOURNAL_MODE_WRITE_BACK);
+}
+
+bool r5c_conf_is_writeback(struct r5conf *conf)
+{
+	return r5c_is_writeback(conf->log);
 }
 
 static sector_t r5l_ring_add(struct r5l_log *log, sector_t start, sector_t inc)
