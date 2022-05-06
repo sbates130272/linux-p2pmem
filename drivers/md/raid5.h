@@ -684,7 +684,7 @@ struct r5conf {
 	struct r5worker_group	*worker_groups;
 	int			group_cnt;
 	int			worker_cnt_per_group;
-	struct r5l_log		*log;
+	struct r5l_log		__rcu *log;
 	void			*log_private;
 
 	spinlock_t		pending_bios_lock;
