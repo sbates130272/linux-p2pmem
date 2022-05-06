@@ -1168,10 +1168,9 @@ static void r5l_run_no_space_stripes(struct r5l_log *log)
  * for write through mode, returns log->next_checkpoint
  * for write back, returns log_start of first sh in stripe_in_journal_list
  */
-static sector_t r5c_calculate_new_cp(struct r5conf *conf)
+static sector_t r5c_calculate_new_cp(struct r5l_log *log)
 {
 	struct stripe_head *sh;
-	struct r5l_log *log = conf->log;
 	sector_t new_cp;
 	unsigned long flags;
 
@@ -1179,12 +1178,12 @@ static sector_t r5c_calculate_new_cp(struct r5conf *conf)
 		return log->next_checkpoint;
 
 	spin_lock_irqsave(&log->stripe_in_journal_lock, flags);
-	if (list_empty(&conf->log->stripe_in_journal_list)) {
+	if (list_empty(&log->stripe_in_journal_list)) {
 		/* all stripes flushed */
 		spin_unlock_irqrestore(&log->stripe_in_journal_lock, flags);
 		return log->next_checkpoint;
 	}
-	sh = list_first_entry(&conf->log->stripe_in_journal_list,
+	sh = list_first_entry(&log->stripe_in_journal_list,
 			      struct stripe_head, r5c);
 	new_cp = sh->log_start;
 	spin_unlock_irqrestore(&log->stripe_in_journal_lock, flags);
@@ -1193,10 +1192,8 @@ static sector_t r5c_calculate_new_cp(struct r5conf *conf)
 
 static sector_t r5l_reclaimable_space(struct r5l_log *log)
 {
-	struct r5conf *conf = log->rdev->mddev->private;
-
 	return r5l_ring_distance(log, log->last_checkpoint,
-				 r5c_calculate_new_cp(conf));
+				 r5c_calculate_new_cp(log));
 }
 
 static void r5l_run_no_mem_stripe(struct r5l_log *log)
@@ -1517,7 +1514,6 @@ static void r5c_do_reclaim(struct r5conf *conf)
 
 static void r5l_do_reclaim(struct r5l_log *log)
 {
-	struct r5conf *conf = log->rdev->mddev->private;
 	sector_t reclaim_target = xchg(&log->reclaim_target, 0);
 	sector_t reclaimable;
 	sector_t next_checkpoint;
@@ -1546,7 +1542,7 @@ static void r5l_do_reclaim(struct r5l_log *log)
 				    log->io_list_lock);
 	}
 
-	next_checkpoint = r5c_calculate_new_cp(conf);
+	next_checkpoint = r5c_calculate_new_cp(log);
 	spin_unlock_irq(&log->io_list_lock);
 
 	if (reclaimable == 0 || !write_super)
