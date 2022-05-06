@@ -505,10 +505,9 @@ static void r5c_handle_parity_cached(struct stripe_head *sh)
  * Setting proper flags after writing (or flushing) data and/or parity to the
  * log device. This is called from r5l_log_endio() or r5l_log_flush_endio().
  */
-static void r5c_finish_cache_stripe(struct stripe_head *sh)
+static void r5c_finish_cache_stripe(struct r5l_log *log,
+				    struct stripe_head *sh)
 {
-	struct r5l_log *log = sh->raid_conf->log;
-
 	if (log->r5c_journal_mode == R5C_JOURNAL_MODE_WRITE_THROUGH) {
 		BUG_ON(test_bit(STRIPE_R5C_CACHING, &sh->state));
 		/*
@@ -526,14 +525,14 @@ static void r5c_finish_cache_stripe(struct stripe_head *sh)
 	}
 }
 
-static void r5l_io_run_stripes(struct r5l_io_unit *io)
+static void r5l_io_run_stripes(struct r5l_log *log, struct r5l_io_unit *io)
 {
 	struct stripe_head *sh, *next;
 
 	list_for_each_entry_safe(sh, next, &io->stripe_list, log_list) {
 		list_del_init(&sh->log_list);
 
-		r5c_finish_cache_stripe(sh);
+		r5c_finish_cache_stripe(log, sh);
 
 		set_bit(STRIPE_HANDLE, &sh->state);
 		raid5_release_stripe(sh);
@@ -552,7 +551,7 @@ static void r5l_log_run_stripes(struct r5l_log *log)
 			break;
 
 		list_move_tail(&io->log_sibling, &log->finished_ios);
-		r5l_io_run_stripes(io);
+		r5l_io_run_stripes(log, io);
 	}
 }
 
@@ -1282,7 +1281,7 @@ static void r5l_log_flush_endio(struct bio *bio)
 
 	spin_lock_irqsave(&log->io_list_lock, flags);
 	list_for_each_entry(io, &log->flushing_ios, log_sibling)
-		r5l_io_run_stripes(io);
+		r5l_io_run_stripes(log, io);
 	list_splice_tail_init(&log->flushing_ios, &log->finished_ios);
 	spin_unlock_irqrestore(&log->io_list_lock, flags);
 
