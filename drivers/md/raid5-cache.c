@@ -3032,20 +3032,17 @@ ioerr:
 	return ret;
 }
 
-int r5l_start(struct r5l_log *log)
+int r5l_start(struct r5conf *conf)
 {
+	struct r5l_log *log = conf->log;
 	int ret;
 
 	if (!log)
 		return 0;
 
 	ret = r5l_load_log(log);
-	if (ret) {
-		struct mddev *mddev = log->rdev->mddev;
-		struct r5conf *conf = mddev->private;
-
+	if (ret)
 		r5l_exit_log(conf);
-	}
 	return ret;
 }
 
