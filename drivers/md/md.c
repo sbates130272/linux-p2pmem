@@ -8042,10 +8042,18 @@ static int status_resync(struct seq_file *seq, struct mddev *mddev)
 		if (test_bit(MD_RECOVERY_DONE, &mddev->recovery))
 			/* Still cleaning up */
 			resync = max_sectors;
-	} else if (resync > max_sectors)
+	} else if (resync > max_sectors) {
 		resync = max_sectors;
-	else
+	} else {
 		resync -= atomic_read(&mddev->recovery_active);
+		if (!resync) {
+			/*
+			 * Resync has started, but if it's zero, ensure
+			 * it is still reported, by forcing it to be 4
+			 */
+			resync = 4;
+		}
+	}
 
 	if (resync == 0) {
 		if (test_bit(MD_RESYNCING_REMOTE, &mddev->recovery)) {
