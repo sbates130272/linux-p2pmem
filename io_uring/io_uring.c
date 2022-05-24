@@ -93,6 +93,7 @@
 #include "io_uring.h"
 
 #include "xattr.h"
+#include "nop.h"
 
 #define IORING_MAX_ENTRIES	32768
 #define IORING_MAX_CQ_ENTRIES	(2 * IORING_MAX_ENTRIES)
@@ -503,12 +504,6 @@ struct io_msg {
 	struct file			*file;
 	u64 user_data;
 	u32 len;
-};
-
-struct io_nop {
-	struct file			*file;
-	u64				extra1;
-	u64				extra2;
 };
 
 struct io_async_connect {
@@ -952,8 +947,7 @@ static inline unsigned int io_put_kbuf_comp(struct io_kiocb *req)
 	return __io_put_kbuf(req, &req->ctx->io_buffers_comp);
 }
 
-static inline unsigned int io_put_kbuf(struct io_kiocb *req,
-				       unsigned issue_flags)
+inline unsigned int io_put_kbuf(struct io_kiocb *req, unsigned issue_flags)
 {
 	unsigned int cflags;
 
@@ -1923,9 +1917,8 @@ static inline void __io_req_complete(struct io_kiocb *req, unsigned issue_flags)
 		io_req_complete_post(req);
 }
 
-static inline void __io_req_complete32(struct io_kiocb *req,
-				       unsigned int issue_flags, u64 extra1,
-				       u64 extra2)
+void __io_req_complete32(struct io_kiocb *req, unsigned int issue_flags,
+			 u64 extra1, u64 extra2)
 {
 	if (issue_flags & IO_URING_F_COMPLETE_DEFER) {
 		io_req_complete_state(req);
@@ -3203,8 +3196,8 @@ static void __user *io_ring_buffer_select(struct io_kiocb *req, size_t *len,
 	return u64_to_user_ptr(buf->addr);
 }
 
-static void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
-				     unsigned int issue_flags)
+void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
+			      unsigned int issue_flags)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_buffer_list *bl;
@@ -4352,47 +4345,6 @@ done:
 	if (ret != sp->len)
 		req_set_fail(req);
 	io_req_set_res(req, ret, 0);
-	return IOU_OK;
-}
-
-static int io_nop_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	/*
-	 * If the ring is setup with CQE32, relay back addr/addr
-	 */
-	if (req->ctx->flags & IORING_SETUP_CQE32) {
-		struct io_nop *nop = io_kiocb_to_cmd(req);
-
-		nop->extra1 = READ_ONCE(sqe->addr);
-		nop->extra2 = READ_ONCE(sqe->addr2);
-	}
-
-	return 0;
-}
-
-/*
- * IORING_OP_NOP just posts a completion event, nothing else.
- */
-static int io_nop(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_nop *nop = io_kiocb_to_cmd(req);
-	void __user *buf;
-
-	if (req->flags & REQ_F_BUFFER_SELECT) {
-		size_t len = 1;
-
-		buf = io_buffer_select(req, &len, issue_flags);
-		if (!buf)
-			return -ENOBUFS;
-	}
-
-	io_req_set_res(req, 0, io_put_kbuf(req, issue_flags));
-
-	if (req->ctx->flags & IORING_SETUP_CQE32) {
-		__io_req_complete32(req, issue_flags, nop->extra1, nop->extra2);
-		return IOU_ISSUE_SKIP_COMPLETE;
-	}
-
 	return IOU_OK;
 }
 

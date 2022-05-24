@@ -15,4 +15,10 @@ static inline void io_req_set_res(struct io_kiocb *req, s32 res, u32 cflags)
 	req->cqe.flags = cflags;
 }
 
+void __io_req_complete32(struct io_kiocb *req, unsigned int issue_flags,
+			 u64 extra1, u64 extra2);
+void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
+			      unsigned int issue_flags);
+unsigned int io_put_kbuf(struct io_kiocb *req, unsigned issue_flags);
+
 #endif
