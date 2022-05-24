@@ -91,6 +91,7 @@
 #include "io-wq.h"
 
 #include "io_uring_types.h"
+#include "io_uring.h"
 
 #define IORING_MAX_ENTRIES	32768
 #define IORING_MAX_CQ_ENTRIES	(2 * IORING_MAX_ENTRIES)
@@ -1804,8 +1805,8 @@ static inline bool __io_fill_cqe_req(struct io_kiocb *req, s32 res, u32 cflags)
 	return __io_fill_cqe(req->ctx, req->cqe.user_data, res, cflags);
 }
 
-static inline void __io_fill_cqe32_req(struct io_kiocb *req, s32 res, u32 cflags,
-				u64 extra1, u64 extra2)
+static inline void __io_fill_cqe32_req(struct io_kiocb *req, u64 extra1,
+				       u64 extra2)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_uring_cqe *cqe;
@@ -1815,8 +1816,8 @@ static inline void __io_fill_cqe32_req(struct io_kiocb *req, s32 res, u32 cflags
 	if (req->flags & REQ_F_CQE_SKIP)
 		return;
 
-	trace_io_uring_complete(ctx, req, req->cqe.user_data, res, cflags,
-				extra1, extra2);
+	trace_io_uring_complete(ctx, req, req->cqe.user_data, req->cqe.res,
+				req->cqe.flags, extra1, extra2);
 
 	/*
 	 * If we can't get a cq entry, userspace overflowed the
@@ -1826,14 +1827,15 @@ static inline void __io_fill_cqe32_req(struct io_kiocb *req, s32 res, u32 cflags
 	cqe = io_get_cqe(ctx);
 	if (likely(cqe)) {
 		WRITE_ONCE(cqe->user_data, req->cqe.user_data);
-		WRITE_ONCE(cqe->res, res);
-		WRITE_ONCE(cqe->flags, cflags);
+		WRITE_ONCE(cqe->res, req->cqe.res);
+		WRITE_ONCE(cqe->flags, req->cqe.flags);
 		WRITE_ONCE(cqe->big_cqe[0], extra1);
 		WRITE_ONCE(cqe->big_cqe[1], extra2);
 		return;
 	}
 
-	io_cqring_event_overflow(ctx, req->cqe.user_data, res, cflags, extra1, extra2);
+	io_cqring_event_overflow(ctx, req->cqe.user_data, req->cqe.res,
+					req->cqe.flags, extra1, extra2);
 }
 
 static noinline bool io_fill_cqe_aux(struct io_ring_ctx *ctx, u64 user_data,
@@ -1883,11 +1885,11 @@ static void __io_req_complete_post(struct io_kiocb *req, s32 res,
 	__io_req_complete_put(req);
 }
 
-static void __io_req_complete_post32(struct io_kiocb *req, s32 res,
-				   u32 cflags, u64 extra1, u64 extra2)
+static void __io_req_complete_post32(struct io_kiocb *req, u64 extra1,
+				     u64 extra2)
 {
 	if (!(req->flags & REQ_F_CQE_SKIP))
-		__io_fill_cqe32_req(req, res, cflags, extra1, extra2);
+		__io_fill_cqe32_req(req, extra1, extra2);
 	__io_req_complete_put(req);
 }
 
@@ -1902,45 +1904,43 @@ static void io_req_complete_post(struct io_kiocb *req, s32 res, u32 cflags)
 	io_cqring_ev_posted(ctx);
 }
 
-static void io_req_complete_post32(struct io_kiocb *req, s32 res,
-				   u32 cflags, u64 extra1, u64 extra2)
+static void io_req_complete_post32(struct io_kiocb *req, u64 extra1, u64 extra2)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 
 	spin_lock(&ctx->completion_lock);
-	__io_req_complete_post32(req, res, cflags, extra1, extra2);
+	__io_req_complete_post32(req, extra1, extra2);
 	io_commit_cqring(ctx);
 	spin_unlock(&ctx->completion_lock);
 	io_cqring_ev_posted(ctx);
 }
 
-static inline void io_req_complete_state(struct io_kiocb *req, s32 res,
-					 u32 cflags)
+static inline void io_req_complete_state(struct io_kiocb *req)
 {
-	req->cqe.res = res;
-	req->cqe.flags = cflags;
 	req->flags |= REQ_F_COMPLETE_INLINE;
 }
 
 static inline void __io_req_complete(struct io_kiocb *req, unsigned issue_flags,
 				     s32 res, u32 cflags)
 {
-	if (issue_flags & IO_URING_F_COMPLETE_DEFER)
-		io_req_complete_state(req, res, cflags);
-	else
+	if (issue_flags & IO_URING_F_COMPLETE_DEFER) {
+		io_req_set_res(req, res, cflags);
+		io_req_complete_state(req);
+	} else {
 		io_req_complete_post(req, res, cflags);
+	}
 }
 
 static inline void __io_req_complete32(struct io_kiocb *req,
-				       unsigned int issue_flags, s32 res,
-				       u32 cflags, u64 extra1, u64 extra2)
+				       unsigned int issue_flags, u64 extra1,
+				       u64 extra2)
 {
 	if (issue_flags & IO_URING_F_COMPLETE_DEFER) {
-		io_req_complete_state(req, res, cflags);
+		io_req_complete_state(req);
 		req->extra1 = extra1;
 		req->extra2 = extra2;
 	} else {
-		io_req_complete_post32(req, res, cflags, extra1, extra2);
+		io_req_complete_post32(req, extra1, extra2);
 	}
 }
 
@@ -2802,7 +2802,8 @@ static inline void io_req_task_complete(struct io_kiocb *req, bool *locked)
 	int res = req->cqe.res;
 
 	if (*locked) {
-		io_req_complete_state(req, res, io_put_kbuf(req, 0));
+		io_req_set_res(req, res, io_put_kbuf(req, 0));
+		io_req_complete_state(req);
 		io_req_add_compl_list(req);
 	} else {
 		io_req_complete_post(req, res,
@@ -4439,8 +4440,9 @@ void io_uring_cmd_done(struct io_uring_cmd *ioucmd, ssize_t ret, ssize_t res2)
 
 	if (ret < 0)
 		req_set_fail(req);
+	io_req_set_res(req, 0, ret);
 	if (req->ctx->flags & IORING_SETUP_CQE32)
-		__io_req_complete32(req, 0, ret, 0, res2, 0);
+		__io_req_complete32(req, 0, res2, 0);
 	else
 		io_req_complete(req, ret);
 }
@@ -4624,7 +4626,6 @@ static int io_nop_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 static int io_nop(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_nop *nop = io_kiocb_to_cmd(req);
-	unsigned int cflags;
 	void __user *buf;
 
 	if (req->flags & REQ_F_BUFFER_SELECT) {
@@ -4635,12 +4636,13 @@ static int io_nop(struct io_kiocb *req, unsigned int issue_flags)
 			return -ENOBUFS;
 	}
 
-	cflags = io_put_kbuf(req, issue_flags);
-	if (!(req->ctx->flags & IORING_SETUP_CQE32))
-		__io_req_complete(req, issue_flags, 0, cflags);
-	else
-		__io_req_complete32(req, issue_flags, 0, cflags,
-				    nop->extra1, nop->extra2);
+	if (req->ctx->flags & IORING_SETUP_CQE32) {
+		io_req_set_res(req, 0, io_put_kbuf(req, issue_flags));
+		__io_req_complete32(req, issue_flags, nop->extra1, nop->extra2);
+		return 0;
+	}
+
+	__io_req_complete(req, issue_flags, 0, io_put_kbuf(req, issue_flags));
 	return 0;
 }
 
