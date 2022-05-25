@@ -2,6 +2,81 @@
 #ifndef _RAID5_LOG_H
 #define _RAID5_LOG_H
 
+struct r5l_log {
+	struct md_rdev *rdev;
+
+	u32 uuid_checksum;
+
+	sector_t device_size;		/* log device size, round to
+					 * BLOCK_SECTORS */
+	sector_t max_free_space;	/* reclaim run if free space is at
+					 * this size */
+
+	sector_t last_checkpoint;	/* log tail. where recovery scan
+					 * starts from */
+	u64 last_cp_seq;		/* log tail sequence */
+
+	sector_t log_start;		/* log head. where new data appends */
+	u64 seq;			/* log head sequence */
+
+	sector_t next_checkpoint;
+
+	struct mutex io_mutex;
+	struct r5l_io_unit *current_io;	/* current io_unit accepting new data */
+
+	spinlock_t io_list_lock;
+	struct list_head running_ios;	/* io_units which are still running,
+					 * and have not yet been completely
+					 * written to the log */
+	struct list_head io_end_ios;	/* io_units which have been completely
+					 * written to the log but not yet written
+					 * to the RAID */
+	struct list_head flushing_ios;	/* io_units which are waiting for log
+					 * cache flush */
+	struct list_head finished_ios;	/* io_units which settle down in log disk */
+	struct bio flush_bio;
+
+	struct list_head no_mem_stripes;   /* pending stripes, -ENOMEM */
+
+	struct kmem_cache *io_kc;
+	mempool_t io_pool;
+	struct bio_set bs;
+	mempool_t meta_pool;
+
+	struct md_thread *reclaim_thread;
+	unsigned long reclaim_target;	/* number of space that need to be
+					 * reclaimed.  if it's 0, reclaim spaces
+					 * used by io_units which are in
+					 * IO_UNIT_STRIPE_END state (eg, reclaim
+					 * dones't wait for specific io_unit
+					 * switching to IO_UNIT_STRIPE_END
+					 * state) */
+	wait_queue_head_t iounit_wait;
+
+	struct list_head no_space_stripes; /* pending stripes, log has no space */
+	spinlock_t no_space_stripes_lock;
+
+	bool need_cache_flush;
+
+	/* for r5c_cache */
+	enum r5c_journal_mode r5c_journal_mode;
+
+	/* all stripes in r5cache, in the order of seq at sh->log_start */
+	struct list_head stripe_in_journal_list;
+
+	spinlock_t stripe_in_journal_lock;
+	atomic_t stripe_in_journal_count;
+
+	/* to submit async io_units, to fulfill ordering of flush */
+	struct work_struct deferred_io_work;
+	/* to disable write back during in degraded mode */
+	struct work_struct disable_writeback_work;
+
+	/* to for chunk_aligned_read in writeback mode, details below */
+	spinlock_t tree_lock;
+	struct radix_tree_root big_stripe_tree;
+};
+
 int r5l_init_log(struct r5conf *conf, struct md_rdev *rdev);
 void r5l_exit_log(struct r5conf *conf);
 int r5l_write_stripe(struct r5conf *conf, struct stripe_head *head_sh);
