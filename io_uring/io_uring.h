@@ -25,6 +25,11 @@ static inline void io_req_set_res(struct io_kiocb *req, s32 res, u32 cflags)
 	req->cqe.flags = cflags;
 }
 
+static inline bool req_has_async_data(struct io_kiocb *req)
+{
+	return req->flags & REQ_F_ASYNC_DATA;
+}
+
 static inline void io_put_file(struct file *file)
 {
 	if (file)
@@ -55,6 +60,7 @@ static inline void io_ring_submit_lock(struct io_ring_ctx *ctx,
 
 void __io_req_complete32(struct io_kiocb *req, unsigned int issue_flags,
 			 u64 extra1, u64 extra2);
+void __io_req_complete(struct io_kiocb *req, unsigned issue_flags);
 void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
 			      unsigned int issue_flags);
 unsigned int io_put_kbuf(struct io_kiocb *req, unsigned issue_flags);
@@ -71,5 +77,7 @@ int io_queue_rsrc_removal(struct io_rsrc_data *data, unsigned idx,
 void io_rsrc_node_switch(struct io_ring_ctx *ctx,
 			 struct io_rsrc_data *data_to_kill);
 bool io_is_uring_fops(struct file *file);
+bool io_alloc_async_data(struct io_kiocb *req);
+void io_req_task_prio_work_add(struct io_kiocb *req);
 
 #endif
