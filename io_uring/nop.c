@@ -9,6 +9,7 @@
 
 #include "io_uring_types.h"
 #include "io_uring.h"
+#include "kbuf.h"
 #include "nop.h"
 
 struct io_nop {
