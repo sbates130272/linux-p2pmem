@@ -2534,10 +2534,13 @@ static ssize_t r5c_journal_mode_show(struct mddev *mddev, char *page)
 	struct r5conf *conf;
 	int ret;
 
-	spin_lock(&mddev->lock);
+	ret = mddev_lock(mddev);
+	if (ret)
+		return ret;
+
 	conf = mddev->private;
 	if (!conf || !conf->log) {
-		spin_unlock(&mddev->lock);
+		mddev_unlock(mddev);
 		return 0;
 	}
 
@@ -2557,7 +2560,7 @@ static ssize_t r5c_journal_mode_show(struct mddev *mddev, char *page)
 	default:
 		ret = 0;
 	}
-	spin_unlock(&mddev->lock);
+	mddev_unlock(mddev);
 	return ret;
 }
 
@@ -3166,6 +3169,8 @@ io_kc:
 void r5l_exit_log(struct r5conf *conf)
 {
 	struct r5l_log *log = conf->log;
+
+	lockdep_assert_held(&conf->mddev->reconfig_mutex);
 
 	conf->log = NULL;
 	synchronize_rcu();
