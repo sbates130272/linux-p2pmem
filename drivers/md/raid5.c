@@ -6043,12 +6043,12 @@ out_release:
 
 static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 {
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	struct r5conf *conf = mddev->private;
 	sector_t logical_sector;
 	struct stripe_request_ctx ctx = {};
 	const int rw = bio_data_dir(bi);
 	enum stripe_result res;
-	DEFINE_WAIT(w);
 	int s, stripe_cnt;
 
 	if (unlikely(bi->bi_opf & REQ_PREFLUSH)) {
@@ -6111,7 +6111,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		return true;
 	}
 	md_account_bio(mddev, &bi);
-	prepare_to_wait(&conf->wait_for_overlap, &w, TASK_UNINTERRUPTIBLE);
+
+	add_wait_queue(&conf->wait_for_overlap, &wait);
 	while (1) {
 		res = make_stripe_request(mddev, conf, &ctx, logical_sector,
 					  bi);
@@ -6134,9 +6135,8 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 				ctx.batch_last = NULL;
 			}
 
-			schedule();
-			prepare_to_wait(&conf->wait_for_overlap, &w,
-					TASK_UNINTERRUPTIBLE);
+			wait_woken(&wait, TASK_UNINTERRUPTIBLE,
+				   MAX_SCHEDULE_TIMEOUT);
 			continue;
 		}
 
@@ -6147,8 +6147,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 		logical_sector = ctx.first_sector +
 			(s << RAID5_STRIPE_SHIFT(conf));
 	}
-
-	finish_wait(&conf->wait_for_overlap, &w);
+	remove_wait_queue(&conf->wait_for_overlap, &wait);
 
 	if (ctx.batch_last)
 		raid5_release_stripe(ctx.batch_last);
