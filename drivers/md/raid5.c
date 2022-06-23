@@ -6091,7 +6091,7 @@ static bool raid5_make_request(struct mddev *mddev, struct bio * bi)
 	bi->bi_next = NULL;
 
 	bitmap_set(ctx.sectors_to_do, 0,
-		   DIV_ROUND_UP(ctx.last_sector - logical_sector,
+		   DIV_ROUND_UP((int)(ctx.last_sector - logical_sector),
 				RAID5_STRIPE_SECTORS(conf)));
 
 	pr_debug("raid456: %s, logical %llu to %llu\n", __func__,
