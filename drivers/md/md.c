@@ -5716,23 +5716,23 @@ int md_alloc(dev_t dev, char *name)
 	disk->events |= DISK_EVENT_MEDIA_CHANGE;
 	mddev->gendisk = disk;
 	error = add_disk(disk);
-	if (error)
-		goto out_cleanup_disk;
+	if (error) {
+		mddev->gendisk = NULL;
+		put_disk(disk);
+		goto out_unlock_disks_mutex;
+	}
 
 	error = kobject_add(&mddev->kobj, &disk_to_dev(disk)->kobj, "%s", "md");
 	if (error)
-		goto out_del_gendisk;
+		goto out_unlock_disks_mutex;
 
 	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mddev->sysfs_state = sysfs_get_dirent_safe(mddev->kobj.sd, "array_state");
 	mddev->sysfs_level = sysfs_get_dirent_safe(mddev->kobj.sd, "level");
-	goto out_unlock_disks_mutex;
 
-out_del_gendisk:
-	del_gendisk(disk);
-out_cleanup_disk:
-	blk_cleanup_disk(disk);
 out_unlock_disks_mutex:
+	if (error)
+		mddev->hold_active = 0;
 	mutex_unlock(&disks_mutex);
 	mddev_put(mddev);
 	return error;
