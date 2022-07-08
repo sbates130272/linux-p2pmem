@@ -503,6 +503,7 @@ struct mddev {
 
 	atomic_t			max_corr_read_errors; /* max read retries */
 	struct list_head		all_mddevs;
+	bool				deleted;
 
 	const struct attribute_group	*to_remove;
 
