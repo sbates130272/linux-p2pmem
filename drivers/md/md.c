@@ -5581,6 +5581,15 @@ md_attr_store(struct kobject *kobj, struct attribute *attr,
 	return rv;
 }
 
+static void mddev_free(struct mddev *mddev)
+{
+	percpu_ref_exit(&mddev->writes_pending);
+	bioset_exit(&mddev->bio_set);
+	bioset_exit(&mddev->sync_set);
+
+	kfree(mddev);
+}
+
 static void md_free(struct kobject *ko)
 {
 	struct mddev *mddev = container_of(ko, struct mddev, kobj);
@@ -5593,12 +5602,9 @@ static void md_free(struct kobject *ko)
 	if (mddev->gendisk) {
 		del_gendisk(mddev->gendisk);
 		blk_cleanup_disk(mddev->gendisk);
+	} else {
+		mddev_free(mddev);
 	}
-	percpu_ref_exit(&mddev->writes_pending);
-
-	bioset_exit(&mddev->bio_set);
-	bioset_exit(&mddev->sync_set);
-	kfree(mddev);
 }
 
 static const struct sysfs_ops md_sysfs_ops = {
@@ -7858,6 +7864,13 @@ static unsigned int md_check_events(struct gendisk *disk, unsigned int clearing)
 	return ret;
 }
 
+static void md_free_disk(struct gendisk *disk)
+{
+	struct mddev *mddev = disk->private_data;
+
+	mddev_free(mddev);
+}
+
 const struct block_device_operations md_fops =
 {
 	.owner		= THIS_MODULE,
@@ -7871,6 +7884,7 @@ const struct block_device_operations md_fops =
 	.getgeo		= md_getgeo,
 	.check_events	= md_check_events,
 	.set_read_only	= md_set_read_only,
+	.free_disk	= md_free_disk,
 };
 
 static int md_thread(void *arg)
