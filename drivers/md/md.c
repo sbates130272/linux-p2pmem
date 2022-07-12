@@ -5585,15 +5585,6 @@ static void md_free(struct kobject *ko)
 {
 	struct mddev *mddev = container_of(ko, struct mddev, kobj);
 
-	if (mddev->sysfs_state)
-		sysfs_put(mddev->sysfs_state);
-	if (mddev->sysfs_level)
-		sysfs_put(mddev->sysfs_level);
-
-	if (mddev->gendisk) {
-		del_gendisk(mddev->gendisk);
-		blk_cleanup_disk(mddev->gendisk);
-	}
 	percpu_ref_exit(&mddev->writes_pending);
 
 	bioset_exit(&mddev->bio_set);
@@ -5618,6 +5609,17 @@ static void mddev_delayed_delete(struct work_struct *ws)
 	struct mddev *mddev = container_of(ws, struct mddev, del_work);
 
 	kobject_del(&mddev->kobj);
+
+	if (mddev->sysfs_state)
+		sysfs_put(mddev->sysfs_state);
+	if (mddev->sysfs_level)
+		sysfs_put(mddev->sysfs_level);
+
+	if (mddev->gendisk) {
+		del_gendisk(mddev->gendisk);
+		blk_cleanup_disk(mddev->gendisk);
+	}
+
 	kobject_put(&mddev->kobj);
 }
 
@@ -5708,6 +5710,7 @@ int md_alloc(dev_t dev, char *name)
 	else
 		sprintf(disk->disk_name, "md%d", unit);
 	disk->fops = &md_fops;
+	kobject_get(&mddev->kobj);
 	disk->private_data = mddev;
 
 	mddev->queue = disk->queue;
@@ -7858,6 +7861,13 @@ static unsigned int md_check_events(struct gendisk *disk, unsigned int clearing)
 	return ret;
 }
 
+static void md_free_disk(struct gendisk *disk)
+{
+	struct mddev *mddev = disk->private_data;
+
+	kobject_put(&mddev->kobj);
+}
+
 const struct block_device_operations md_fops =
 {
 	.owner		= THIS_MODULE,
@@ -7871,6 +7881,7 @@ const struct block_device_operations md_fops =
 	.getgeo		= md_getgeo,
 	.check_events	= md_check_events,
 	.set_read_only	= md_set_read_only,
+	.free_disk	= md_free_disk,
 };
 
 static int md_thread(void *arg)
