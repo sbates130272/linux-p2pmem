@@ -769,7 +769,7 @@ static struct mddev *mddev_alloc(dev_t unit)
 	return new;
 out_free_new:
 	spin_unlock(&all_mddevs_lock);
-	kfree(new);
+	kobject_put(&new->kobj);
 	return ERR_PTR(error);
 }
 
