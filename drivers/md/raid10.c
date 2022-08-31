@@ -274,6 +274,12 @@ static void put_buf(struct r10bio *r10_bio)
 	lower_barrier(conf);
 }
 
+static void wake_up_barrier(struct r10conf *conf)
+{
+	if (wq_has_sleeper(&conf->wait_barrier))
+		wake_up(&conf->wait_barrier);
+}
+
 static void reschedule_retry(struct r10bio *r10_bio)
 {
 	unsigned long flags;
@@ -286,7 +292,7 @@ static void reschedule_retry(struct r10bio *r10_bio)
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
 	/* wake up frozen array... */
-	wake_up(&conf->wait_barrier);
+	wake_up_barrier(conf);
 
 	md_wakeup_thread(mddev->thread);
 }
@@ -884,7 +890,7 @@ static void flush_pending_writes(struct r10conf *conf)
 		/* flush any pending bitmap writes to disk
 		 * before proceeding w/ I/O */
 		md_bitmap_unplug(conf->mddev->bitmap);
-		wake_up(&conf->wait_barrier);
+		wake_up_barrier(conf);
 
 		while (bio) { /* submit pending writes */
 			struct bio *next = bio->bi_next;
@@ -930,38 +936,60 @@ static void flush_pending_writes(struct r10conf *conf)
 
 static void raise_barrier(struct r10conf *conf, int force)
 {
+	write_seqlock_irq(&conf->resync_lock);
 	BUG_ON(force && !conf->barrier);
-	spin_lock_irq(&conf->resync_lock);
 
 	/* Wait until no block IO is waiting (unless 'force') */
 	wait_event_lock_irq(conf->wait_barrier, force || !conf->nr_waiting,
-			    conf->resync_lock);
+			    conf->resync_lock.lock);
 
 	/* block any new IO from starting */
-	conf->barrier++;
+	WRITE_ONCE(conf->barrier, conf->barrier + 1);
 
 	/* Now wait for all pending IO to complete */
 	wait_event_lock_irq(conf->wait_barrier,
 			    !atomic_read(&conf->nr_pending) && conf->barrier < RESYNC_DEPTH,
-			    conf->resync_lock);
+			    conf->resync_lock.lock);
 
-	spin_unlock_irq(&conf->resync_lock);
+	write_sequnlock_irq(&conf->resync_lock);
 }
 
 static void lower_barrier(struct r10conf *conf)
 {
 	unsigned long flags;
-	spin_lock_irqsave(&conf->resync_lock, flags);
-	conf->barrier--;
-	spin_unlock_irqrestore(&conf->resync_lock, flags);
-	wake_up(&conf->wait_barrier);
+
+	write_seqlock_irqsave(&conf->resync_lock, flags);
+	WRITE_ONCE(conf->barrier, conf->barrier - 1);
+	write_sequnlock_irqrestore(&conf->resync_lock, flags);
+	wake_up_barrier(conf);
+}
+
+static bool wait_barrier_nolock(struct r10conf *conf)
+{
+	unsigned int seq = raw_read_seqcount(&conf->resync_lock.seqcount);
+
+	if (seq & 1)
+		return false;
+
+	if (READ_ONCE(conf->barrier))
+		return false;
+
+	atomic_inc(&conf->nr_pending);
+	if (!read_seqcount_retry(&conf->resync_lock.seqcount, seq))
+		return true;
+
+	atomic_dec(&conf->nr_pending);
+	return false;
 }
 
 static bool wait_barrier(struct r10conf *conf, bool nowait)
 {
 	bool ret = true;
 
-	spin_lock_irq(&conf->resync_lock);
+	if (wait_barrier_nolock(conf))
+		return true;
+
+	write_seqlock_irq(&conf->resync_lock);
 	if (conf->barrier) {
 		struct bio_list *bio_list = current->bio_list;
 		conf->nr_waiting++;
@@ -992,16 +1020,16 @@ static bool wait_barrier(struct r10conf *conf, bool nowait)
 					      test_bit(MD_RECOVERY_RUNNING,
 						       &conf->mddev->recovery) &&
 					      conf->nr_queued > 0),
-					    conf->resync_lock);
+					    conf->resync_lock.lock);
 		}
 		conf->nr_waiting--;
 		if (!conf->nr_waiting)
-			wake_up(&conf->wait_barrier);
+			wake_up_barrier(conf);
 	}
 	/* Only increment nr_pending when we wait */
 	if (ret)
 		atomic_inc(&conf->nr_pending);
-	spin_unlock_irq(&conf->resync_lock);
+	write_sequnlock_irq(&conf->resync_lock);
 	return ret;
 }
 
@@ -1009,7 +1037,7 @@ static void allow_barrier(struct r10conf *conf)
 {
 	if ((atomic_dec_and_test(&conf->nr_pending)) ||
 			(conf->array_freeze_pending))
-		wake_up(&conf->wait_barrier);
+		wake_up_barrier(conf);
 }
 
 static void freeze_array(struct r10conf *conf, int extra)
@@ -1026,27 +1054,27 @@ static void freeze_array(struct r10conf *conf, int extra)
 	 * must match the number of pending IOs (nr_pending) before
 	 * we continue.
 	 */
-	spin_lock_irq(&conf->resync_lock);
+	write_seqlock_irq(&conf->resync_lock);
 	conf->array_freeze_pending++;
-	conf->barrier++;
+	WRITE_ONCE(conf->barrier, conf->barrier + 1);
 	conf->nr_waiting++;
 	wait_event_lock_irq_cmd(conf->wait_barrier,
 				atomic_read(&conf->nr_pending) == conf->nr_queued+extra,
-				conf->resync_lock,
+				conf->resync_lock.lock,
 				flush_pending_writes(conf));
 
 	conf->array_freeze_pending--;
-	spin_unlock_irq(&conf->resync_lock);
+	write_sequnlock_irq(&conf->resync_lock);
 }
 
 static void unfreeze_array(struct r10conf *conf)
 {
 	/* reverse the effect of the freeze */
-	spin_lock_irq(&conf->resync_lock);
-	conf->barrier--;
+	write_seqlock_irq(&conf->resync_lock);
+	WRITE_ONCE(conf->barrier, conf->barrier - 1);
 	conf->nr_waiting--;
-	wake_up(&conf->wait_barrier);
-	spin_unlock_irq(&conf->resync_lock);
+	wake_up_barrier(conf);
+	write_sequnlock_irq(&conf->resync_lock);
 }
 
 static sector_t choose_data_offset(struct r10bio *r10_bio,
@@ -1070,7 +1098,7 @@ static void raid10_unplug(struct blk_plug_cb *cb, bool from_schedule)
 		spin_lock_irq(&conf->device_lock);
 		bio_list_merge(&conf->pending_bio_list, &plug->pending);
 		spin_unlock_irq(&conf->device_lock);
-		wake_up(&conf->wait_barrier);
+		wake_up_barrier(conf);
 		md_wakeup_thread(mddev->thread);
 		kfree(plug);
 		return;
@@ -1079,7 +1107,7 @@ static void raid10_unplug(struct blk_plug_cb *cb, bool from_schedule)
 	/* we aren't scheduling, so we can do the write-out directly. */
 	bio = bio_list_get(&plug->pending);
 	md_bitmap_unplug(mddev->bitmap);
-	wake_up(&conf->wait_barrier);
+	wake_up_barrier(conf);
 
 	while (bio) { /* submit pending writes */
 		struct bio *next = bio->bi_next;
@@ -1885,7 +1913,7 @@ static bool raid10_make_request(struct mddev *mddev, struct bio *bio)
 	__make_request(mddev, bio, sectors);
 
 	/* In case raid10d snuck in to freeze_array */
-	wake_up(&conf->wait_barrier);
+	wake_up_barrier(conf);
 	return true;
 }
 
@@ -3033,7 +3061,7 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 			 * In case freeze_array() is waiting for condition
 			 * nr_pending == nr_queued + extra to be true.
 			 */
-			wake_up(&conf->wait_barrier);
+			wake_up_barrier(conf);
 			md_wakeup_thread(conf->mddev->thread);
 		} else {
 			if (test_bit(R10BIO_WriteError,
@@ -4033,7 +4061,7 @@ static struct r10conf *setup_conf(struct mddev *mddev)
 	INIT_LIST_HEAD(&conf->retry_list);
 	INIT_LIST_HEAD(&conf->bio_end_io_list);
 
-	spin_lock_init(&conf->resync_lock);
+	seqlock_init(&conf->resync_lock);
 	init_waitqueue_head(&conf->wait_barrier);
 	atomic_set(&conf->nr_pending, 0);
 
@@ -4352,7 +4380,7 @@ static void *raid10_takeover_raid0(struct mddev *mddev, sector_t size, int devs)
 				rdev->new_raid_disk = rdev->raid_disk * 2;
 				rdev->sectors = size;
 			}
-		conf->barrier = 1;
+		WRITE_ONCE(conf->barrier, 1);
 	}
 
 	return conf;
