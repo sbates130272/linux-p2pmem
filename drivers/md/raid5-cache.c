@@ -1333,11 +1333,20 @@ static void r5l_write_super_and_discard_space(struct r5l_log *log,
 	 * there is a deadlock. We workaround this issue with a trylock.
 	 * FIXME: we could miss discard if we can't take reconfig mutex
 	 */
+	pr_info("SB_CHANGE %s %s %lx\n", __func__, current->comm,
+		mddev->sb_flags);
 	set_mask_bits(&mddev->sb_flags, 0,
 		BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
-	if (!mddev_trylock(mddev))
+	if (!mddev_trylock(mddev)) {
+		pr_info("SB_CHANGE X %s %s %lx\n", __func__, current->comm,
+			mddev->sb_flags);
 		return;
+	}
+	pr_info("SB_CHANGE Y %s %s %lx\n", __func__, current->comm,
+		mddev->sb_flags);
 	md_update_sb(mddev, 1);
+	pr_info("SB_CHANGE Z %s %s %lx\n", __func__, current->comm,
+		mddev->sb_flags);
 	mddev_unlock(mddev);
 
 	/* discard IO error really doesn't matter, ignore it */
@@ -2428,6 +2437,7 @@ static void r5c_recovery_flush_data_only_stripes(struct r5l_log *log,
 
 	if (test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags)) {
 		cleared_pending = true;
+		pr_info("SB_CHANGE %s %s\n", __func__, current->comm);
 		clear_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags);
 	}
 	log->r5c_journal_mode = R5C_JOURNAL_MODE_WRITE_BACK;
@@ -2444,8 +2454,10 @@ static void r5c_recovery_flush_data_only_stripes(struct r5l_log *log,
 		   atomic_read(&conf->active_stripes) == 0);
 
 	log->r5c_journal_mode = R5C_JOURNAL_MODE_WRITE_THROUGH;
-	if (cleared_pending)
+	if (cleared_pending) {
 		set_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags);
+		pr_info("SB_CHANGE2 %s %s\n", __func__, current->comm);
+	}
 }
 
 static int r5l_recovery_log(struct r5l_log *log)

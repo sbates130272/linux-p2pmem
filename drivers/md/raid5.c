@@ -2980,6 +2980,7 @@ static void raid5_error(struct mddev *mddev, struct md_rdev *rdev)
 	set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 
 	set_bit(Blocked, &rdev->flags);
+	pr_info("SB_CHANGE %s %s\n", __func__, current->comm);
 	set_mask_bits(&mddev->sb_flags, 0,
 		      BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
 	r5c_update_on_rdev_error(mddev, rdev);

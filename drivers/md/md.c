@@ -626,7 +626,9 @@ EXPORT_SYMBOL(md_flush_request);
 static inline struct mddev *mddev_get(struct mddev *mddev)
 {
 	lockdep_assert_held(&all_mddevs_lock);
-
+	pr_debug("%s %pS %s/%d\n", __func__,
+		 __builtin_return_address(0), current->comm,
+		 current->pid);
 	if (test_bit(MD_DELETED, &mddev->flags))
 		return NULL;
 	atomic_inc(&mddev->active);
@@ -637,6 +639,9 @@ static void mddev_delayed_delete(struct work_struct *ws);
 
 void mddev_put(struct mddev *mddev)
 {
+	pr_debug("%s %pS %s/%d\n", __func__,
+		 __builtin_return_address(0), current->comm,
+		 current->pid);
 	if (!atomic_dec_and_lock(&mddev->active, &all_mddevs_lock))
 		return;
 	if (!mddev->raid_disks && list_empty(&mddev->disks) &&

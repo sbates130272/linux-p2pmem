@@ -117,6 +117,8 @@ static void rwb_wake_all(struct rq_wb *rwb)
 {
 	int i;
 
+	pr_debug("WW: %px %s %pS\n", rwb, current->comm, __builtin_return_address(0));
+
 	for (i = 0; i < WBT_NUM_RWQ; i++) {
 		struct rq_wait *rqw = &rwb->rq_wait[i];
 
@@ -149,9 +151,11 @@ static void wbt_rqw_done(struct rq_wb *rwb, struct rq_wait *rqw,
 	if (wb_acct & WBT_DISCARD)
 		limit = rwb->wb_background;
 	else if (rwb->wc && !wb_recent_wait(rwb))
-		limit = 0;
+		limit = rwb->wb_background;
 	else
 		limit = rwb->wb_normal;
+
+	pr_debug("D %s: %px %d %d\n", current->comm, rwb, inflight, limit);
 
 	/*
 	 * Don't wake anyone up if we are above the normal limit.
@@ -162,8 +166,10 @@ static void wbt_rqw_done(struct rq_wb *rwb, struct rq_wait *rqw,
 	if (wq_has_sleeper(&rqw->wait)) {
 		int diff = limit - inflight;
 
-		if (!inflight || diff >= rwb->wb_background / 2)
+		pr_debug("W: %px %d %d %d\n", rwb, inflight, limit, diff);
+		if (!inflight || diff >= rwb->wb_background / 2) {
 			wake_up_all(&rqw->wait);
+		}
 	}
 }
 
@@ -196,6 +202,7 @@ static void wbt_done(struct rq_qos *rqos, struct request *rq)
 		if (wbt_is_read(rq))
 			wb_timestamp(rwb, &rwb->last_comp);
 	} else {
+		pr_debug("Z: %px %px %px\n", rwb, rq, rq->bio);
 		WARN_ON_ONCE(rq == rwb->sync_cookie);
 		__wbt_done(rqos, wbt_flags(rq));
 	}
@@ -496,7 +503,15 @@ struct wbt_wait_data {
 static bool wbt_inflight_cb(struct rq_wait *rqw, void *private_data)
 {
 	struct wbt_wait_data *data = private_data;
-	return rq_wait_inc_below(rqw, get_limit(data->rwb, data->opf));
+	int before = atomic_read(&rqw->inflight);
+	int limit = get_limit(data->rwb, data->opf);
+	int ret;
+
+	ret = rq_wait_inc_below(rqw, limit);
+	pr_debug("I %s: %px %d %d %d \n", current->comm, data->rwb,
+		before, atomic_read(&rqw->inflight), limit);
+
+	return ret;
 }
 
 static void wbt_cleanup_cb(struct rq_wait *rqw, void *private_data)
@@ -584,6 +599,7 @@ static void wbt_wait(struct rq_qos *rqos, struct bio *bio)
 	}
 
 	__wbt_wait(rwb, flags, bio->bi_opf);
+	pr_debug("X: %px %px\n", rwb, bio);
 
 	if (!blk_stat_is_active(rwb->cb))
 		rwb_arm_timer(rwb);
@@ -592,6 +608,7 @@ static void wbt_wait(struct rq_qos *rqos, struct bio *bio)
 static void wbt_track(struct rq_qos *rqos, struct request *rq, struct bio *bio)
 {
 	struct rq_wb *rwb = RQWB(rqos);
+	pr_debug("Y: %px %px %px\n", rwb, rq, bio);
 	rq->wbt_flags |= bio_to_wbt_flags(rwb, bio);
 }
 
