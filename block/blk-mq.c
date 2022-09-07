@@ -2543,6 +2543,8 @@ static void blk_mq_plug_issue_direct(struct blk_plug *plug, bool from_schedule)
 			hctx = rq->mq_hctx;
 		}
 
+		pr_debug("P %px %px %px\n", rq, rq->bio, plug);
+
 		ret = blk_mq_request_issue_directly(rq, last);
 		switch (ret) {
 		case BLK_STS_OK:
@@ -2594,6 +2596,8 @@ static void blk_mq_dispatch_plug_list(struct blk_plug *plug, bool from_sched)
 			rq_list_add(&requeue_list, rq);
 			continue;
 		}
+
+		pr_debug("p %px %px %px\n", rq, rq->bio, plug);
 		list_add_tail(&rq->queuelist, &list);
 		depth++;
 	} while (!rq_list_empty(plug->mq_list));
@@ -2832,15 +2836,19 @@ void blk_mq_submit_bio(struct bio *bio)
 		return;
 	}
 
-	if (plug)
+	if (plug) {
+		pr_debug("R %px %px %px\n", rq, bio, plug);
 		blk_add_rq_to_plug(plug, rq);
-	else if ((rq->rq_flags & RQF_ELV) ||
+	} else if ((rq->rq_flags & RQF_ELV) ||
 		 (rq->mq_hctx->dispatch_busy &&
-		  (q->nr_hw_queues == 1 || !is_sync)))
+		  (q->nr_hw_queues == 1 || !is_sync))) {
+		pr_debug("S %px %px\n", rq, bio);
 		blk_mq_sched_insert_request(rq, false, true, true);
-	else
+	} else {
+		pr_debug("T %px %px\n", rq, bio);
 		blk_mq_run_dispatch_ops(rq->q,
 				blk_mq_try_issue_directly(rq->mq_hctx, rq));
+	}
 }
 
 #ifdef CONFIG_BLK_MQ_STACKING

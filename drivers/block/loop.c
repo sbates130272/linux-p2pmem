@@ -1832,6 +1832,7 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 #endif
 	}
 #endif
+	pr_info("L: %px %px\n", rq, rq->bio);
 	loop_queue_work(lo, cmd);
 
 	return BLK_STS_OK;
@@ -1856,6 +1857,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 		old_memcg = set_active_memcg(
 			mem_cgroup_from_css(cmd->memcg_css));
 
+//	pr_info("LL: %px %px\n", rq, rq->bio);
 	ret = do_req_filebacked(lo, rq);
 
 	if (cmd->blkcg_css)
@@ -2084,7 +2086,7 @@ static int loop_control_remove(int idx)
 		pr_warn_once("deleting an unspecified loop device is not supported.\n");
 		return -EINVAL;
 	}
-		
+
 	/* Hide this loop device for serialization. */
 	ret = mutex_lock_killable(&loop_ctl_mutex);
 	if (ret)

@@ -2757,9 +2757,9 @@ static void raid5_end_read_request(struct bio * bi)
 		if (bi == &sh->dev[i].req)
 			break;
 
-	pr_debug("end_read_request %llu/%d, count: %d, error %d.\n",
+	pr_debug("end_read_request %llu/%d, count: %d, error %d %px.\n",
 		(unsigned long long)sh->sector, i, atomic_read(&sh->count),
-		bi->bi_status);
+		bi->bi_status, bi);
 	if (i == disks) {
 		BUG();
 		return;
@@ -2901,9 +2901,9 @@ static void raid5_end_write_request(struct bio *bi)
 			break;
 		}
 	}
-	pr_debug("end_write_request %llu/%d, count %d, error: %d.\n",
+	pr_debug("end_write_request %llu/%d, count %d, error: %d %px.\n",
 		(unsigned long long)sh->sector, i, atomic_read(&sh->count),
-		bi->bi_status);
+		bi->bi_status, bi);
 	if (i == disks) {
 		BUG();
 		return;
