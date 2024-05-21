@@ -436,6 +436,12 @@ static const struct vm_operations_struct kernfs_vm_ops = {
 	.access		= kernfs_vma_access,
 };
 
+static const struct vm_operations_struct kernfs_vm_ops_mmap_allocates = {
+	.open		= kernfs_vma_open,
+	.fault		= kernfs_vma_fault,
+	.access		= kernfs_vma_access,
+};
+
 static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct kernfs_open_file *of = kernfs_of(file);
@@ -482,13 +488,20 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 	if (vma->vm_ops && vma->vm_ops->close)
 		goto out_put;
 
+	if (ops->mmap_allocates)
+		vma->vm_ops = &kernfs_vm_ops_mmap_allocates;
+	else
+		vma->vm_ops = &kernfs_vm_ops;
+
+	if (ops->mmap_allocates && vma->vm_ops->page_mkwrite)
+		goto out_put;
+
 	rc = 0;
 	if (!of->mmapped) {
 		of->mmapped = true;
 		of_on(of)->nr_mmapped++;
 		of->vm_ops = vma->vm_ops;
 	}
-	vma->vm_ops = &kernfs_vm_ops;
 out_put:
 	kernfs_put_active(of->kn);
 out_unlock:
