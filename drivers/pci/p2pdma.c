@@ -171,6 +171,7 @@ static struct bin_attribute p2pmem_alloc_attr = {
 	 * to be very large.
 	 */
 	.size = SZ_1T,
+	.mmap_allocates = true,
 };
 
 static struct attribute *p2pmem_attrs[] = {
