@@ -264,6 +264,15 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 	.llseek		= sysfs_kf_bin_llseek,
 };
 
+static const struct kernfs_ops sysfs_bin_kfops_mmap_allocates = {
+	.read		= sysfs_kf_bin_read,
+	.write		= sysfs_kf_bin_write,
+	.mmap		= sysfs_kf_bin_mmap,
+	.open		= sysfs_kf_bin_open,
+	.llseek		= sysfs_kf_bin_llseek,
+	.mmap_allocates = true,
+};
+
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 		const struct attribute *attr, umode_t mode, kuid_t uid,
 		kgid_t gid, const void *ns)
@@ -323,8 +332,12 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 	const struct kernfs_ops *ops;
 	struct kernfs_node *kn;
 
-	if (battr->mmap)
-		ops = &sysfs_bin_kfops_mmap;
+	if (battr->mmap) {
+		if (battr->mmap_allocates)
+			ops = &sysfs_bin_kfops_mmap_allocates;
+		else
+			ops = &sysfs_bin_kfops_mmap;
+	}
 	else if (battr->read && battr->write)
 		ops = &sysfs_bin_kfops_rw;
 	else if (battr->read)
