@@ -2503,6 +2503,10 @@ static bool folio_fast_pin_allowed(struct folio *folio, unsigned int flags)
 	if (folio_test_hugetlb(folio))
 		return true;
 
+	/* It makes no sense to access the mapping of ZONE_DEVICE pages */
+	if (folio_is_zone_device(folio))
+		return true;
+
 	/*
 	 * GUP-fast disables IRQs. When IRQS are disabled, RCU grace periods
 	 * cannot proceed, which means no actions performed under RCU can
