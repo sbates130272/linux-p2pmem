@@ -20,6 +20,8 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/bvec.h>
+#include <linux/uio.h>
 
 static struct dma_heap *sys_heap;
 
@@ -281,6 +283,124 @@ static void system_heap_vunmap(struct dma_buf *dmabuf, struct iosys_map *map)
 	iosys_map_clear(map);
 }
 
+static struct bio_vec *system_heap_init_bvec(struct system_heap_buffer *buffer,
+			size_t offset, size_t len, int *nr_segs)
+{
+	struct sg_table *sgt = &buffer->sg_table;
+	struct scatterlist *sg;
+	size_t length = 0;
+	unsigned int i, k = 0;
+	struct bio_vec *bvec;
+	size_t sg_left;
+	size_t sg_offset;
+	size_t sg_len;
+
+	bvec = kvcalloc(sgt->nents, sizeof(*bvec), GFP_KERNEL);
+	if (!bvec)
+		return NULL;
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		length += sg->length;
+		if (length <= offset)
+			continue;
+
+		sg_left = length - offset;
+		sg_offset = sg->offset + sg->length - sg_left;
+		sg_len = min(sg_left, len);
+
+		bvec[k].bv_page = sg_page(sg);
+		bvec[k].bv_len = sg_len;
+		bvec[k].bv_offset = sg_offset;
+		k++;
+
+		offset += sg_len;
+		len -= sg_len;
+		if (len <= 0)
+			break;
+	}
+
+	*nr_segs = k;
+	return bvec;
+}
+
+static int system_heap_rw_file(struct system_heap_buffer *buffer, bool is_read,
+		bool direct_io, struct file *filp, loff_t file_offset,
+		size_t buf_offset, size_t len)
+{
+	struct bio_vec *bvec;
+	int nr_segs = 0;
+	struct iov_iter iter;
+	struct kiocb kiocb;
+	ssize_t ret = 0;
+
+	if (!list_empty(&buffer->attachments) || buffer->vmap_cnt)
+		return -EBUSY;
+
+	if (direct_io) {
+		if (!(filp->f_mode & FMODE_CAN_ODIRECT))
+			return -EINVAL;
+	}
+
+	bvec = system_heap_init_bvec(buffer, buf_offset, len, &nr_segs);
+	if (!bvec)
+		return -ENOMEM;
+
+	iov_iter_bvec(&iter, is_read ? ITER_DEST : ITER_SOURCE, bvec, nr_segs, len);
+	init_sync_kiocb(&kiocb, filp);
+	kiocb.ki_pos = file_offset;
+	if (direct_io)
+		kiocb.ki_flags |= IOCB_DIRECT;
+
+	while (kiocb.ki_pos < file_offset + len) {
+		if (is_read)
+			ret = vfs_iocb_iter_read(filp, &kiocb, &iter);
+		else
+			ret = vfs_iocb_iter_write(filp, &kiocb, &iter);
+		if (ret <= 0)
+			break;
+	}
+
+	kvfree(bvec);
+	return ret < 0 ? ret : 0;
+}
+
+static int system_heap_dma_buf_rw_file(struct dma_buf *dmabuf,
+			struct dma_buf_rw_file *back)
+{
+	struct system_heap_buffer *buffer = dmabuf->priv;
+	int ret = 0;
+	__u32 op = back->flags & DMA_BUF_RW_FLAGS_OP_MASK;
+	bool direct_io = back->flags & DMA_BUF_RW_FLAGS_DIRECT;
+	struct file *filp;
+
+	if (op != DMA_BUF_RW_FLAGS_READ && op != DMA_BUF_RW_FLAGS_WRITE)
+		return -EINVAL;
+	if (direct_io) {
+		if (!PAGE_ALIGNED(back->file_offset) ||
+		    !PAGE_ALIGNED(back->buf_offset) ||
+		    !PAGE_ALIGNED(back->buf_len))
+			return -EINVAL;
+	}
+	if (!back->buf_len || back->buf_len > dmabuf->size ||
+		back->buf_offset >= dmabuf->size ||
+		back->buf_offset + back->buf_len > dmabuf->size)
+		return -EINVAL;
+	if (back->file_offset + back->buf_len < back->file_offset)
+		return -EINVAL;
+
+	filp = fget(back->fd);
+	if (!filp)
+		return -EBADF;
+
+	mutex_lock(&buffer->lock);
+	ret = system_heap_rw_file(buffer, op == DMA_BUF_RW_FLAGS_READ, direct_io,
+			filp, back->file_offset, back->buf_offset, back->buf_len);
+	mutex_unlock(&buffer->lock);
+
+	fput(filp);
+	return ret;
+}
+
 static void system_heap_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct system_heap_buffer *buffer = dmabuf->priv;
@@ -308,6 +428,7 @@ static const struct dma_buf_ops system_heap_buf_ops = {
 	.mmap = system_heap_mmap,
 	.vmap = system_heap_vmap,
 	.vunmap = system_heap_vunmap,
+	.rw_file = system_heap_dma_buf_rw_file,
 	.release = system_heap_dma_buf_release,
 };
 
