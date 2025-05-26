@@ -460,6 +460,7 @@ static long dma_buf_ioctl(struct file *file,
 	struct dma_buf *dmabuf;
 	struct dma_buf_sync sync;
 	enum dma_data_direction direction;
+	struct dma_buf_rw_file kfile;
 	int ret;
 
 	dmabuf = file->private_data;
@@ -503,6 +504,13 @@ static long dma_buf_ioctl(struct file *file,
 	case DMA_BUF_IOCTL_IMPORT_SYNC_FILE:
 		return dma_buf_import_sync_file(dmabuf, (const void __user *)arg);
 #endif
+
+	case DMA_BUF_IOCTL_RW_FILE:
+		if (copy_from_user(&kfile, (void __user *) arg, sizeof(kfile)))
+			return -EFAULT;
+		if (!dmabuf->ops->rw_file)
+			return -EINVAL;
+		return dmabuf->ops->rw_file(dmabuf, &kfile);
 
 	default:
 		return -ENOTTY;

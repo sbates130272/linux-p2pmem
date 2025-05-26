@@ -167,6 +167,28 @@ struct dma_buf_import_sync_file {
 	__s32 fd;
 };
 
+/**
+ * struct dma_buf_rw_file - read/write file associated with a dma-buf
+ *
+ * Userspace can performs a DMA_BUF_IOCTL_BACK to save data from a dma-buf or
+ * restore data to a dma-buf.
+ */
+struct dma_buf_rw_file {
+	/** @flags: Flags indicating read/write for this dma-buf. */
+	__u32 flags;
+	/** @fd: File descriptor of the file associated with this dma-buf. */
+	__s32 fd;
+	/** @file_offset: Offset within the file where this dma-buf starts.
+	 *
+	 *  Offset and Length must be page-aligned for direct I/O.
+	 */
+	__u64 file_offset;
+	/** @buf_offset: Offset within this dma-buf where the read/write starts. */
+	__u64 buf_offset;
+	/** @buf_len: Length of this dma-buf read/write. */
+	__u64 buf_len;
+};
+
 #define DMA_BUF_BASE		'b'
 #define DMA_BUF_IOCTL_SYNC	_IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
 
@@ -178,5 +200,11 @@ struct dma_buf_import_sync_file {
 #define DMA_BUF_SET_NAME_B	_IOW(DMA_BUF_BASE, 1, __u64)
 #define DMA_BUF_IOCTL_EXPORT_SYNC_FILE	_IOWR(DMA_BUF_BASE, 2, struct dma_buf_export_sync_file)
 #define DMA_BUF_IOCTL_IMPORT_SYNC_FILE	_IOW(DMA_BUF_BASE, 3, struct dma_buf_import_sync_file)
+
+#define DMA_BUF_RW_FLAGS_OP_MASK (0xFF << 0)
+#define DMA_BUF_RW_FLAGS_READ (1 << 0) /* Restore dma-buf data */
+#define DMA_BUF_RW_FLAGS_WRITE (2 << 0) /* Save dma-buf data */
+#define DMA_BUF_RW_FLAGS_DIRECT (1u << 31) /* Direct read/write file */
+#define DMA_BUF_IOCTL_RW_FILE	_IOW(DMA_BUF_BASE, 4, struct dma_buf_rw_file)
 
 #endif
