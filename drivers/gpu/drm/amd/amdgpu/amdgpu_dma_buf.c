@@ -24,6 +24,8 @@
  * Authors: Alex Deucher
  */
 
+#define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
+
 /**
  * DOC: PRIME Buffer Sharing
  *
@@ -285,6 +287,161 @@ static int amdgpu_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 	return ret;
 }
 
+
+static struct bio_vec *amdgpu_init_bvec(struct sg_table *sgt,
+					size_t offset,
+					size_t len, int *nr_segs)
+{
+	struct scatterlist *sg;
+	size_t length = 0;
+	unsigned int i, k = 0;
+	struct bio_vec *bvec;
+	size_t sg_left;
+	size_t sg_offset;
+	size_t sg_len;
+
+	bvec = kvcalloc(sgt->nents, sizeof(*bvec), GFP_KERNEL);
+	if (!bvec)
+		return NULL;
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+		length += sg->length;
+		if (length <= offset)
+			continue;
+
+		sg_left = length - offset;
+		sg_offset = sg->offset + sg->length - sg_left;
+		sg_len = min(sg_left, len);
+
+		bvec[k].bv_page = sg_page(sg);
+		bvec[k].bv_len = sg_len;
+		bvec[k].bv_offset = sg_offset;
+		k++;
+
+		offset += sg_len;
+		len -= sg_len;
+		if (len <= 0)
+			break;
+	}
+
+	*nr_segs = k;
+	return bvec;
+}
+
+static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
+                          bool direct_io, struct file *filp, loff_t file_offset,
+                          size_t buf_offset, size_t len)
+{
+	struct sg_table *sgt;
+	struct dma_buf_attachment attach;
+	struct dma_buf_attach_ops ops;
+
+	struct bio_vec *bvec;
+	int nr_segs = 0;
+	struct iov_iter iter;
+	struct kiocb kiocb;
+	ssize_t ret = 0;
+
+	printk(KERN_INFO "is_read = %d!\n", is_read);
+	printk(KERN_INFO "file_offset = %lld!\n", file_offset);
+	printk(KERN_INFO "buf_offset = %zd!\n", buf_offset);
+	printk(KERN_INFO "len = %zd!\n", len);
+
+	if (direct_io) {
+		if (!(filp->f_mode & FMODE_CAN_ODIRECT))
+			return -EINVAL;
+	}
+
+	ops.allow_peer2peer = true;
+	attach.dmabuf = dmabuf;
+	/*
+	 * SUPER HACK. Need to find the correct way to locate the
+	 * DMA-capable parent of file based on either struct file or the
+	 * file descriptor.
+	*/
+	attach.dev = filp->f_path.mnt->mnt_sb->s_bdev->bd_device.parent->parent;
+	attach.importer_ops = &ops;
+	  
+	sgt = dma_buf_map_attachment(&attach, DMA_BIDIRECTIONAL);
+	if (IS_ERR(sgt))
+	    return PTR_ERR(sgt);
+
+	bvec = amdgpu_init_bvec(sgt, buf_offset, len, &nr_segs);
+	if (!bvec)
+		return -ENOMEM;
+
+	iov_iter_bvec(&iter, is_read ? ITER_DEST : ITER_SOURCE, bvec, nr_segs, len);
+	init_sync_kiocb(&kiocb, filp);
+	kiocb.ki_pos = file_offset;
+	if (direct_io)
+		kiocb.ki_flags |= IOCB_DIRECT;
+
+	while (kiocb.ki_pos < file_offset + len) {
+
+		if (is_read)
+			ret = vfs_iocb_iter_read(filp, &kiocb, &iter);
+		else
+			ret = vfs_iocb_iter_write(filp, &kiocb, &iter);
+		if (ret <= 0)
+			break;
+	}
+
+	kvfree(bvec);
+	dma_buf_unmap_attachment(&attach, sgt,
+				 DMA_BIDIRECTIONAL);
+	
+	return ret < 0 ? ret : 0;
+}
+
+/**
+ * amdgpu_dma_buf_rw_file - &dma_buf_ops.rw_file implementation
+ * @dma_buf: Shared DMA buffer
+ * @dma_buf_rw_file: Struct with info on backing file
+ *
+ * This is a callback to enable both buffered and O_DIRECT IO between
+ * an AMD GPU generated dma_buf and a file on any standard (VFS
+ * supported) filesystem. Note that the backing-object associated with
+ * the dma-buf is managed by this driver and thus this driver has full
+ * control over the location and mappings.
+ *
+ * Returns:
+ * 0 on success or a negative error code on failure.
+ */
+static int amdgpu_dma_buf_rw_file(struct dma_buf *dmabuf,
+                                  struct dma_buf_rw_file *back)
+{
+	int ret = 0;
+	__u32 op = back->flags & DMA_BUF_RW_FLAGS_OP_MASK;
+	bool direct_io = back->flags & DMA_BUF_RW_FLAGS_DIRECT;
+	struct file *filp;
+
+	if (op != DMA_BUF_RW_FLAGS_READ && op != DMA_BUF_RW_FLAGS_WRITE)
+		return -EINVAL;
+	if (direct_io) {
+		if (!PAGE_ALIGNED(back->file_offset) ||
+		    !PAGE_ALIGNED(back->buf_offset) ||
+		    !PAGE_ALIGNED(back->buf_len))
+			return -EINVAL;
+	}
+	if (!back->buf_len || back->buf_len > dmabuf->size ||
+		back->buf_offset >= dmabuf->size ||
+		back->buf_offset + back->buf_len > dmabuf->size)
+		return -EINVAL;
+	if (back->file_offset + back->buf_len < back->file_offset)
+		return -EINVAL;
+
+	filp = fget(back->fd);
+	if (!filp)
+		return -EBADF;
+
+	ret = amdgpu_rw_file(dmabuf, op == DMA_BUF_RW_FLAGS_READ,
+			     direct_io, filp, back->file_offset,
+			     back->buf_offset, back->buf_len);
+
+	fput(filp);
+	return ret;
+}
+
 const struct dma_buf_ops amdgpu_dmabuf_ops = {
 	.attach = amdgpu_dma_buf_attach,
 	.pin = amdgpu_dma_buf_pin,
@@ -296,6 +453,7 @@ const struct dma_buf_ops amdgpu_dmabuf_ops = {
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
+        .rw_file = amdgpu_dma_buf_rw_file,
 };
 
 /**
