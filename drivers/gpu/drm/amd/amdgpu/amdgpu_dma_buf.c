@@ -39,11 +39,13 @@
 #include "amdgpu_dma_buf.h"
 #include "amdgpu_xgmi.h"
 #include "amdgpu_vm.h"
+#include <linux/pagemap.h>
 #include <drm/amdgpu_drm.h>
 #include <drm/ttm/ttm_tt.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-fence-array.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/blkdev.h>
 
 static const struct dma_buf_attach_ops amdgpu_dma_buf_attach_ops;
 
@@ -299,6 +301,7 @@ static struct bio_vec *amdgpu_init_bvec(struct sg_table *sgt,
 	size_t sg_left;
 	size_t sg_offset;
 	size_t sg_len;
+	struct page *page;
 
 	bvec = kvcalloc(sgt->nents, sizeof(*bvec), GFP_KERNEL);
 	if (!bvec)
@@ -313,7 +316,19 @@ static struct bio_vec *amdgpu_init_bvec(struct sg_table *sgt,
 		sg_offset = sg->offset + sg->length - sg_left;
 		sg_len = min(sg_left, len);
 
-		bvec[k].bv_page = sg_page(sg);
+		page = pfn_to_page(PHYS_PFN(sg_dma_address(sg)));
+		if (!page) {
+			printk(KERN_ERR "Failed to get page for sg[%d]!\n", i);
+			kvfree(bvec);
+			return NULL;
+		} else if (!is_pci_p2pdma_page(page)) {
+			printk(KERN_ERR "page:%p is not PCI P2P page!\n", page);
+			kvfree(bvec);
+			return NULL;
+		} else {
+			printk(KERN_INFO "page:%p is PCI P2P page!\n", page);
+		}
+		bvec[k].bv_page = page;
 		bvec[k].bv_len = sg_len;
 		bvec[k].bv_offset = sg_offset;
 		k++;
@@ -335,12 +350,14 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 	struct sg_table *sgt;
 	struct dma_buf_attachment attach;
 	struct dma_buf_attach_ops ops;
+	struct amdgpu_bo *bo;
 
 	struct bio_vec *bvec;
 	int nr_segs = 0;
 	struct iov_iter iter;
 	struct kiocb kiocb;
-	ssize_t ret = 0;
+	int ret = 0;
+	struct pci_dev *pdev;
 
 	printk(KERN_INFO "is_read = %d!\n", is_read);
 	printk(KERN_INFO "file_offset = %lld!\n", file_offset);
@@ -352,23 +369,54 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 			return -EINVAL;
 	}
 
+	memset(&attach, 0, sizeof(attach));
 	ops.allow_peer2peer = true;
 	attach.dmabuf = dmabuf;
+	attach.peer2peer = true;
+	attach.importer_ops = &ops;
 	/*
 	 * SUPER HACK. Need to find the correct way to locate the
 	 * DMA-capable parent of file based on either struct file or the
 	 * file descriptor.
 	*/
 	attach.dev = filp->f_path.mnt->mnt_sb->s_bdev->bd_device.parent->parent;
-	attach.importer_ops = &ops;
-	  
-	sgt = dma_buf_map_attachment(&attach, DMA_BIDIRECTIONAL);
-	if (IS_ERR(sgt))
-	    return PTR_ERR(sgt);
+	if (!attach.dev->dma_mask) {
+		/* The above hack didn't work. So hard code it for now */
+		pdev = pci_get_domain_bus_and_slot(0, 0x41, PCI_DEVFN(0, 0));
+		attach.dev = &pdev->dev;
+	}
+
+	sgt = dma_buf_map_attachment_unlocked(&attach, DMA_BIDIRECTIONAL);
+	if (IS_ERR(sgt)) {
+		ret = PTR_ERR(sgt);
+		goto out;
+	}
+
+	bo = gem_to_amdgpu_bo(dmabuf->priv);
+	if (!bo) {
+		ret = -EINVAL;
+		goto out;
+	} else {
+		/* Show BO domain to cross-check if it is in VRAM */
+		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "DMA-BUF bo->tbo.base.size:%lx\n",
+			 bo->tbo.base.size);
+		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "mem_type:%x start:%lx size:%zx placement:%x\n",
+			 bo->tbo.resource->mem_type, bo->tbo.resource->start,
+			 bo->tbo.resource->size, bo->tbo.resource->placement);
+	}
+
+	if (pci_p2pdma_distance(pdev, amdgpu_ttm_adev(bo->tbo.bdev)->dev, false) < 0) {
+		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev,
+			 "DMA-BUF p2p not accessible!\n");
+		ret = -ENODEV;
+		goto out;
+	}
 
 	bvec = amdgpu_init_bvec(sgt, buf_offset, len, &nr_segs);
-	if (!bvec)
-		return -ENOMEM;
+	if (!bvec) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	iov_iter_bvec(&iter, is_read ? ITER_DEST : ITER_SOURCE, bvec, nr_segs, len);
 	init_sync_kiocb(&kiocb, filp);
@@ -387,9 +435,9 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 	}
 
 	kvfree(bvec);
-	dma_buf_unmap_attachment(&attach, sgt,
+	dma_buf_unmap_attachment_unlocked(&attach, sgt,
 				 DMA_BIDIRECTIONAL);
-	
+out:
 	return ret < 0 ? ret : 0;
 }
 

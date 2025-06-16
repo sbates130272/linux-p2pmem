@@ -25,6 +25,7 @@
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 #include <linux/migrate.h>
+#include <linux/pci-p2pdma.h>
 #include "amdgpu_sync.h"
 #include "amdgpu_object.h"
 #include "amdgpu_vm.h"
@@ -1020,8 +1021,9 @@ int kgd2kfd_init_zone_device(struct amdgpu_device *adev)
 	struct amdgpu_kfd_dev *kfddev = &adev->kfd;
 	struct dev_pagemap *pgmap;
 	struct resource *res = NULL;
-	unsigned long size;
+	unsigned long size, reserve_size;
 	void *r;
+	int ret;
 
 	/* Page migration works on gfx9 or newer */
 	if (amdgpu_ip_version(adev, GC_HWIP, 0) < IP_VERSION(9, 0, 1))
@@ -1066,13 +1068,21 @@ int kgd2kfd_init_zone_device(struct amdgpu_device *adev)
 		pgmap->type = 0;
 		return PTR_ERR(r);
 	}
+	reserve_size = SVM_HMM_PAGE_STRUCT_SIZE(size);
 
-	pr_debug("reserve %ldMB system memory for VRAM pages struct\n",
-		 SVM_HMM_PAGE_STRUCT_SIZE(size) >> 20);
+	ret = pci_p2pdma_add_resource(adev->pdev, 0, 0, 0);
+	if (ret) {
+		pr_err("failed to register PCI P2P DMA resource %d\n", ret);
+	} else {
+		reserve_size += SVM_HMM_PAGE_STRUCT_SIZE(size);
+	}
 
-	amdgpu_amdkfd_reserve_system_mem(SVM_HMM_PAGE_STRUCT_SIZE(size));
+	pr_info("reserve %ldMB system memory for VRAM pages struct\n",
+		 reserve_size >> 20);
 
-	pr_info("HMM registered %ldMB device memory\n", size >> 20);
+	amdgpu_amdkfd_reserve_system_mem(reserve_size);
 
-	return 0;
+	pr_info("HMM and P2P registered %ldMB device memory\n", size >> 20);
+
+	return ret;
 }
