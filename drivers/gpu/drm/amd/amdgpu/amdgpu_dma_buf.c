@@ -289,6 +289,26 @@ static int amdgpu_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 	return ret;
 }
 
+static struct pci_dev *get_pci_dev_from_file(struct file *file)
+{
+	struct device *dev = file->f_path.mnt->mnt_sb->s_bdev->bd_device.parent;
+	struct pci_dev *pdev = NULL;
+
+	/*
+	 * TODO: Check if there is a better way to locate the
+	 * DMA-capable parent of file based on either struct file or the
+	 * file descriptor.
+	*/
+
+	while (dev && !dev_is_pci(dev)) {
+		dev = dev->parent;
+	}
+	if (dev && dev_is_pci(dev)) {
+		pdev = to_pci_dev(dev);
+	}
+
+	return pdev;
+}
 
 static struct bio_vec *amdgpu_init_bvec(struct sg_table *sgt,
 					size_t offset,
@@ -374,17 +394,14 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 	attach.dmabuf = dmabuf;
 	attach.peer2peer = true;
 	attach.importer_ops = &ops;
-	/*
-	 * SUPER HACK. Need to find the correct way to locate the
-	 * DMA-capable parent of file based on either struct file or the
-	 * file descriptor.
-	*/
-	attach.dev = filp->f_path.mnt->mnt_sb->s_bdev->bd_device.parent->parent;
-	if (!attach.dev->dma_mask) {
-		/* The above hack didn't work. So hard code it for now */
-		pdev = pci_get_domain_bus_and_slot(0, 0x41, PCI_DEVFN(0, 0));
-		attach.dev = &pdev->dev;
+
+	pdev = get_pci_dev_from_file(filp);
+	if (!pdev) {
+		ret = -ENODEV;
+		printk(KERN_ERR "Failed to get PCI device from file!\n");
+		goto out;
 	}
+	attach.dev = &pdev->dev;
 
 	sgt = dma_buf_map_attachment_unlocked(&attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR(sgt)) {
