@@ -379,10 +379,12 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 	int ret = 0;
 	struct pci_dev *pdev;
 
-	printk(KERN_INFO "is_read = %d!\n", is_read);
-	printk(KERN_INFO "file_offset = %lld!\n", file_offset);
-	printk(KERN_INFO "buf_offset = %zd!\n", buf_offset);
-	printk(KERN_INFO "len = %zd!\n", len);
+	bo = gem_to_amdgpu_bo(dmabuf->priv);
+
+	dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "is_read = %d.\n", is_read);
+	dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "file_offset = %lld.\n", file_offset);
+	dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "buf_offset = %zd.\n", buf_offset);
+	dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "IO length = %zd B.\n", len);
 
 	if (direct_io) {
 		if (!(filp->f_mode & FMODE_CAN_ODIRECT))
@@ -401,6 +403,7 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 		printk(KERN_ERR "Failed to get PCI device from file!\n");
 		goto out;
 	}
+	dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "found pci_dev: %s\n", pci_name(pdev));
 	attach.dev = &pdev->dev;
 
 	sgt = dma_buf_map_attachment_unlocked(&attach, DMA_BIDIRECTIONAL);
@@ -409,7 +412,12 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 		goto out;
 	}
 
-	bo = gem_to_amdgpu_bo(dmabuf->priv);
+	char const* mem_types[] =
+	  { "TTM_PL_SYSTEM",
+	    "TTM_PL_TT",
+	    "TTM_PL_VRAM",
+	    "TTM_PL_PRIV" };
+
 	if (!bo) {
 		ret = -EINVAL;
 		goto out;
@@ -417,8 +425,8 @@ static int amdgpu_rw_file(struct dma_buf *dmabuf, bool is_read,
 		/* Show BO domain to cross-check if it is in VRAM */
 		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "DMA-BUF bo->tbo.base.size:%lx\n",
 			 bo->tbo.base.size);
-		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "mem_type:%x start:%lx size:%zx placement:%x\n",
-			 bo->tbo.resource->mem_type, bo->tbo.resource->start,
+		dev_info(amdgpu_ttm_adev(bo->tbo.bdev)->dev, "mem_type:%s start:%lx size:%zx placement:%x\n",
+			 mem_types[bo->tbo.resource->mem_type], bo->tbo.resource->start,
 			 bo->tbo.resource->size, bo->tbo.resource->placement);
 	}
 
