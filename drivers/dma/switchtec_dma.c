@@ -5,6 +5,7 @@
  * Copyright (c) 2025, Microchip Corporation
  */
 
+#include <linux/bitfield.h>
 #include <linux/circ_buf.h>
 #include <linux/dmaengine.h>
 #include <linux/module.h>
@@ -74,27 +75,15 @@ struct chan_hw_regs {
 	u16 rsvd4;
 };
 
-enum {
-	PERF_BURST_SCALE_SHIFT = 0x2,
-	PERF_BURST_SCALE_MASK = 0x3,
-	PERF_MRRS_SHIFT = 0x4,
-	PERF_MRRS_MASK = 0x7,
-	PERF_INTERVAL_SHIFT = 0x8,
-	PERF_INTERVAL_MASK = 0x7,
-	PERF_BURST_SIZE_SHIFT = 0xc,
-	PERF_BURST_SIZE_MASK = 0x7,
-	PERF_ARB_WEIGHT_SHIFT = 0x18,
-	PERF_ARB_WEIGHT_MASK = 0xff,
-};
+#define PERF_BURST_SCALE_MASK	GENMASK_U32(3,   2)
+#define PERF_MRRS_MASK		GENMASK_U32(6,   4)
+#define PERF_INTERVAL_MASK	GENMASK_U32(10,  8)
+#define PERF_BURST_SIZE_MASK	GENMASK_U32(14, 12)
+#define PERF_ARB_WEIGHT_MASK	GENMASK_U32(31, 24)
 
-enum {
-	SE_BUF_BASE_SHIFT = 0x2,
-	SE_BUF_BASE_MASK = 0x1ff,
-	SE_BUF_LEN_SHIFT = 0xc,
-	SE_BUF_LEN_MASK = 0x1ff,
-	SE_THRESH_SHIFT = 0x17,
-	SE_THRESH_MASK = 0x1ff,
-};
+#define SE_BUF_BASE_MASK	GENMASK_U32(10,  2)
+#define SE_BUF_LEN_MASK		GENMASK_U32(20, 12)
+#define SE_THRESH_MASK		GENMASK_U32(31, 23)
 
 #define SWITCHTEC_CHAN_ENABLE	BIT(1)
 
@@ -1069,19 +1058,19 @@ static int switchtec_dma_alloc_chan_resources(struct dma_chan *chan)
 	rcu_read_unlock();
 
 	dev_dbg(&chan->dev->device, "Burst Size:  0x%x",
-		(perf_cfg >> PERF_BURST_SIZE_SHIFT) & PERF_BURST_SIZE_MASK);
+		FIELD_GET(PERF_BURST_SIZE_MASK, perf_cfg));
 
 	dev_dbg(&chan->dev->device, "Burst Scale: 0x%x",
-		(perf_cfg >> PERF_BURST_SCALE_SHIFT) & PERF_BURST_SCALE_MASK);
+		FIELD_GET(PERF_BURST_SCALE_MASK, perf_cfg));
 
 	dev_dbg(&chan->dev->device, "Interval:    0x%x",
-		(perf_cfg >> PERF_INTERVAL_SHIFT) & PERF_INTERVAL_MASK);
+		FIELD_GET(PERF_INTERVAL_MASK, perf_cfg));
 
 	dev_dbg(&chan->dev->device, "Arb Weight:  0x%x",
-		(perf_cfg >> PERF_ARB_WEIGHT_SHIFT) & PERF_ARB_WEIGHT_MASK);
+		FIELD_GET(PERF_ARB_WEIGHT_MASK, perf_cfg));
 
 	dev_dbg(&chan->dev->device, "MRRS:        0x%x",
-		(perf_cfg >> PERF_MRRS_SHIFT) & PERF_MRRS_MASK);
+		FIELD_GET(PERF_MRRS_MASK, perf_cfg));
 
 	return SWITCHTEC_DMA_SQ_SIZE;
 }
@@ -1114,7 +1103,7 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 {
 	struct dma_device *dma = &swdma_dev->dma_dev;
 	struct switchtec_dma_chan *swdma_chan;
-	u32 perf_cfg, valid_en_se, thresh;
+	u32 valid_en_se, thresh;
 	int se_buf_len, irq, rc;
 	struct dma_chan *chan;
 
@@ -1146,22 +1135,22 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 		goto free_and_exit;
 
 	/* init perf tuner */
-	perf_cfg = (1 << PERF_BURST_SCALE_SHIFT |
-		    3 << PERF_MRRS_SHIFT |
-		    6 << PERF_BURST_SIZE_SHIFT |
-		    1 << PERF_ARB_WEIGHT_SHIFT);
-	writel(perf_cfg, &swdma_chan->mmio_chan_fw->perf_cfg);
+	writel(FIELD_PREP(PERF_BURST_SCALE_MASK, 1) |
+	       FIELD_PREP(PERF_MRRS_MASK, 3) |
+	       FIELD_PREP(PERF_BURST_SIZE_MASK, 6) |
+	       FIELD_PREP(PERF_ARB_WEIGHT_MASK, 1),
+	       &swdma_chan->mmio_chan_fw->perf_cfg);
 
 	valid_en_se = readl(&swdma_chan->mmio_chan_fw->valid_en_se);
 
-	dev_dbg(&pdev->dev, "Channel %d: SE buffer base %d\n",
-		i, (valid_en_se >> SE_BUF_BASE_SHIFT) & SE_BUF_BASE_MASK);
+	dev_dbg(&pdev->dev, "Channel %d: SE buffer base %d\n", i,
+		FIELD_GET(SE_BUF_BASE_MASK, valid_en_se));
 
-	se_buf_len = (valid_en_se >> SE_BUF_LEN_SHIFT) & SE_BUF_LEN_MASK;
+	se_buf_len = FIELD_GET(SE_BUF_LEN_MASK, valid_en_se);
 	dev_dbg(&pdev->dev, "Channel %d: SE buffer count %d\n", i, se_buf_len);
 
 	thresh = se_buf_len / 2;
-	valid_en_se |= (thresh & SE_THRESH_MASK) << SE_THRESH_SHIFT;
+	valid_en_se |= FIELD_GET(SE_THRESH_MASK, thresh);
 	writel(valid_en_se, &swdma_chan->mmio_chan_fw->valid_en_se);
 
 	/* request irqs */
