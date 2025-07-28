@@ -130,7 +130,7 @@ enum cmd_status {
 	CMD_STATUS_IDLE = 0,
 	CMD_STATUS_INPROGRESS = 0x1,
 	CMD_STATUS_DONE = 0x2,
-	CMD_STATUS_ERROR = 0xFF,
+	CMD_STATUS_ERROR = 0xff,
 };
 
 struct switchtec_dma_chan {
@@ -1436,7 +1436,7 @@ static void switchtec_dma_remove(struct pci_dev *pdev)
 		.subvendor  = PCI_ANY_ID, \
 		.subdevice  = PCI_ANY_ID, \
 		.class      = PCI_CLASS_SYSTEM_OTHER << 8, \
-		.class_mask = 0xFFFFFFFF, \
+		.class_mask = 0xffffffff, \
 	}
 
 static const struct pci_device_id switchtec_dma_pci_tbl[] = {
