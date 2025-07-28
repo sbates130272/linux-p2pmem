@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Microchip Switchtec(tm) DMA Controller Driver
- * Copyright (c) 2023, Kelvin Cao <kelvin.cao@microchip.com>
- * Copyright (c) 2023, Microchip Corporation
+ * Copyright (c) 2025, Kelvin Cao <kelvin.cao@microchip.com>
+ * Copyright (c) 2025, Microchip Corporation
  */
 
 #include <linux/circ_buf.h>
