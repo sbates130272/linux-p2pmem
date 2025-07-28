@@ -270,20 +270,15 @@ struct switchtec_dma_desc {
 
 #define SWITCHTEC_DMA_RING_SIZE	SWITCHTEC_DMA_SQ_SIZE
 
-static int
-wait_for_chan_status(struct chan_hw_regs __iomem *chan_hw, u32 mask, bool set)
+static int wait_for_chan_status(struct chan_hw_regs __iomem *chan_hw, u32 mask,
+				bool set)
 {
 	u32 status;
-	int ret;
 
-	ret = readl_poll_timeout_atomic(&chan_hw->status, status,
-					(set && (status & mask)) ||
-					(!set && !(status & mask)),
-					10, 100 * USEC_PER_MSEC);
-	if (ret)
-		return -EIO;
-
-	return 0;
+	return readl_poll_timeout_atomic(&chan_hw->status, status,
+					 (set && (status & mask)) ||
+					 (!set && !(status & mask)),
+					 10, 100 * USEC_PER_MSEC);
 }
 
 static int halt_channel(struct switchtec_dma_chan *swdma_chan)
