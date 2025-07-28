@@ -75,14 +75,6 @@ struct chan_hw_regs {
 };
 
 enum {
-	PERF_BURST_SCALE = 0x1,
-	PERF_BURST_SIZE = 0x6,
-	PERF_INTERVAL = 0x0,
-	PERF_MRRS = 0x3,
-	PERF_ARB_WEIGHT = 0x1,
-};
-
-enum {
 	PERF_BURST_SCALE_SHIFT = 0x2,
 	PERF_BURST_SCALE_MASK = 0x3,
 	PERF_MRRS_SHIFT = 0x4,
@@ -1154,12 +1146,10 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 		goto free_and_exit;
 
 	/* init perf tuner */
-	perf_cfg = PERF_BURST_SCALE << PERF_BURST_SCALE_SHIFT;
-	perf_cfg |= PERF_MRRS << PERF_MRRS_SHIFT;
-	perf_cfg |= PERF_INTERVAL << PERF_INTERVAL_SHIFT;
-	perf_cfg |= PERF_BURST_SIZE << PERF_BURST_SIZE_SHIFT;
-	perf_cfg |= PERF_ARB_WEIGHT << PERF_ARB_WEIGHT_SHIFT;
-
+	perf_cfg = (1 << PERF_BURST_SCALE_SHIFT |
+		    3 << PERF_MRRS_SHIFT |
+		    6 << PERF_BURST_SIZE_SHIFT |
+		    1 << PERF_ARB_WEIGHT_SHIFT);
 	writel(perf_cfg, &swdma_chan->mmio_chan_fw->perf_cfg);
 
 	valid_en_se = readl(&swdma_chan->mmio_chan_fw->valid_en_se);
