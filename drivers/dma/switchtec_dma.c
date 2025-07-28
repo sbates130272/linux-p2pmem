@@ -730,7 +730,7 @@ static void switchtec_dma_chan_status_task(unsigned long data)
 
 		bit = ffs(chan_status);
 		if (!bit)
-			dev_dbg(chan_dev, "No pause bit set.");
+			dev_dbg(chan_dev, "No pause bit set.\n");
 		else
 			dev_err(chan_dev, "Paused, %s\n",
 				channel_status_str[bit - 1]);
@@ -1052,19 +1052,19 @@ static int switchtec_dma_alloc_chan_resources(struct dma_chan *chan)
 	perf_cfg = readl(&swdma_chan->mmio_chan_fw->perf_cfg);
 	rcu_read_unlock();
 
-	dev_dbg(&chan->dev->device, "Burst Size:  0x%x",
+	dev_dbg(&chan->dev->device, "Burst Size:  0x%x\n",
 		FIELD_GET(PERF_BURST_SIZE_MASK, perf_cfg));
 
-	dev_dbg(&chan->dev->device, "Burst Scale: 0x%x",
+	dev_dbg(&chan->dev->device, "Burst Scale: 0x%x\n",
 		FIELD_GET(PERF_BURST_SCALE_MASK, perf_cfg));
 
-	dev_dbg(&chan->dev->device, "Interval:    0x%x",
+	dev_dbg(&chan->dev->device, "Interval:    0x%x\n",
 		FIELD_GET(PERF_INTERVAL_MASK, perf_cfg));
 
-	dev_dbg(&chan->dev->device, "Arb Weight:  0x%x",
+	dev_dbg(&chan->dev->device, "Arb Weight:  0x%x\n",
 		FIELD_GET(PERF_ARB_WEIGHT_MASK, perf_cfg));
 
-	dev_dbg(&chan->dev->device, "MRRS:        0x%x",
+	dev_dbg(&chan->dev->device, "MRRS:        0x%x\n",
 		FIELD_GET(PERF_MRRS_MASK, perf_cfg));
 
 	return SWITCHTEC_DMA_SQ_SIZE;
