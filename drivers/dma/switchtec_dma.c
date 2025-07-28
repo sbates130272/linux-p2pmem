@@ -1154,6 +1154,12 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 	swdma_chan->index = i;
 	swdma_chan->swdma_dev = swdma_dev;
 
+	spin_lock_init(&swdma_chan->hw_ctrl_lock);
+	spin_lock_init(&swdma_chan->submit_lock);
+	spin_lock_init(&swdma_chan->complete_lock);
+	tasklet_init(&swdma_chan->desc_task, switchtec_dma_desc_task,
+		     (unsigned long)swdma_chan);
+
 	swdma_chan->mmio_chan_fw =
 		swdma_dev->bar + SWITCHTEC_DMAC_CHAN_CFG_STS_OFFSET +
 		i * SWITCHTEC_DMA_CHAN_FW_REGS_SIZE;
@@ -1200,12 +1206,6 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 		goto free_and_exit;
 
 	swdma_chan->irq = irq;
-
-	spin_lock_init(&swdma_chan->hw_ctrl_lock);
-	spin_lock_init(&swdma_chan->submit_lock);
-	spin_lock_init(&swdma_chan->complete_lock);
-	tasklet_init(&swdma_chan->desc_task, switchtec_dma_desc_task,
-		     (unsigned long)swdma_chan);
 
 	chan = &swdma_chan->dma_chan;
 	chan->device = dma;
