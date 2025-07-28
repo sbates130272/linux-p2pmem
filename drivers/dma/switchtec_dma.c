@@ -341,9 +341,9 @@ unlock_and_exit:
 
 static int unhalt_channel(struct switchtec_dma_chan *swdma_chan)
 {
-	u8 ctrl;
 	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
 	struct pci_dev *pdev;
+	u8 ctrl;
 	int ret;
 
 	rcu_read_lock();
@@ -526,15 +526,12 @@ switchtec_dma_get_ce(struct switchtec_dma_chan *swdma_chan, int i)
 static void switchtec_dma_process_desc(struct switchtec_dma_chan *swdma_chan)
 {
 	struct device *chan_dev = to_chan_dev(swdma_chan);
-	struct dmaengine_result res;
 	struct switchtec_dma_desc *desc;
 	struct switchtec_dma_hw_ce *ce;
+	struct dmaengine_result res;
+	int tail, cid, se_idx, i;
 	__le16 phase_tag;
-	int tail;
-	int cid;
-	int se_idx;
 	u32 sts_code;
-	int i;
 	__le32 *p;
 
 	do {
@@ -638,8 +635,8 @@ static void switchtec_dma_process_desc(struct switchtec_dma_chan *swdma_chan)
 static void
 switchtec_dma_abort_desc(struct switchtec_dma_chan *swdma_chan, int force)
 {
-	struct dmaengine_result res;
 	struct switchtec_dma_desc *desc;
+	struct dmaengine_result res;
 
 	if (!force)
 		switchtec_dma_process_desc(swdma_chan);
@@ -746,8 +743,8 @@ static void switchtec_dma_chan_status_task(unsigned long data)
 	struct dma_device *dma_dev = &swdma_dev->dma_dev;
 	struct switchtec_dma_chan *swdma_chan;
 	struct chan_hw_regs __iomem *chan_hw;
-	struct dma_chan *chan;
 	struct device *chan_dev;
+	struct dma_chan *chan;
 	u32 chan_status;
 	int bit;
 
@@ -783,8 +780,7 @@ switchtec_dma_prep_desc(struct dma_chan *c, u16 dst_fid, dma_addr_t dma_dst,
 {
 	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(c);
 	struct switchtec_dma_desc *desc;
-	int head;
-	int tail;
+	int head, tail;
 
 	spin_lock_bh(&swdma_chan->submit_lock);
 
@@ -975,11 +971,10 @@ static int switchtec_dma_alloc_desc(struct switchtec_dma_chan *swdma_chan)
 {
 	struct switchtec_dma_dev *swdma_dev = swdma_chan->swdma_dev;
 	struct chan_fw_regs __iomem *chan_fw = swdma_chan->mmio_chan_fw;
-	struct pci_dev *pdev;
 	struct switchtec_dma_desc *desc;
+	struct pci_dev *pdev;
 	size_t size;
-	int rc;
-	int i;
+	int rc, i;
 
 	swdma_chan->head = 0;
 	swdma_chan->tail = 0;
@@ -1138,13 +1133,9 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 {
 	struct dma_device *dma = &swdma_dev->dma_dev;
 	struct switchtec_dma_chan *swdma_chan;
+	u32 perf_cfg, valid_en_se, thresh;
+	int se_buf_len, irq, rc;
 	struct dma_chan *chan;
-	u32 perf_cfg;
-	u32 valid_en_se;
-	u32 thresh;
-	int se_buf_len;
-	int irq;
-	int rc;
 
 	swdma_chan = kzalloc(sizeof(*swdma_chan), GFP_KERNEL);
 	if (!swdma_chan)
@@ -1253,10 +1244,7 @@ static int switchtec_dma_chans_enumerate(struct switchtec_dma_dev *swdma_dev,
 					 struct pci_dev *pdev, int chan_cnt)
 {
 	struct dma_device *dma = &swdma_dev->dma_dev;
-	int base;
-	int cnt;
-	int rc;
-	int i;
+	int base, cnt, rc, i;
 
 	swdma_dev->swdma_chans = kcalloc(chan_cnt, sizeof(*swdma_dev->swdma_chans),
 					 GFP_KERNEL);
@@ -1295,9 +1283,9 @@ err_exit:
 
 static void switchtec_dma_release(struct dma_device *dma_dev)
 {
-	int i;
 	struct switchtec_dma_dev *swdma_dev =
 		container_of(dma_dev, struct switchtec_dma_dev, dma_dev);
+	int i;
 
 	for (i = 0; i < swdma_dev->chan_cnt; i++)
 		kfree(swdma_dev->swdma_chans[i]);
@@ -1311,12 +1299,9 @@ static void switchtec_dma_release(struct dma_device *dma_dev)
 static int switchtec_dma_create(struct pci_dev *pdev)
 {
 	struct switchtec_dma_dev *swdma_dev;
+	int chan_cnt, nr_vecs, irq, rc;
 	struct dma_device *dma;
 	struct dma_chan *chan;
-	int chan_cnt;
-	int nr_vecs;
-	int irq;
-	int rc;
 
 	/*
 	 * Create the switchtec dma device
