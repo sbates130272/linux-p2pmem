@@ -1153,8 +1153,6 @@ static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
 	if (rc)
 		goto free_and_exit;
 
-	perf_cfg = readl(&swdma_chan->mmio_chan_fw->perf_cfg);
-
 	/* init perf tuner */
 	perf_cfg = PERF_BURST_SCALE << PERF_BURST_SCALE_SHIFT;
 	perf_cfg |= PERF_MRRS << PERF_MRRS_SHIFT;
