@@ -1133,10 +1133,10 @@ static void switchtec_dma_free_chan_resources(struct dma_chan *chan)
 	disable_channel(swdma_chan);
 }
 
-static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev, int i)
+static int switchtec_dma_chan_init(struct switchtec_dma_dev *swdma_dev,
+				   struct pci_dev *pdev, int i)
 {
 	struct dma_device *dma = &swdma_dev->dma_dev;
-	struct pci_dev *pdev = rcu_dereference(swdma_dev->pdev);
 	struct switchtec_dma_chan *swdma_chan;
 	struct dma_chan *chan;
 	u32 perf_cfg;
@@ -1250,17 +1250,15 @@ static int switchtec_dma_chans_release(struct switchtec_dma_dev *swdma_dev)
 }
 
 static int switchtec_dma_chans_enumerate(struct switchtec_dma_dev *swdma_dev,
-					 int chan_cnt)
+					 struct pci_dev *pdev, int chan_cnt)
 {
 	struct dma_device *dma = &swdma_dev->dma_dev;
-	struct pci_dev *pdev = rcu_dereference(swdma_dev->pdev);
 	int base;
 	int cnt;
 	int rc;
 	int i;
 
-	swdma_dev->swdma_chans = kcalloc(chan_cnt,
-					 sizeof(*swdma_dev->swdma_chans),
+	swdma_dev->swdma_chans = kcalloc(chan_cnt, sizeof(*swdma_dev->swdma_chans),
 					 GFP_KERNEL);
 
 	if (!swdma_dev->swdma_chans)
@@ -1275,7 +1273,7 @@ static int switchtec_dma_chans_enumerate(struct switchtec_dma_dev *swdma_dev,
 	INIT_LIST_HEAD(&dma->channels);
 
 	for (i = 0; i < chan_cnt; i++) {
-		rc = switchtec_dma_chan_init(swdma_dev, i);
+		rc = switchtec_dma_chan_init(swdma_dev, pdev, i);
 		if (rc) {
 			dev_err(&pdev->dev, "Channel %d: init channel failed\n",
 				i);
@@ -1360,7 +1358,7 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 		goto err_exit;
 	}
 
-	chan_cnt = switchtec_dma_chans_enumerate(swdma_dev, chan_cnt);
+	chan_cnt = switchtec_dma_chans_enumerate(swdma_dev, pdev, chan_cnt);
 	if (chan_cnt < 0) {
 		pci_err(pdev, "Failed to enumerate dma channels: %d\n",
 			chan_cnt);
