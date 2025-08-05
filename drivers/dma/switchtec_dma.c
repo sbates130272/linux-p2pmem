@@ -844,8 +844,7 @@ switchtec_dma_tx_submit(struct dma_async_tx_descriptor *desc)
 }
 
 static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
-					       dma_cookie_t cookie,
-					       struct dma_tx_state *txstate)
+		dma_cookie_t cookie, struct dma_tx_state *txstate)
 {
 	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
 	enum dma_status ret;
