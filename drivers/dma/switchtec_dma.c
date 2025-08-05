@@ -404,12 +404,6 @@ static int disable_channel(struct switchtec_dma_chan *swdma_chan)
 	return channel_op(swdma_chan, DISABLE_CHAN);
 }
 
-static struct switchtec_dma_hw_ce *
-switchtec_dma_get_ce(struct switchtec_dma_chan *swdma_chan, int i)
-{
-	return &swdma_chan->hw_cq[i];
-}
-
 static void
 switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 {
@@ -429,8 +423,7 @@ switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 			break;
 		}
 
-		ce = switchtec_dma_get_ce(swdma_chan, swdma_chan->cq_tail);
-
+		ce = &swdma_chan->hw_cq[swdma_chan->cq_tail];
 		/*
 		 * phase_tag is updated by hardware, ensure the value is
 		 * not from the cache
