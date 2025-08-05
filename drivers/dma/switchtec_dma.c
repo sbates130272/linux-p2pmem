@@ -188,11 +188,6 @@ struct switchtec_dma_dev {
 	struct tasklet_struct chan_status_task;
 };
 
-static struct switchtec_dma_chan *to_switchtec_dma_chan(struct dma_chan *c)
-{
-	return container_of(c, struct switchtec_dma_chan, dma_chan);
-}
-
 static struct device *to_chan_dev(struct switchtec_dma_chan *swdma_chan)
 {
 	return &swdma_chan->dma_chan.dev->device;
@@ -390,7 +385,8 @@ static int pause_reset_channel(struct switchtec_dma_chan *swdma_chan)
 
 static int switchtec_dma_pause(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
 	struct pci_dev *pdev;
 	int ret;
@@ -414,7 +410,8 @@ unlock_and_exit:
 
 static int switchtec_dma_resume(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
 	struct pci_dev *pdev;
 	int ret;
@@ -654,7 +651,8 @@ static void switchtec_dma_chan_stop(struct switchtec_dma_chan *swdma_chan)
 
 static int switchtec_dma_terminate_all(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 
 	spin_lock_bh(&swdma_chan->complete_lock);
 	swdma_chan->comp_ring_active = false;
@@ -665,7 +663,9 @@ static int switchtec_dma_terminate_all(struct dma_chan *chan)
 
 static void switchtec_dma_synchronize(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+
 	int rc;
 
 	switchtec_dma_abort_desc(swdma_chan, 1);
@@ -715,7 +715,8 @@ static void switchtec_dma_chan_status_task(unsigned long data)
 	int bit;
 
 	list_for_each_entry(chan, &dma_dev->channels, device_node) {
-		swdma_chan = to_switchtec_dma_chan(chan);
+		swdma_chan = container_of(chan, struct switchtec_dma_chan,
+					  dma_chan);
 		chan_dev = to_chan_dev(swdma_chan);
 		chan_hw = swdma_chan->mmio_chan_hw;
 
@@ -744,7 +745,8 @@ switchtec_dma_prep_desc(struct dma_chan *c, u16 dst_fid, dma_addr_t dma_dst,
 			size_t len, unsigned long flags)
 	__acquires(swdma_chan->submit_lock)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(c);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(c, struct switchtec_dma_chan, dma_chan);
 	struct switchtec_dma_desc *desc;
 	int head, tail;
 
@@ -834,7 +836,7 @@ switchtec_dma_tx_submit(struct dma_async_tx_descriptor *desc)
 	__releases(swdma_chan->submit_lock)
 {
 	struct switchtec_dma_chan *swdma_chan =
-		to_switchtec_dma_chan(desc->chan);
+		container_of(desc->chan, struct switchtec_dma_chan, dma_chan);
 	dma_cookie_t cookie;
 
 	cookie = dma_cookie_assign(desc);
@@ -847,7 +849,8 @@ switchtec_dma_tx_submit(struct dma_async_tx_descriptor *desc)
 static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
 		dma_cookie_t cookie, struct dma_tx_state *txstate)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 	enum dma_status ret;
 
 	ret = dma_cookie_status(chan, cookie, txstate);
@@ -861,7 +864,8 @@ static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
 
 static void switchtec_dma_issue_pending(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 	struct switchtec_dma_dev *swdma_dev = swdma_chan->swdma_dev;
 
 	/*
@@ -1016,7 +1020,8 @@ free_and_exit:
 
 static int switchtec_dma_alloc_chan_resources(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 	struct switchtec_dma_dev *swdma_dev = swdma_chan->swdma_dev;
 	u32 perf_cfg;
 	int rc;
@@ -1072,7 +1077,8 @@ static int switchtec_dma_alloc_chan_resources(struct dma_chan *chan)
 
 static void switchtec_dma_free_chan_resources(struct dma_chan *chan)
 {
-	struct switchtec_dma_chan *swdma_chan = to_switchtec_dma_chan(chan);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
 
 	spin_lock_bh(&swdma_chan->submit_lock);
 	swdma_chan->ring_active = false;
