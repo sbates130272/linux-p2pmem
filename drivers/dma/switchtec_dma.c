@@ -118,21 +118,6 @@ struct chan_fw_regs {
 	u16 cq_phase;
 };
 
-enum cmd {
-	CMD_GET_HOST_LIST = 1,
-	CMD_REGISTER_BUF = 2,
-	CMD_UNREGISTER_BUF = 3,
-	CMD_GET_BUF_LIST = 4,
-	CMD_GET_OWN_BUF_LIST = 5,
-};
-
-enum cmd_status {
-	CMD_STATUS_IDLE = 0,
-	CMD_STATUS_INPROGRESS = 0x1,
-	CMD_STATUS_DONE = 0x2,
-	CMD_STATUS_ERROR = 0xff,
-};
-
 struct switchtec_dma_chan {
 	struct switchtec_dma_dev *swdma_dev;
 	struct dma_chan dma_chan;
