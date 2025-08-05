@@ -166,10 +166,11 @@ struct switchtec_dma_chan {
 struct switchtec_dma_dev {
 	struct dma_device dma_dev;
 	struct pci_dev __rcu *pdev;
+	void __iomem *bar;
+
 	struct switchtec_dma_chan **swdma_chans;
 	int chan_cnt;
 	int chan_status_irq;
-	void __iomem *bar;
 	struct tasklet_struct chan_status_task;
 };
 
