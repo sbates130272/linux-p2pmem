@@ -364,56 +364,6 @@ static int pause_reset_channel(struct switchtec_dma_chan *swdma_chan)
 	return reset_channel(swdma_chan);
 }
 
-static int switchtec_dma_pause(struct dma_chan *chan)
-{
-	struct switchtec_dma_chan *swdma_chan =
-		container_of(chan, struct switchtec_dma_chan, dma_chan);
-	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
-	struct pci_dev *pdev;
-	int ret;
-
-	rcu_read_lock();
-	pdev = rcu_dereference(swdma_chan->swdma_dev->pdev);
-	if (!pdev) {
-		ret = -ENODEV;
-		goto unlock_and_exit;
-	}
-
-	spin_lock(&swdma_chan->hw_ctrl_lock);
-	writeb(SWITCHTEC_CHAN_CTRL_PAUSE, &chan_hw->ctrl);
-	ret = wait_for_chan_status(chan_hw, SWITCHTEC_CHAN_STS_PAUSED, true);
-	spin_unlock(&swdma_chan->hw_ctrl_lock);
-
-unlock_and_exit:
-	rcu_read_unlock();
-	return ret;
-}
-
-static int switchtec_dma_resume(struct dma_chan *chan)
-{
-	struct switchtec_dma_chan *swdma_chan =
-		container_of(chan, struct switchtec_dma_chan, dma_chan);
-	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
-	struct pci_dev *pdev;
-	int ret;
-
-	rcu_read_lock();
-	pdev = rcu_dereference(swdma_chan->swdma_dev->pdev);
-	if (!pdev) {
-		ret = -ENODEV;
-		goto unlock_and_exit;
-	}
-
-	spin_lock(&swdma_chan->hw_ctrl_lock);
-	writeb(0, &chan_hw->ctrl);
-	ret = wait_for_chan_status(chan_hw, SWITCHTEC_CHAN_STS_PAUSED, false);
-	spin_unlock(&swdma_chan->hw_ctrl_lock);
-
-unlock_and_exit:
-	rcu_read_unlock();
-	return ret;
-}
-
 enum chan_op {
 	ENABLE_CHAN,
 	DISABLE_CHAN,
@@ -874,6 +824,56 @@ static void switchtec_dma_issue_pending(struct dma_chan *chan)
 	rcu_read_unlock();
 }
 
+static int switchtec_dma_pause(struct dma_chan *chan)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
+	struct pci_dev *pdev;
+	int ret;
+
+	rcu_read_lock();
+	pdev = rcu_dereference(swdma_chan->swdma_dev->pdev);
+	if (!pdev) {
+		ret = -ENODEV;
+		goto unlock_and_exit;
+	}
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	writeb(SWITCHTEC_CHAN_CTRL_PAUSE, &chan_hw->ctrl);
+	ret = wait_for_chan_status(chan_hw, SWITCHTEC_CHAN_STS_PAUSED, true);
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
+unlock_and_exit:
+	rcu_read_unlock();
+	return ret;
+}
+
+static int switchtec_dma_resume(struct dma_chan *chan)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_hw_regs __iomem *chan_hw = swdma_chan->mmio_chan_hw;
+	struct pci_dev *pdev;
+	int ret;
+
+	rcu_read_lock();
+	pdev = rcu_dereference(swdma_chan->swdma_dev->pdev);
+	if (!pdev) {
+		ret = -ENODEV;
+		goto unlock_and_exit;
+	}
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	writeb(0, &chan_hw->ctrl);
+	ret = wait_for_chan_status(chan_hw, SWITCHTEC_CHAN_STS_PAUSED, false);
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
+unlock_and_exit:
+	rcu_read_unlock();
+	return ret;
+}
+
 static irqreturn_t switchtec_dma_isr(int irq, void *chan)
 {
 	struct switchtec_dma_chan *swdma_chan = chan;
@@ -1310,8 +1310,8 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 	dma->device_alloc_chan_resources = switchtec_dma_alloc_chan_resources;
 	dma->device_free_chan_resources = switchtec_dma_free_chan_resources;
 	dma->device_prep_dma_memcpy = switchtec_dma_prep_memcpy;
-	dma->device_issue_pending = switchtec_dma_issue_pending;
 	dma->device_tx_status = switchtec_dma_tx_status;
+	dma->device_issue_pending = switchtec_dma_issue_pending;
 	dma->device_pause = switchtec_dma_pause;
 	dma->device_resume = switchtec_dma_resume;
 	dma->device_terminate_all = switchtec_dma_terminate_all;
