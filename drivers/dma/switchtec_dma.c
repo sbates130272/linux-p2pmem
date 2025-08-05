@@ -488,7 +488,8 @@ switchtec_dma_get_ce(struct switchtec_dma_chan *swdma_chan, int i)
 	return &swdma_chan->hw_cq[i];
 }
 
-static void switchtec_dma_process_desc(struct switchtec_dma_chan *swdma_chan)
+static void
+switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 {
 	struct device *chan_dev = to_chan_dev(swdma_chan);
 	struct switchtec_dma_desc *desc;
@@ -604,7 +605,7 @@ switchtec_dma_abort_desc(struct switchtec_dma_chan *swdma_chan, int force)
 	struct dmaengine_result res;
 
 	if (!force)
-		switchtec_dma_process_desc(swdma_chan);
+		switchtec_dma_cleanup_completed(swdma_chan);
 
 	spin_lock_bh(&swdma_chan->complete_lock);
 
@@ -699,7 +700,7 @@ static void switchtec_dma_desc_task(unsigned long data)
 {
 	struct switchtec_dma_chan *swdma_chan = (void *)data;
 
-	switchtec_dma_process_desc(swdma_chan);
+	switchtec_dma_cleanup_completed(swdma_chan);
 }
 
 static void switchtec_dma_chan_status_task(unsigned long data)
@@ -853,7 +854,7 @@ static enum dma_status switchtec_dma_tx_status(struct dma_chan *chan,
 	if (ret == DMA_COMPLETE)
 		return ret;
 
-	switchtec_dma_process_desc(swdma_chan);
+	switchtec_dma_cleanup_completed(swdma_chan);
 
 	return dma_cookie_status(chan, cookie, txstate);
 }
