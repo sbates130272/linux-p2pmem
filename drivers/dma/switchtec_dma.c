@@ -404,12 +404,6 @@ static int disable_channel(struct switchtec_dma_chan *swdma_chan)
 	return channel_op(swdma_chan, DISABLE_CHAN);
 }
 
-static struct switchtec_dma_desc *
-switchtec_dma_get_desc(struct switchtec_dma_chan *swdma_chan, int i)
-{
-	return swdma_chan->desc_ring[i];
-}
-
 static struct switchtec_dma_hw_ce *
 switchtec_dma_get_ce(struct switchtec_dma_chan *swdma_chan, int i)
 {
@@ -449,7 +443,7 @@ switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 
 		cid = le16_to_cpu(ce->cid);
 		se_idx = cid & (SWITCHTEC_DMA_SQ_SIZE - 1);
-		desc = switchtec_dma_get_desc(swdma_chan, se_idx);
+		desc = swdma_chan->desc_ring[i];
 
 		tail = swdma_chan->tail;
 
@@ -515,8 +509,7 @@ switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 			 * the tail index
 			 */
 			smp_store_release(&swdma_chan->tail, tail);
-			desc = switchtec_dma_get_desc(swdma_chan,
-						      swdma_chan->tail);
+			desc = swdma_chan->desc_ring[swdma_chan->tail];
 			if (!desc->completed)
 				break;
 		} while (CIRC_CNT(READ_ONCE(swdma_chan->head), swdma_chan->tail,
@@ -539,7 +532,7 @@ switchtec_dma_abort_desc(struct switchtec_dma_chan *swdma_chan, int force)
 
 	while (CIRC_CNT(swdma_chan->head, swdma_chan->tail,
 			SWITCHTEC_DMA_SQ_SIZE) >= 1) {
-		desc = switchtec_dma_get_desc(swdma_chan, swdma_chan->tail);
+		desc = swdma_chan->desc_ring[swdma_chan->tail];
 
 		res.residue = desc->orig_size;
 		res.result = DMA_TRANS_ABORTED;
@@ -692,7 +685,7 @@ switchtec_dma_prep_desc(struct dma_chan *c, u16 dst_fid, dma_addr_t dma_dst,
 	if (!CIRC_SPACE(head, tail, SWITCHTEC_DMA_RING_SIZE))
 		goto err_unlock;
 
-	desc = switchtec_dma_get_desc(swdma_chan, head);
+	desc = swdma_chan->desc_ring[head];
 
 	if (src_fid != SWITCHTEC_INVALID_HFID &&
 	    dst_fid != SWITCHTEC_INVALID_HFID)
