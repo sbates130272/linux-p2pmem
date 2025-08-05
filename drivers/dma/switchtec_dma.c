@@ -1145,10 +1145,9 @@ free_and_exit:
 	return rc;
 }
 
-static int switchtec_dma_chan_free(struct switchtec_dma_chan *swdma_chan)
+static int switchtec_dma_chan_free(struct pci_dev *pdev,
+				   struct switchtec_dma_chan *swdma_chan)
 {
-	struct pci_dev *pdev = rcu_dereference(swdma_chan->swdma_dev->pdev);
-
 	spin_lock_bh(&swdma_chan->submit_lock);
 	swdma_chan->ring_active = false;
 	spin_unlock_bh(&swdma_chan->submit_lock);
@@ -1164,12 +1163,13 @@ static int switchtec_dma_chan_free(struct switchtec_dma_chan *swdma_chan)
 	return 0;
 }
 
-static int switchtec_dma_chans_release(struct switchtec_dma_dev *swdma_dev)
+static int switchtec_dma_chans_release(struct pci_dev *pdev,
+				       struct switchtec_dma_dev *swdma_dev)
 {
 	int i;
 
 	for (i = 0; i < swdma_dev->chan_cnt; i++)
-		switchtec_dma_chan_free(swdma_dev->swdma_chans[i]);
+		switchtec_dma_chan_free(pdev, swdma_dev->swdma_chans[i]);
 
 	return 0;
 }
@@ -1208,7 +1208,7 @@ static int switchtec_dma_chans_enumerate(struct switchtec_dma_dev *swdma_dev,
 
 err_exit:
 	for (i = 0; i < chan_cnt; i++)
-		switchtec_dma_chan_free(swdma_dev->swdma_chans[i]);
+		switchtec_dma_chan_free(pdev, swdma_dev->swdma_chans[i]);
 
 	kfree(swdma_dev->swdma_chans);
 
@@ -1320,7 +1320,7 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 	return 0;
 
 err_chans_release_exit:
-	switchtec_dma_chans_release(swdma_dev);
+	switchtec_dma_chans_release(pdev, swdma_dev);
 
 err_exit:
 	if (swdma_dev->chan_status_irq)
@@ -1372,7 +1372,7 @@ static void switchtec_dma_remove(struct pci_dev *pdev)
 {
 	struct switchtec_dma_dev *swdma_dev = pci_get_drvdata(pdev);
 
-	switchtec_dma_chans_release(swdma_dev);
+	switchtec_dma_chans_release(pdev, swdma_dev);
 
 	tasklet_kill(&swdma_dev->chan_status_task);
 
