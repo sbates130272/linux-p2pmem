@@ -188,11 +188,6 @@ struct switchtec_dma_dev {
 	struct tasklet_struct chan_status_task;
 };
 
-static struct device *to_chan_dev(struct switchtec_dma_chan *swdma_chan)
-{
-	return &swdma_chan->dma_chan.dev->device;
-}
-
 enum switchtec_dma_opcode {
 	SWITCHTEC_DMA_OPC_MEMCPY = 0,
 	SWITCHTEC_DMA_OPC_RDIMM = 0x1,
@@ -488,7 +483,7 @@ switchtec_dma_get_ce(struct switchtec_dma_chan *swdma_chan, int i)
 static void
 switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 {
-	struct device *chan_dev = to_chan_dev(swdma_chan);
+	struct device *chan_dev = &swdma_chan->dma_chan.dev->device;
 	struct switchtec_dma_desc *desc;
 	struct switchtec_dma_hw_ce *ce;
 	struct dmaengine_result res;
@@ -717,7 +712,7 @@ static void switchtec_dma_chan_status_task(unsigned long data)
 	list_for_each_entry(chan, &dma_dev->channels, device_node) {
 		swdma_chan = container_of(chan, struct switchtec_dma_chan,
 					  dma_chan);
-		chan_dev = to_chan_dev(swdma_chan);
+		chan_dev = &swdma_chan->dma_chan.dev->device;
 		chan_hw = swdma_chan->mmio_chan_hw;
 
 		rcu_read_lock();
