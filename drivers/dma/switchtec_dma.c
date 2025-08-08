@@ -171,7 +171,6 @@ struct switchtec_dma_dev {
 	struct switchtec_dma_chan **swdma_chans;
 	int chan_cnt;
 	int chan_status_irq;
-	struct tasklet_struct chan_status_task;
 };
 
 enum switchtec_dma_opcode {
@@ -620,42 +619,6 @@ static void switchtec_dma_desc_task(unsigned long data)
 	switchtec_dma_cleanup_completed(swdma_chan);
 }
 
-static void switchtec_dma_chan_status_task(unsigned long data)
-{
-	struct switchtec_dma_dev *swdma_dev = (void *)data;
-	struct dma_device *dma_dev = &swdma_dev->dma_dev;
-	struct switchtec_dma_chan *swdma_chan;
-	struct chan_hw_regs __iomem *chan_hw;
-	struct device *chan_dev;
-	struct dma_chan *chan;
-	u32 chan_status;
-	int bit;
-
-	list_for_each_entry(chan, &dma_dev->channels, device_node) {
-		swdma_chan = container_of(chan, struct switchtec_dma_chan,
-					  dma_chan);
-		chan_dev = &swdma_chan->dma_chan.dev->device;
-		chan_hw = swdma_chan->mmio_chan_hw;
-
-		rcu_read_lock();
-		if (!rcu_dereference(swdma_dev->pdev)) {
-			rcu_read_unlock();
-			return;
-		}
-
-		chan_status = readl(&chan_hw->status);
-		chan_status &= SWITCHTEC_CHAN_STS_PAUSED_MASK;
-		rcu_read_unlock();
-
-		bit = ffs(chan_status);
-		if (!bit)
-			dev_dbg(chan_dev, "No pause bit set.\n");
-		else
-			dev_err(chan_dev, "Paused, %s\n",
-				channel_status_str[bit - 1]);
-	}
-}
-
 static struct dma_async_tx_descriptor *
 switchtec_dma_prep_desc(struct dma_chan *c, u16 dst_fid, dma_addr_t dma_dst,
 			u16 src_fid, dma_addr_t dma_src, u64 data,
@@ -873,9 +836,39 @@ static irqreturn_t switchtec_dma_isr(int irq, void *chan)
 static irqreturn_t switchtec_dma_chan_status_isr(int irq, void *dma)
 {
 	struct switchtec_dma_dev *swdma_dev = dma;
+	struct dma_device *dma_dev = &swdma_dev->dma_dev;
+	struct switchtec_dma_chan *swdma_chan;
+	struct chan_hw_regs __iomem *chan_hw;
+	struct device *chan_dev;
+	struct dma_chan *chan;
+	u32 chan_status;
+	int bit;
 
-	tasklet_schedule(&swdma_dev->chan_status_task);
+	list_for_each_entry(chan, &dma_dev->channels, device_node) {
+		swdma_chan = container_of(chan, struct switchtec_dma_chan,
+					  dma_chan);
+		chan_dev = &swdma_chan->dma_chan.dev->device;
+		chan_hw = swdma_chan->mmio_chan_hw;
 
+		rcu_read_lock();
+		if (!rcu_dereference(swdma_dev->pdev)) {
+			rcu_read_unlock();
+			goto out;
+		}
+
+		chan_status = readl(&chan_hw->status);
+		chan_status &= SWITCHTEC_CHAN_STS_PAUSED_MASK;
+		rcu_read_unlock();
+
+		bit = ffs(chan_status);
+		if (!bit)
+			dev_dbg(chan_dev, "No pause bit set.\n");
+		else
+			dev_err(chan_dev, "Paused, %s\n",
+				channel_status_str[bit - 1]);
+	}
+
+out:
 	return IRQ_HANDLED;
 }
 
@@ -1256,14 +1249,10 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 	if (rc < 0)
 		goto err_exit;
 
-	tasklet_init(&swdma_dev->chan_status_task,
-		     switchtec_dma_chan_status_task,
-		     (unsigned long)swdma_dev);
-
 	irq = readw(swdma_dev->bar + SWITCHTEC_REG_CHAN_STS_VEC);
 	pci_dbg(pdev, "Channel pause irq vector %d\n", irq);
 
-	rc = pci_request_irq(pdev, irq, switchtec_dma_chan_status_isr, NULL,
+	rc = pci_request_irq(pdev, irq, NULL, switchtec_dma_chan_status_isr,
 			     swdma_dev, KBUILD_MODNAME);
 	if (rc)
 		goto err_exit;
@@ -1373,8 +1362,6 @@ static void switchtec_dma_remove(struct pci_dev *pdev)
 	struct switchtec_dma_dev *swdma_dev = pci_get_drvdata(pdev);
 
 	switchtec_dma_chans_release(pdev, swdma_dev);
-
-	tasklet_kill(&swdma_dev->chan_status_task);
 
 	rcu_assign_pointer(swdma_dev->pdev, NULL);
 	synchronize_rcu();
