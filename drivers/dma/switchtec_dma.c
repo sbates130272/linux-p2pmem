@@ -612,13 +612,6 @@ static void switchtec_dma_synchronize(struct dma_chan *chan)
 	spin_unlock_bh(&swdma_chan->complete_lock);
 }
 
-static void switchtec_dma_desc_task(unsigned long data)
-{
-	struct switchtec_dma_chan *swdma_chan = (void *)data;
-
-	switchtec_dma_cleanup_completed(swdma_chan);
-}
-
 static struct dma_async_tx_descriptor *
 switchtec_dma_prep_desc(struct dma_chan *c, u16 dst_fid, dma_addr_t dma_dst,
 			u16 src_fid, dma_addr_t dma_src, u64 data,
@@ -821,6 +814,13 @@ static int switchtec_dma_resume(struct dma_chan *chan)
 unlock_and_exit:
 	rcu_read_unlock();
 	return ret;
+}
+
+static void switchtec_dma_desc_task(unsigned long data)
+{
+	struct switchtec_dma_chan *swdma_chan = (void *)data;
+
+	switchtec_dma_cleanup_completed(swdma_chan);
 }
 
 static irqreturn_t switchtec_dma_isr(int irq, void *chan)
