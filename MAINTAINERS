@@ -24330,6 +24330,7 @@ F:	net/switchdev/
 
 SWITCHTEC DMA DRIVER
 M:	Kelvin Cao <kelvin.cao@microchip.com>
+M:	Logan Gunthorpe <logang@deltatee.com>
 L:	dmaengine@vger.kernel.org
 S:	Maintained
 F:	drivers/dma/switchtec_dma.c
