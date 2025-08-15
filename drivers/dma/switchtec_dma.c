@@ -435,7 +435,7 @@ switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 
 		cid = le16_to_cpu(ce->cid);
 		se_idx = cid & (SWITCHTEC_DMA_SQ_SIZE - 1);
-		desc = swdma_chan->desc_ring[i];
+		desc = swdma_chan->desc_ring[se_idx];
 
 		tail = swdma_chan->tail;
 
