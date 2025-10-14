@@ -1277,7 +1277,7 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 	swdma_dev->chan_cnt = chan_cnt;
 
 	dma = &swdma_dev->dma_dev;
-	dma->copy_align = DMAENGINE_ALIGN_1_BYTE;
+	dma->copy_align = DMAENGINE_ALIGN_8_BYTES;
 	dma_cap_set(DMA_MEMCPY, dma->cap_mask);
 	dma_cap_set(DMA_PRIVATE, dma->cap_mask);
 	dma->dev = get_device(&pdev->dev);
