@@ -14,12 +14,6 @@
 
 #include "../dmaengine.h"
 
-struct ioat_sysfs_entry {
-	struct attribute attr;
-	ssize_t (*show)(struct dma_chan *, char *);
-	ssize_t (*store)(struct dma_chan *, const char *, size_t);
-};
-
 static ssize_t cap_show(struct dma_chan *c, char *page)
 {
 	struct dma_device *dma = c->device;
@@ -32,7 +26,7 @@ static ssize_t cap_show(struct dma_chan *c, char *page)
 		       dma_has_cap(DMA_INTERRUPT, dma->cap_mask) ? " intr" : "");
 
 }
-static const struct ioat_sysfs_entry ioat_cap_attr = __ATTR_RO(cap);
+static const struct dma_chan_sysfs_entry ioat_cap_attr = __ATTR_RO(cap);
 
 static ssize_t version_show(struct dma_chan *c, char *page)
 {
@@ -42,77 +36,7 @@ static ssize_t version_show(struct dma_chan *c, char *page)
 	return sprintf(page, "%d.%d\n",
 		       ioat_dma->version >> 4, ioat_dma->version & 0xf);
 }
-static const struct ioat_sysfs_entry ioat_version_attr = __ATTR_RO(version);
-
-static ssize_t
-ioat_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
-{
-	const struct ioat_sysfs_entry *entry;
-	struct ioatdma_chan *ioat_chan;
-
-	entry = container_of_const(attr, struct ioat_sysfs_entry, attr);
-	ioat_chan = container_of(kobj, struct ioatdma_chan, kobj);
-
-	if (!entry->show)
-		return -EIO;
-	return entry->show(&ioat_chan->dma_chan, page);
-}
-
-static ssize_t
-ioat_attr_store(struct kobject *kobj, struct attribute *attr,
-const char *page, size_t count)
-{
-	const struct ioat_sysfs_entry *entry;
-	struct ioatdma_chan *ioat_chan;
-
-	entry = container_of_const(attr, struct ioat_sysfs_entry, attr);
-	ioat_chan = container_of(kobj, struct ioatdma_chan, kobj);
-
-	if (!entry->store)
-		return -EIO;
-	return entry->store(&ioat_chan->dma_chan, page, count);
-}
-
-static const struct sysfs_ops ioat_sysfs_ops = {
-	.show	= ioat_attr_show,
-	.store  = ioat_attr_store,
-};
-
-void ioat_kobject_add(struct ioatdma_device *ioat_dma, const struct kobj_type *type)
-{
-	struct dma_device *dma = &ioat_dma->dma_dev;
-	struct dma_chan *c;
-
-	list_for_each_entry(c, &dma->channels, device_node) {
-		struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
-		struct kobject *parent = &c->dev->device.kobj;
-		int err;
-
-		err = kobject_init_and_add(&ioat_chan->kobj, type,
-					   parent, "quickdata");
-		if (err) {
-			dev_warn(to_dev(ioat_chan),
-				 "sysfs init error (%d), continuing...\n", err);
-			kobject_put(&ioat_chan->kobj);
-			set_bit(IOAT_KOBJ_INIT_FAIL, &ioat_chan->state);
-		}
-	}
-}
-
-void ioat_kobject_del(struct ioatdma_device *ioat_dma)
-{
-	struct dma_device *dma = &ioat_dma->dma_dev;
-	struct dma_chan *c;
-
-	list_for_each_entry(c, &dma->channels, device_node) {
-		struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
-
-		if (!test_bit(IOAT_KOBJ_INIT_FAIL, &ioat_chan->state)) {
-			kobject_del(&ioat_chan->kobj);
-			kobject_put(&ioat_chan->kobj);
-		}
-	}
-}
+static const struct dma_chan_sysfs_entry ioat_version_attr = __ATTR_RO(version);
 
 static ssize_t ring_size_show(struct dma_chan *c, char *page)
 {
@@ -120,7 +44,7 @@ static ssize_t ring_size_show(struct dma_chan *c, char *page)
 
 	return sprintf(page, "%d\n", (1 << ioat_chan->alloc_order) & ~1);
 }
-static const struct ioat_sysfs_entry ring_size_attr = __ATTR_RO(ring_size);
+static const struct dma_chan_sysfs_entry ring_size_attr = __ATTR_RO(ring_size);
 
 static ssize_t ring_active_show(struct dma_chan *c, char *page)
 {
@@ -129,7 +53,7 @@ static ssize_t ring_active_show(struct dma_chan *c, char *page)
 	/* ...taken outside the lock, no need to be precise */
 	return sprintf(page, "%d\n", ioat_ring_active(ioat_chan));
 }
-static const struct ioat_sysfs_entry ring_active_attr = __ATTR_RO(ring_active);
+static const struct dma_chan_sysfs_entry ring_active_attr = __ATTR_RO(ring_active);
 
 static ssize_t intr_coalesce_show(struct dma_chan *c, char *page)
 {
@@ -154,7 +78,7 @@ size_t count)
 	return count;
 }
 
-static const struct ioat_sysfs_entry intr_coalesce_attr = __ATTR_RW(intr_coalesce);
+static const struct dma_chan_sysfs_entry intr_coalesce_attr = __ATTR_RW(intr_coalesce);
 
 static const struct attribute *const ioat_attrs[] = {
 	&ring_size_attr.attr,
@@ -167,6 +91,6 @@ static const struct attribute *const ioat_attrs[] = {
 ATTRIBUTE_GROUPS(ioat);
 
 const struct kobj_type ioat_ktype = {
-	.sysfs_ops = &ioat_sysfs_ops,
+	.sysfs_ops = &dma_chan_sysfs_ops,
 	.default_groups = ioat_groups,
 };

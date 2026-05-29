@@ -541,8 +541,6 @@ static void ioat_dma_remove(struct ioatdma_device *ioat_dma)
 
 	ioat_disable_interrupts(ioat_dma);
 
-	ioat_kobject_del(ioat_dma);
-
 	dma_async_device_unregister(dma);
 }
 
@@ -1174,7 +1172,7 @@ static int ioat3_dma_probe(struct ioatdma_device *ioat_dma, int dca)
 	if (err)
 		goto err_disable_interrupts;
 
-	ioat_kobject_add(ioat_dma, &ioat_ktype);
+	dma_chan_kobject_add(&ioat_dma->dma_dev, &ioat_ktype, "quickdata");
 
 	if (dca)
 		ioat_dma->dca = ioat_dca_init(pdev, ioat_dma->reg_base);
