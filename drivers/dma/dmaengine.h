@@ -182,6 +182,17 @@ dmaengine_desc_callback_valid(struct dmaengine_desc_callback *cb)
 struct dma_chan *dma_get_slave_channel(struct dma_chan *chan);
 struct dma_chan *dma_get_any_slave_channel(struct dma_device *device);
 
+struct dma_chan_sysfs_entry {
+	struct attribute attr;
+	ssize_t (*show)(struct dma_chan *chan, char *page);
+	ssize_t (*store)(struct dma_chan *chan, const char *page, size_t count);
+};
+
+extern const struct sysfs_ops dma_chan_sysfs_ops;
+
+void dma_chan_kobject_add(struct dma_device *dev, const struct kobj_type *type,
+			  const char *name);
+
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 

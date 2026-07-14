@@ -358,6 +358,9 @@ struct dma_chan {
 	struct dma_router *router;
 	void *route_data;
 
+	bool kobj_used;
+	struct kobject kobj;
+
 	void *private;
 };
 
@@ -860,6 +863,13 @@ struct dma_filter {
  *     called and there are no further references to this structure. This
  *     must be implemented to free resources however many existing drivers
  *     do not and are therefore not safe to unbind while in use.
+ * @device_chan_kobj_gone: called, if non-NULL, immediately before a
+ *     dropped reference to chan->kobj may invoke the kobj_type's release()
+ *     and free the structure containing chan. Only relevant to drivers
+ *     that use dma_chan_kobject_add() and whose kobj_type release()
+ *     callback frees that structure; such a driver's own per-channel
+ *     bookkeeping (e.g. an index array) must be updated here, since chan
+ *     must not be dereferenced again afterwards.
  * @dbg_summary_show: optional routine to show contents in debugfs; default code
  *     will be used when this is omitted, but custom code can show extra,
  *     controller specific information.
@@ -954,6 +964,7 @@ struct dma_device {
 					    struct dma_tx_state *txstate);
 	void (*device_issue_pending)(struct dma_chan *chan);
 	void (*device_release)(struct dma_device *dev);
+	void (*device_chan_kobj_gone)(struct dma_chan *chan);
 	/* debugfs support */
 	void (*dbg_summary_show)(struct seq_file *s, struct dma_device *dev);
 	struct dentry *dbg_dev_root;

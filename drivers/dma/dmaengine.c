@@ -143,6 +143,81 @@ static inline int dmaengine_debug_register(struct dma_device *dma_dev)
 static inline void dmaengine_debug_unregister(struct dma_device *dma_dev) { }
 #endif	/* DEBUG_FS */
 
+/* --- driver specific sysfs attributes --- */
+
+static ssize_t
+dma_chan_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
+{
+	const struct dma_chan_sysfs_entry *entry;
+	struct dma_chan *dma_chan;
+
+	entry = container_of_const(attr, struct dma_chan_sysfs_entry, attr);
+	dma_chan = container_of(kobj, struct dma_chan, kobj);
+
+	if (!entry->show)
+		return -EIO;
+
+	return entry->show(dma_chan, page);
+}
+
+static ssize_t
+dma_chan_attr_store(struct kobject *kobj, struct attribute *attr,
+		    const char *page, size_t count)
+{
+	const struct dma_chan_sysfs_entry *entry;
+	struct dma_chan *dma_chan;
+
+	entry = container_of_const(attr, struct dma_chan_sysfs_entry, attr);
+	dma_chan = container_of(kobj, struct dma_chan, kobj);
+
+	if (!entry->store)
+		return -EIO;
+
+	return entry->store(dma_chan, page, count);
+}
+
+const struct sysfs_ops dma_chan_sysfs_ops = {
+	.show = dma_chan_attr_show,
+	.store = dma_chan_attr_store,
+};
+EXPORT_SYMBOL_GPL(dma_chan_sysfs_ops);
+
+void dma_chan_kobject_add(struct dma_device *dev, const struct kobj_type *type,
+			  const char *name)
+{
+	struct dma_chan *chan, *n;
+	int err;
+
+	list_for_each_entry_safe(chan, n, &dev->channels, device_node) {
+		chan->kobj_used = true;
+		err = kobject_init_and_add(&chan->kobj, type,
+					   &chan->dev->device.kobj, "%s", name);
+		if (err) {
+			chan->kobj_used = false;
+			dev_warn(dev->dev,
+				 "sysfs init error(%d), removing channel %s\n",
+				 err, dma_chan_name(chan));
+
+			mutex_lock(&dma_list_mutex);
+			list_del(&chan->device_node);
+			dev->chancnt--;
+			mutex_unlock(&dma_list_mutex);
+
+			if (dev->device_chan_kobj_gone)
+				dev->device_chan_kobj_gone(chan);
+			/*
+			 * kobject_init_and_add() has already called
+			 * kobject_init(), so this kobject_put() may invoke
+			 * the ktype's release() and free the structure
+			 * containing chan. Nothing below this point, nor
+			 * the next loop iteration, may dereference chan.
+			 */
+			kobject_put(&chan->kobj);
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(dma_chan_kobject_add);
+
 /* --- sysfs implementation --- */
 
 #define DMA_SLAVE_NAME	"slave"
@@ -1140,19 +1215,38 @@ EXPORT_SYMBOL_GPL(dma_async_device_channel_register);
 static void __dma_async_device_channel_unregister(struct dma_device *device,
 						  struct dma_chan *chan)
 {
-	if (chan->local == NULL)
+	struct dma_chan_dev *chan_dev = chan->dev;
+	struct dma_chan_percpu __percpu *chan_local = chan->local;
+	int chan_id = chan->chan_id;
+
+	if (!chan_local)
 		return;
 
 	WARN_ONCE(!device->device_release && chan->client_count,
 		  "%s called while %d clients hold a reference\n",
 		  __func__, chan->client_count);
+
 	mutex_lock(&dma_list_mutex);
+	list_del(&chan->device_node);
 	device->chancnt--;
-	chan->dev->chan = NULL;
+	chan_dev->chan = NULL;
 	mutex_unlock(&dma_list_mutex);
-	ida_free(&device->chan_ida, chan->chan_id);
-	device_unregister(&chan->dev->device);
-	free_percpu(chan->local);
+
+	if (chan->kobj_used) {
+		kobject_del(&chan->kobj);
+		if (device->device_chan_kobj_gone)
+			device->device_chan_kobj_gone(chan);
+		/*
+		 * This may invoke the ktype's release() and free the
+		 * structure containing chan; nothing below this point may
+		 * dereference chan.
+		 */
+		kobject_put(&chan->kobj);
+	}
+
+	ida_free(&device->chan_ida, chan_id);
+	device_unregister(&chan_dev->device);
+	free_percpu(chan_local);
 }
 
 void dma_async_device_channel_unregister(struct dma_device *device,
