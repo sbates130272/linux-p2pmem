@@ -90,7 +90,16 @@ static const struct attribute *const ioat_attrs[] = {
 };
 ATTRIBUTE_GROUPS(ioat);
 
+static void ioat_chan_release(struct kobject *kobj)
+{
+	struct dma_chan *c = container_of(kobj, struct dma_chan, kobj);
+	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
+
+	kfree(ioat_chan);
+}
+
 const struct kobj_type ioat_ktype = {
 	.sysfs_ops = &dma_chan_sysfs_ops,
 	.default_groups = ioat_groups,
+	.release = ioat_chan_release,
 };
