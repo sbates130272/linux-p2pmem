@@ -1327,6 +1327,20 @@ static void release_ioatdma(struct dma_device *device)
 	kfree(d);
 }
 
+static void ioat_chan_kobj_gone(struct dma_chan *c)
+{
+	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
+	struct ioatdma_device *ioat_dma = ioat_chan->ioat_dma;
+	int i;
+
+	for (i = 0; i < IOAT_MAX_CHANS; i++) {
+		if (ioat_dma->idx[i] == ioat_chan) {
+			ioat_dma->idx[i] = NULL;
+			break;
+		}
+	}
+}
+
 static struct ioatdma_device *
 alloc_ioatdma(struct pci_dev *pdev, void __iomem *iobase)
 {
@@ -1337,6 +1351,7 @@ alloc_ioatdma(struct pci_dev *pdev, void __iomem *iobase)
 	d->pdev = pdev;
 	d->reg_base = iobase;
 	d->dma_dev.device_release = release_ioatdma;
+	d->dma_dev.device_chan_kobj_gone = ioat_chan_kobj_gone;
 	return d;
 }
 
