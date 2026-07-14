@@ -132,6 +132,8 @@ struct switchtec_dma_chan {
 
 	/* Serialize hardware control register access */
 	spinlock_t hw_ctrl_lock;
+	/* Set while the channel is allocated to a client; blocks sysfs hw config changes */
+	bool hw_cfg_locked;
 
 	struct tasklet_struct desc_task;
 
@@ -1024,13 +1026,180 @@ static int switchtec_dma_alloc_chan_resources(struct dma_chan *chan)
 	dev_dbg(&chan->dev->device, "MRRS:        0x%x\n",
 		FIELD_GET(PERF_MRRS_MASK, perf_cfg));
 
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	swdma_chan->hw_cfg_locked = true;
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
 	return SWITCHTEC_DMA_SQ_SIZE;
 }
+
+static __always_inline ssize_t perf_cfg_show(struct dma_chan *chan, char *page,
+					     unsigned int mask)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_fw_regs __iomem *chan_fw = swdma_chan->mmio_chan_fw;
+	u32 perf_cfg;
+	int value;
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+
+	perf_cfg = readl(&chan_fw->perf_cfg);
+	value = field_get(mask, perf_cfg);
+
+	rcu_read_unlock();
+	return sprintf(page, "0x%x\n", value);
+}
+
+static __always_inline ssize_t perf_cfg_store(struct dma_chan *chan,
+		const char *page, size_t count, unsigned int mask)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_fw_regs __iomem *chan_fw = swdma_chan->mmio_chan_fw;
+	ssize_t ret = count;
+	u32 perf_cfg;
+	int value;
+
+	if (kstrtoint(page, 0, &value) < 0)
+		return -EINVAL;
+
+	if (value < 0 || value > field_max(mask))
+		return -EINVAL;
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		ret = -ENODEV;
+		goto err_unlock;
+	}
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	if (swdma_chan->hw_cfg_locked) {
+		spin_unlock(&swdma_chan->hw_ctrl_lock);
+		ret = -EBUSY;
+		goto err_unlock;
+	}
+
+	perf_cfg = readl(&chan_fw->perf_cfg);
+	perf_cfg = (perf_cfg & ~mask) | field_prep(mask, value);
+	writel(perf_cfg, &chan_fw->perf_cfg);
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
+err_unlock:
+	rcu_read_unlock();
+	return ret;
+}
+
+static ssize_t burst_scale_show(struct dma_chan *chan, char *page)
+{
+	return perf_cfg_show(chan, page, PERF_BURST_SCALE_MASK);
+}
+
+static ssize_t burst_scale_store(struct dma_chan *chan, const char *page,
+				 size_t count)
+{
+	return perf_cfg_store(chan, page, count, PERF_BURST_SCALE_MASK);
+}
+
+static struct dma_chan_sysfs_entry burst_scale_attr = __ATTR_RW(burst_scale);
+
+static ssize_t mrrs_show(struct dma_chan *chan, char *page)
+{
+	return perf_cfg_show(chan, page, PERF_MRRS_MASK);
+}
+
+static ssize_t mrrs_store(struct dma_chan *chan, const char *page,
+				 size_t count)
+{
+	return perf_cfg_store(chan, page, count, PERF_MRRS_MASK);
+}
+
+static struct dma_chan_sysfs_entry mrrs_attr = __ATTR_RW(mrrs);
+
+static ssize_t interval_show(struct dma_chan *chan, char *page)
+{
+	return perf_cfg_show(chan, page, PERF_INTERVAL_MASK);
+}
+
+static ssize_t interval_store(struct dma_chan *chan, const char *page,
+				 size_t count)
+{
+	return perf_cfg_store(chan, page, count, PERF_INTERVAL_MASK);
+}
+
+static struct dma_chan_sysfs_entry interval_attr = __ATTR_RW(interval);
+
+static ssize_t burst_size_show(struct dma_chan *chan, char *page)
+{
+	return perf_cfg_show(chan, page, PERF_BURST_SIZE_MASK);
+}
+
+static ssize_t burst_size_store(struct dma_chan *chan, const char *page,
+				size_t count)
+{
+	return perf_cfg_store(chan, page, count, PERF_BURST_SIZE_MASK);
+}
+
+static struct dma_chan_sysfs_entry burst_size_attr = __ATTR_RW(burst_size);
+
+static ssize_t arb_weight_show(struct dma_chan *chan, char *page)
+{
+	return perf_cfg_show(chan, page, PERF_ARB_WEIGHT_MASK);
+}
+
+static ssize_t arb_weight_store(struct dma_chan *chan, const char *page,
+				 size_t count)
+{
+	return perf_cfg_store(chan, page, count, PERF_ARB_WEIGHT_MASK);
+}
+
+static struct dma_chan_sysfs_entry arb_weight_attr = __ATTR_RW(arb_weight);
+
+static struct attribute *switchtec_config_attrs[] = {
+	&burst_scale_attr.attr,
+	&mrrs_attr.attr,
+	&interval_attr.attr,
+	&burst_size_attr.attr,
+	&arb_weight_attr.attr,
+	NULL
+};
+
+static struct attribute_group switchtec_config_group = {
+	.attrs = switchtec_config_attrs,
+};
+
+static const struct attribute_group *switchtec_groups[] = {
+	&switchtec_config_group,
+	NULL,
+};
+
+static void switchtec_dma_chan_release(struct kobject *kobj)
+{
+	struct dma_chan *chan = container_of(kobj, struct dma_chan, kobj);
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+
+	kfree(swdma_chan);
+}
+
+static const struct kobj_type switchtec_ktype = {
+	.sysfs_ops = &dma_chan_sysfs_ops,
+	.default_groups = switchtec_groups,
+	.release = switchtec_dma_chan_release,
+};
 
 static void switchtec_dma_free_chan_resources(struct dma_chan *chan)
 {
 	struct switchtec_dma_chan *swdma_chan =
 		container_of(chan, struct switchtec_dma_chan, dma_chan);
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	swdma_chan->hw_cfg_locked = false;
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
 
 	spin_lock_bh(&swdma_chan->submit_lock);
 	swdma_chan->ring_active = false;
@@ -1294,6 +1463,8 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 		pci_err(pdev, "Failed to register dma device: %d\n", rc);
 		goto err_chans_release_exit;
 	}
+
+	dma_chan_kobject_add(dma, &switchtec_ktype, "switchtec");
 
 	pci_dbg(pdev, "Channel count: %d\n", chan_cnt);
 
