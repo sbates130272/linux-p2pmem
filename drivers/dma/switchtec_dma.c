@@ -1212,6 +1212,14 @@ static void switchtec_dma_release(struct dma_device *dma_dev)
 	kfree(swdma_dev);
 }
 
+static void switchtec_dma_chan_kobj_gone(struct dma_chan *chan)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+
+	swdma_chan->swdma_dev->swdma_chans[swdma_chan->index] = NULL;
+}
+
 static int switchtec_dma_create(struct pci_dev *pdev)
 {
 	struct switchtec_dma_dev *swdma_dev;
@@ -1279,6 +1287,7 @@ static int switchtec_dma_create(struct pci_dev *pdev)
 	dma->device_terminate_all = switchtec_dma_terminate_all;
 	dma->device_synchronize = switchtec_dma_synchronize;
 	dma->device_release = switchtec_dma_release;
+	dma->device_chan_kobj_gone = switchtec_dma_chan_kobj_gone;
 
 	rc = dma_async_device_register(dma);
 	if (rc) {
