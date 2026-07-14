@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
+#include <linux/io-64-nonatomic-lo-hi.h>
 
 #include "dmaengine.h"
 
@@ -90,6 +91,12 @@ struct chan_hw_regs {
 #define SE_BUF_BASE_MASK	GENMASK_U32(10,  2)
 #define SE_BUF_LEN_MASK		GENMASK_U32(20, 12)
 #define SE_THRESH_MASK		GENMASK_U32(31, 23)
+
+#define SWITCHTEC_LAT_SE_FETCH   BIT(0)
+#define SWITCHTEC_LAT_VDM        BIT(1)
+#define SWITCHTEC_LAT_RD_IMM     BIT(2)
+#define SWITCHTEC_LAT_FW_NP      BIT(3)
+#define SWITCHTEC_LAT_SE_PROCESS BIT(4)
 
 #define SWITCHTEC_CHAN_ENABLE	BIT(1)
 
@@ -1172,8 +1179,212 @@ static struct attribute_group switchtec_config_group = {
 	.attrs = switchtec_config_attrs,
 };
 
+#define pmon_show(chan, page, field, reader) ({				     \
+	struct switchtec_dma_chan *__swdma_chan =			     \
+		container_of((chan), struct switchtec_dma_chan, dma_chan);   \
+	struct chan_fw_regs __iomem *__chan_fw = __swdma_chan->mmio_chan_fw; \
+	u64 __pmon_val = 0;						     \
+	int __pmon_ret = 0;						     \
+									     \
+	rcu_read_lock();						     \
+	if (!rcu_dereference(__swdma_chan->swdma_dev->pdev)) {		     \
+		__pmon_ret = -ENODEV;					     \
+	} else {							     \
+		__pmon_val = reader(&__chan_fw->field);			     \
+		__pmon_ret = sysfs_emit((page), "0x%llx\n", __pmon_val);     \
+	}								     \
+	rcu_read_unlock();						     \
+	__pmon_ret;							     \
+})
+
+static ssize_t se_count_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_fetched_se_cnt_lo, lo_hi_readq);
+}
+
+static struct dma_chan_sysfs_entry se_count_attr = __ATTR_RO(se_count);
+
+static ssize_t byte_count_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_byte_cnt_lo, lo_hi_readq);
+}
+
+static struct dma_chan_sysfs_entry byte_count_attr = __ATTR_RO(byte_count);
+
+static ssize_t se_pending_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_se_pending, readw);
+}
+
+static struct dma_chan_sysfs_entry se_pending_attr = __ATTR_RO(se_pending);
+
+static ssize_t se_buf_empty_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_se_buf_empty, readw);
+}
+
+static struct dma_chan_sysfs_entry se_buf_empty_attr = __ATTR_RO(se_buf_empty);
+
+static ssize_t chan_idle_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_chan_idle, readl);
+}
+
+static struct dma_chan_sysfs_entry chan_idle_attr = __ATTR_RO(chan_idle);
+
+static ssize_t latency_max_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_lat_max, readl);
+}
+
+static struct dma_chan_sysfs_entry latency_max_attr = __ATTR_RO(latency_max);
+
+static ssize_t latency_min_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_lat_min, readl);
+}
+
+static struct dma_chan_sysfs_entry latency_min_attr = __ATTR_RO(latency_min);
+
+static ssize_t latency_last_show(struct dma_chan *chan, char *page)
+{
+	return pmon_show(chan, page, perf_lat_last, readl);
+}
+
+static struct dma_chan_sysfs_entry latency_last_attr = __ATTR_RO(latency_last);
+
+static ssize_t latency_selector_show(struct dma_chan *chan, char *page)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_fw_regs __iomem *chan_fw = swdma_chan->mmio_chan_fw;
+	u32 lat = 0;
+	int len;
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+
+	lat = readl(&chan_fw->perf_latency_selector);
+	rcu_read_unlock();
+
+	len = sysfs_emit(page,
+			 "To select a latency type, write the type number (1 ~ 5) to latency_selector\n\n");
+
+	len += sysfs_emit_at(page, len, "Latency Types:\n");
+	len += sysfs_emit_at(page, len, "(1) SE Fetch latency");
+	if (lat & SWITCHTEC_LAT_SE_FETCH)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(2) VDM latency");
+	if (lat & SWITCHTEC_LAT_VDM)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(3) Read Immediate latency");
+	if (lat & SWITCHTEC_LAT_RD_IMM)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(4) SE Processing latency");
+	if (lat & SWITCHTEC_LAT_SE_PROCESS)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(5) FW NP TLP latency");
+	if (lat & SWITCHTEC_LAT_FW_NP)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	return len;
+}
+
+static ssize_t latency_selector_store(struct dma_chan *chan, const char *page,
+				      size_t count)
+{
+	struct switchtec_dma_chan *swdma_chan =
+		container_of(chan, struct switchtec_dma_chan, dma_chan);
+	struct chan_fw_regs __iomem *chan_fw = swdma_chan->mmio_chan_fw;
+	ssize_t ret = count;
+	int lat_type;
+
+	if (kstrtoint(page, 0, &lat_type) < 0)
+		return -EINVAL;
+
+	switch (lat_type) {
+	case 1:
+		lat_type = SWITCHTEC_LAT_SE_FETCH;
+		break;
+	case 2:
+		lat_type = SWITCHTEC_LAT_VDM;
+		break;
+	case 3:
+		lat_type = SWITCHTEC_LAT_RD_IMM;
+		break;
+	case 4:
+		lat_type = SWITCHTEC_LAT_SE_PROCESS;
+		break;
+	case 5:
+		lat_type = SWITCHTEC_LAT_FW_NP;
+		break;
+	default:
+		return -EINVAL;
+	};
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		ret = -ENODEV;
+		goto err_unlock;
+	}
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	if (swdma_chan->hw_cfg_locked) {
+		spin_unlock(&swdma_chan->hw_ctrl_lock);
+		ret = -EBUSY;
+		goto err_unlock;
+	}
+
+	writel(lat_type, &chan_fw->perf_latency_selector);
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
+err_unlock:
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static struct dma_chan_sysfs_entry
+latency_selector_attr = __ATTR_RW(latency_selector);
+
+static struct attribute *switchtec_pmon_attrs[] = {
+	&se_count_attr.attr,
+	&byte_count_attr.attr,
+	&se_pending_attr.attr,
+	&se_buf_empty_attr.attr,
+	&chan_idle_attr.attr,
+	&latency_max_attr.attr,
+	&latency_min_attr.attr,
+	&latency_last_attr.attr,
+	&latency_selector_attr.attr,
+	NULL,
+};
+
+static struct attribute_group switchtec_pmon_group = {
+	.name = "pmon",
+	.attrs = switchtec_pmon_attrs,
+};
+
 static const struct attribute_group *switchtec_groups[] = {
 	&switchtec_config_group,
+	&switchtec_pmon_group,
 	NULL,
 };
 
