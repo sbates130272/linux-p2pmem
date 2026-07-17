@@ -103,7 +103,6 @@ struct ioatdma_chan {
 	#define IOAT_CHAN_DOWN 0
 	#define IOAT_COMPLETION_ACK 1
 	#define IOAT_RESET_PENDING 2
-	#define IOAT_KOBJ_INIT_FAIL 3
 	#define IOAT_RUN 5
 	#define IOAT_CHAN_ACTIVE 6
 	struct timer_list timer;
@@ -112,7 +111,6 @@ struct ioatdma_chan {
 	dma_addr_t completion_dma;
 	u64 *completion;
 	struct tasklet_struct cleanup_task;
-	struct kobject kobj;
 
 /* ioat v2 / v3 channel attributes
  * @xfercap_log; log2 of channel max transfer length (for fast division)
@@ -190,7 +188,7 @@ struct ioat_ring_ent {
 };
 
 extern int ioat_pending_level;
-extern const struct kobj_type ioat_ktype;
+extern const struct attribute_group *ioat_groups[];
 extern struct kmem_cache *ioat_cache;
 extern struct kmem_cache *ioat_sed_cache;
 
@@ -393,8 +391,6 @@ void ioat_issue_pending(struct dma_chan *chan);
 /* IOAT Init functions */
 bool is_bwd_ioat(struct pci_dev *pdev);
 struct dca_provider *ioat_dca_init(struct pci_dev *pdev, void __iomem *iobase);
-void ioat_kobject_add(struct ioatdma_device *ioat_dma, const struct kobj_type *type);
-void ioat_kobject_del(struct ioatdma_device *ioat_dma);
 int ioat_dma_setup_interrupts(struct ioatdma_device *ioat_dma);
 void ioat_stop(struct ioatdma_chan *ioat_chan);
 #endif /* IOATDMA_H */
