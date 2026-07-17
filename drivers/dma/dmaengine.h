@@ -182,6 +182,25 @@ dmaengine_desc_callback_valid(struct dmaengine_desc_callback *cb)
 struct dma_chan *dma_get_slave_channel(struct dma_chan *chan);
 struct dma_chan *dma_get_any_slave_channel(struct dma_device *device);
 
+/*
+ * dma_chan_from_dev_lock() / dma_chan_from_dev_unlock() bracket a critical
+ * section across which a channel's struct device can be safely converted
+ * back to its struct dma_chan: dma_chan_from_dev_lock() returns NULL if the
+ * channel has already been unregistered, and the lock it takes must be held
+ * for as long as the returned channel (or anything derived from it) is
+ * accessed.
+ *
+ * Use these through the dma_chan_from_dev CLASS below rather than calling
+ * them directly.
+ */
+struct dma_chan *dma_chan_from_dev_lock(struct device *dev);
+void dma_chan_from_dev_unlock(struct dma_chan *chan);
+
+DEFINE_CLASS(dma_chan_from_dev, struct dma_chan *,
+	     dma_chan_from_dev_unlock(_T),
+	     dma_chan_from_dev_lock(dev),
+	     struct device *dev)
+
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 

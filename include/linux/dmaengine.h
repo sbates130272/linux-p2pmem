@@ -803,6 +803,9 @@ struct dma_filter {
  * @dev: struct device reference for dma mapping api
  * @owner: owner module (automatically set based on the provided dev)
  * @chan_ida: unique channel ID
+ * @chan_groups: optional NULL-terminated array of sysfs attribute groups
+ *	added to each channel's struct device, for driver-specific per-channel
+ *	attributes
  * @src_addr_widths: bit mask of src addr widths the device supports
  *	Width is specified in bytes, e.g. for a device supporting
  *	a width of 4 the mask should have BIT(4) set.
@@ -886,6 +889,7 @@ struct dma_device {
 	struct device *dev;
 	struct module *owner;
 	struct ida chan_ida;
+	const struct attribute_group **chan_groups;
 
 	u32 src_addr_widths;
 	u32 dst_addr_widths;
