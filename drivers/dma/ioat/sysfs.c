@@ -14,134 +14,95 @@
 
 #include "../dmaengine.h"
 
-struct ioat_sysfs_entry {
-	struct attribute attr;
-	ssize_t (*show)(struct dma_chan *, char *);
-	ssize_t (*store)(struct dma_chan *, const char *, size_t);
-};
-
-static ssize_t cap_show(struct dma_chan *c, char *page)
+static ssize_t cap_show(struct device *dev, struct device_attribute *attr,
+			char *page)
 {
-	struct dma_device *dma = c->device;
+	struct dma_device *dma;
 
+	CLASS(dma_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
+	dma = c->device;
 	return sysfs_emit(page, "copy%s%s%s%s%s\n",
 		dma_has_cap(DMA_PQ, dma->cap_mask) ? " pq" : "",
 		dma_has_cap(DMA_PQ_VAL, dma->cap_mask) ? " pq_val" : "",
 		dma_has_cap(DMA_XOR, dma->cap_mask) ? " xor" : "",
 		dma_has_cap(DMA_XOR_VAL, dma->cap_mask) ? " xor_val" : "",
 		dma_has_cap(DMA_INTERRUPT, dma->cap_mask) ? " intr" : "");
-
 }
-static const struct ioat_sysfs_entry ioat_cap_attr = __ATTR_RO(cap);
+static DEVICE_ATTR_RO(cap);
 
-static ssize_t version_show(struct dma_chan *c, char *page)
+static ssize_t version_show(struct device *dev, struct device_attribute *attr,
+			    char *page)
 {
-	struct dma_device *dma = c->device;
-	struct ioatdma_device *ioat_dma = to_ioatdma_device(dma);
+	struct ioatdma_device *ioat_dma;
 
+	CLASS(dma_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
+	ioat_dma = to_ioatdma_device(c->device);
 	return sysfs_emit(page, "%d.%d\n",
 			   ioat_dma->version >> 4, ioat_dma->version & 0xf);
 }
-static const struct ioat_sysfs_entry ioat_version_attr = __ATTR_RO(version);
+static DEVICE_ATTR_RO(version);
 
-static ssize_t
-ioat_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
+static ssize_t ring_size_show(struct device *dev, struct device_attribute *attr,
+			      char *page)
 {
-	const struct ioat_sysfs_entry *entry;
-	struct ioatdma_chan *ioat_chan;
+	CLASS(dma_chan_from_dev, c)(dev);
 
-	entry = container_of_const(attr, struct ioat_sysfs_entry, attr);
-	ioat_chan = container_of(kobj, struct ioatdma_chan, kobj);
+	if (!c)
+		return -ENODEV;
 
-	if (!entry->show)
-		return -EIO;
-	return entry->show(&ioat_chan->dma_chan, page);
-}
-
-static ssize_t
-ioat_attr_store(struct kobject *kobj, struct attribute *attr,
-const char *page, size_t count)
-{
-	const struct ioat_sysfs_entry *entry;
-	struct ioatdma_chan *ioat_chan;
-
-	entry = container_of_const(attr, struct ioat_sysfs_entry, attr);
-	ioat_chan = container_of(kobj, struct ioatdma_chan, kobj);
-
-	if (!entry->store)
-		return -EIO;
-	return entry->store(&ioat_chan->dma_chan, page, count);
-}
-
-static const struct sysfs_ops ioat_sysfs_ops = {
-	.show	= ioat_attr_show,
-	.store  = ioat_attr_store,
-};
-
-void ioat_kobject_add(struct ioatdma_device *ioat_dma, const struct kobj_type *type)
-{
-	struct dma_device *dma = &ioat_dma->dma_dev;
-	struct dma_chan *c;
-
-	list_for_each_entry(c, &dma->channels, device_node) {
-		struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
-		struct kobject *parent = &c->dev->device.kobj;
-		int err;
-
-		err = kobject_init_and_add(&ioat_chan->kobj, type,
-					   parent, "quickdata");
-		if (err) {
-			dev_warn(to_dev(ioat_chan),
-				 "sysfs init error (%d), continuing...\n", err);
-			kobject_put(&ioat_chan->kobj);
-			set_bit(IOAT_KOBJ_INIT_FAIL, &ioat_chan->state);
-		}
-	}
-}
-
-void ioat_kobject_del(struct ioatdma_device *ioat_dma)
-{
-	struct dma_device *dma = &ioat_dma->dma_dev;
-	struct dma_chan *c;
-
-	list_for_each_entry(c, &dma->channels, device_node) {
-		struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
-
-		if (!test_bit(IOAT_KOBJ_INIT_FAIL, &ioat_chan->state)) {
-			kobject_del(&ioat_chan->kobj);
-			kobject_put(&ioat_chan->kobj);
-		}
-	}
-}
-
-static ssize_t ring_size_show(struct dma_chan *c, char *page)
-{
 	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
 
 	return sysfs_emit(page, "%d\n", (1 << ioat_chan->alloc_order) & ~1);
 }
-static const struct ioat_sysfs_entry ring_size_attr = __ATTR_RO(ring_size);
+static DEVICE_ATTR_RO(ring_size);
 
-static ssize_t ring_active_show(struct dma_chan *c, char *page)
+static ssize_t ring_active_show(struct device *dev,
+				struct device_attribute *attr, char *page)
 {
+	CLASS(dma_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
 	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
 
 	/* ...taken outside the lock, no need to be precise */
 	return sysfs_emit(page, "%d\n", ioat_ring_active(ioat_chan));
 }
-static const struct ioat_sysfs_entry ring_active_attr = __ATTR_RO(ring_active);
+static DEVICE_ATTR_RO(ring_active);
 
-static ssize_t intr_coalesce_show(struct dma_chan *c, char *page)
+static ssize_t intr_coalesce_show(struct device *dev,
+				  struct device_attribute *attr, char *page)
 {
+	CLASS(dma_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
 	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
 
 	return sysfs_emit(page, "%d\n", ioat_chan->intr_coalesce);
 }
 
-static ssize_t intr_coalesce_store(struct dma_chan *c, const char *page,
-size_t count)
+static ssize_t intr_coalesce_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *page, size_t count)
 {
 	int intr_coalesce = 0;
+
+	CLASS(dma_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
 	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
 
 	if (sscanf(page, "%du", &intr_coalesce) != -1) {
@@ -153,20 +114,23 @@ size_t count)
 
 	return count;
 }
+static DEVICE_ATTR_RW(intr_coalesce);
 
-static const struct ioat_sysfs_entry intr_coalesce_attr = __ATTR_RW(intr_coalesce);
-
-static const struct attribute *const ioat_attrs[] = {
-	&ring_size_attr.attr,
-	&ring_active_attr.attr,
-	&ioat_cap_attr.attr,
-	&ioat_version_attr.attr,
-	&intr_coalesce_attr.attr,
+static struct attribute *ioat_attrs[] = {
+	&dev_attr_ring_size.attr,
+	&dev_attr_ring_active.attr,
+	&dev_attr_cap.attr,
+	&dev_attr_version.attr,
+	&dev_attr_intr_coalesce.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(ioat);
 
-const struct kobj_type ioat_ktype = {
-	.sysfs_ops = &ioat_sysfs_ops,
-	.default_groups = ioat_groups,
+static const struct attribute_group ioat_attr_group = {
+	.name = "quickdata",
+	.attrs = ioat_attrs,
+};
+
+const struct attribute_group *ioat_groups[] = {
+	&ioat_attr_group,
+	NULL,
 };
