@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/iopoll.h>
+#include <linux/io-64-nonatomic-lo-hi.h>
 
 #include "dmaengine.h"
 
@@ -90,6 +91,12 @@ struct chan_hw_regs {
 #define SE_BUF_BASE_MASK	GENMASK_U32(10,  2)
 #define SE_BUF_LEN_MASK		GENMASK_U32(20, 12)
 #define SE_THRESH_MASK		GENMASK_U32(31, 23)
+
+#define SWITCHTEC_LAT_SE_FETCH   BIT(0)
+#define SWITCHTEC_LAT_VDM        BIT(1)
+#define SWITCHTEC_LAT_RD_IMM     BIT(2)
+#define SWITCHTEC_LAT_FW_NP      BIT(3)
+#define SWITCHTEC_LAT_SE_PROCESS BIT(4)
 
 #define SWITCHTEC_CHAN_ENABLE	BIT(1)
 
@@ -1215,8 +1222,274 @@ static const struct attribute_group switchtec_config_group = {
 	.attrs = switchtec_config_attrs,
 };
 
+static ssize_t pmon_show(struct device *dev, char *page,
+			 u64 (*reader)(struct chan_fw_regs __iomem *chan_fw))
+{
+	struct switchtec_dma_chan *swdma_chan;
+	u64 val;
+
+	CLASS(dmaengine_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
+	swdma_chan = container_of(c, struct switchtec_dma_chan, dma_chan);
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+
+	val = reader(swdma_chan->mmio_chan_fw);
+	rcu_read_unlock();
+
+	return sysfs_emit(page, "0x%llx\n", val);
+}
+
+static u64 read_se_count(struct chan_fw_regs __iomem *chan_fw)
+{
+	return lo_hi_readq(&chan_fw->perf_fetched_se_cnt_lo);
+}
+
+static ssize_t se_count_show(struct device *dev,
+			     struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_se_count);
+}
+static DEVICE_ATTR_RO(se_count);
+
+static u64 read_byte_count(struct chan_fw_regs __iomem *chan_fw)
+{
+	return lo_hi_readq(&chan_fw->perf_byte_cnt_lo);
+}
+
+static ssize_t byte_count_show(struct device *dev,
+			       struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_byte_count);
+}
+static DEVICE_ATTR_RO(byte_count);
+
+static u64 read_se_pending(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readw(&chan_fw->perf_se_pending);
+}
+
+static ssize_t se_pending_show(struct device *dev,
+			       struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_se_pending);
+}
+static DEVICE_ATTR_RO(se_pending);
+
+static u64 read_se_buf_empty(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readw(&chan_fw->perf_se_buf_empty);
+}
+
+static ssize_t se_buf_empty_show(struct device *dev,
+				 struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_se_buf_empty);
+}
+static DEVICE_ATTR_RO(se_buf_empty);
+
+static u64 read_chan_idle(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readl(&chan_fw->perf_chan_idle);
+}
+
+static ssize_t chan_idle_show(struct device *dev,
+			      struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_chan_idle);
+}
+static DEVICE_ATTR_RO(chan_idle);
+
+static u64 read_latency_max(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readl(&chan_fw->perf_lat_max);
+}
+
+static ssize_t latency_max_show(struct device *dev,
+				struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_latency_max);
+}
+static DEVICE_ATTR_RO(latency_max);
+
+static u64 read_latency_min(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readl(&chan_fw->perf_lat_min);
+}
+
+static ssize_t latency_min_show(struct device *dev,
+				struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_latency_min);
+}
+static DEVICE_ATTR_RO(latency_min);
+
+static u64 read_latency_last(struct chan_fw_regs __iomem *chan_fw)
+{
+	return readl(&chan_fw->perf_lat_last);
+}
+
+static ssize_t latency_last_show(struct device *dev,
+				 struct device_attribute *attr, char *page)
+{
+	return pmon_show(dev, page, read_latency_last);
+}
+static DEVICE_ATTR_RO(latency_last);
+
+static ssize_t latency_selector_show(struct device *dev,
+				     struct device_attribute *attr, char *page)
+{
+	struct switchtec_dma_chan *swdma_chan;
+	struct chan_fw_regs __iomem *chan_fw;
+	u32 lat = 0;
+	int len;
+
+	CLASS(dmaengine_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
+	swdma_chan = container_of(c, struct switchtec_dma_chan, dma_chan);
+	chan_fw = swdma_chan->mmio_chan_fw;
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+
+	lat = readl(&chan_fw->perf_latency_selector);
+	rcu_read_unlock();
+
+	len = sysfs_emit(page,
+			 "To select a latency type, write the type number\n");
+	len += sysfs_emit_at(page, len, "(1 ~ 5) to latency_selector\n\n");
+
+	len += sysfs_emit_at(page, len, "Latency Types:\n");
+	len += sysfs_emit_at(page, len, "(1) SE Fetch latency");
+	if (lat & SWITCHTEC_LAT_SE_FETCH)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(2) VDM latency");
+	if (lat & SWITCHTEC_LAT_VDM)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(3) Read Immediate latency");
+	if (lat & SWITCHTEC_LAT_RD_IMM)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(4) SE Processing latency");
+	if (lat & SWITCHTEC_LAT_SE_PROCESS)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	len += sysfs_emit_at(page, len, "(5) FW NP TLP latency");
+	if (lat & SWITCHTEC_LAT_FW_NP)
+		len += sysfs_emit_at(page, len, " (*)\n");
+	else
+		len += sysfs_emit_at(page, len, "\n");
+
+	return len;
+}
+
+static ssize_t latency_selector_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *page, size_t count)
+{
+	struct switchtec_dma_chan *swdma_chan;
+	struct chan_fw_regs __iomem *chan_fw;
+	ssize_t ret = count;
+	int lat_type;
+
+	CLASS(dmaengine_chan_from_dev, c)(dev);
+
+	if (!c)
+		return -ENODEV;
+
+	swdma_chan = container_of(c, struct switchtec_dma_chan, dma_chan);
+	chan_fw = swdma_chan->mmio_chan_fw;
+
+	if (kstrtoint(page, 0, &lat_type) < 0)
+		return -EINVAL;
+
+	switch (lat_type) {
+	case 1:
+		lat_type = SWITCHTEC_LAT_SE_FETCH;
+		break;
+	case 2:
+		lat_type = SWITCHTEC_LAT_VDM;
+		break;
+	case 3:
+		lat_type = SWITCHTEC_LAT_RD_IMM;
+		break;
+	case 4:
+		lat_type = SWITCHTEC_LAT_SE_PROCESS;
+		break;
+	case 5:
+		lat_type = SWITCHTEC_LAT_FW_NP;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	rcu_read_lock();
+	if (!rcu_dereference(swdma_chan->swdma_dev->pdev)) {
+		ret = -ENODEV;
+		goto err_unlock;
+	}
+
+	spin_lock(&swdma_chan->hw_ctrl_lock);
+	if (swdma_chan->hw_cfg_locked) {
+		spin_unlock(&swdma_chan->hw_ctrl_lock);
+		ret = -EBUSY;
+		goto err_unlock;
+	}
+
+	writel(lat_type, &chan_fw->perf_latency_selector);
+	spin_unlock(&swdma_chan->hw_ctrl_lock);
+
+err_unlock:
+	rcu_read_unlock();
+
+	return ret;
+}
+static DEVICE_ATTR_RW(latency_selector);
+
+static struct attribute *switchtec_pmon_attrs[] = {
+	&dev_attr_se_count.attr,
+	&dev_attr_byte_count.attr,
+	&dev_attr_se_pending.attr,
+	&dev_attr_se_buf_empty.attr,
+	&dev_attr_chan_idle.attr,
+	&dev_attr_latency_max.attr,
+	&dev_attr_latency_min.attr,
+	&dev_attr_latency_last.attr,
+	&dev_attr_latency_selector.attr,
+	NULL,
+};
+
+static const struct attribute_group switchtec_pmon_group = {
+	.name = "switchtec-pmon",
+	.attrs = switchtec_pmon_attrs,
+};
+
 static const struct attribute_group *switchtec_groups[] = {
 	&switchtec_config_group,
+	&switchtec_pmon_group,
 	NULL,
 };
 
