@@ -161,6 +161,32 @@ static struct dma_chan *dev_to_dma_chan(struct device *dev)
 	return chan_dev->chan;
 }
 
+/**
+ * dmaengine_chan_from_dev_lock - take dma_list_mutex and convert a channel's
+ *	struct device to its dma_chan
+ * @dev: the channel's struct device, embedded in struct dma_chan_dev
+ *
+ * Returns NULL if the channel has already been unregistered. Pairs with
+ * dmaengine_chan_from_dev_unlock(); see the dmaengine_chan_from_dev CLASS in
+ * drivers/dma/dmaengine.h.
+ */
+struct dma_chan *dmaengine_chan_from_dev_lock(struct device *dev)
+{
+	mutex_lock(&dma_list_mutex);
+	return dev_to_dma_chan(dev);
+}
+EXPORT_SYMBOL_GPL(dmaengine_chan_from_dev_lock);
+
+/**
+ * dmaengine_chan_from_dev_unlock - release the channel lookup lock
+ * @chan: unused; matches the value produced by dmaengine_chan_from_dev_lock()
+ */
+void dmaengine_chan_from_dev_unlock(struct dma_chan *chan)
+{
+	mutex_unlock(&dma_list_mutex);
+}
+EXPORT_SYMBOL_GPL(dmaengine_chan_from_dev_unlock);
+
 static ssize_t memcpy_count_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
@@ -1117,6 +1143,7 @@ static int __dma_async_device_channel_register(struct dma_device *device,
 
 	dmaengine_chan_dev(chan)->class = &dma_devclass;
 	dmaengine_chan_dev(chan)->parent = device->dev;
+	dmaengine_chan_dev(chan)->groups = device->chan_groups;
 	chan->chan_dev->chan = chan;
 	chan->chan_dev->dev_id = device->dev_id;
 	spin_lock_init(&chan->lock);
