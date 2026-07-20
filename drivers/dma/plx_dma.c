@@ -104,6 +104,7 @@ struct plx_dma_dev {
 	struct dma_device dma_dev;
 	struct dma_chan dma_chan;
 	struct pci_dev __rcu *pdev;
+	int irq;
 	void __iomem *bar;
 	struct tasklet_struct desc_task;
 
@@ -452,7 +453,6 @@ static void plx_dma_free_chan_resources(struct dma_chan *chan)
 {
 	struct plx_dma_dev *plxdev = chan_to_plx_dma_dev(chan);
 	size_t ring_sz = PLX_DMA_RING_COUNT * sizeof(*plxdev->hw_ring);
-	struct pci_dev *pdev;
 	int irq = -1;
 	int i;
 
@@ -463,9 +463,8 @@ static void plx_dma_free_chan_resources(struct dma_chan *chan)
 	plx_dma_stop(plxdev);
 
 	rcu_read_lock();
-	pdev = rcu_dereference(plxdev->pdev);
-	if (pdev)
-		irq = pci_irq_vector(pdev, 0);
+	if (rcu_dereference(plxdev->pdev))
+		irq = plxdev->irq;
 	rcu_read_unlock();
 
 	if (irq > 0)
@@ -504,8 +503,9 @@ static int plx_dma_create(struct pci_dev *pdev)
 	if (!plxdev)
 		return -ENOMEM;
 
-	rc = request_irq(pci_irq_vector(pdev, 0), plx_dma_isr, 0,
-			 KBUILD_MODNAME, plxdev);
+	plxdev->irq = pci_irq_vector(pdev, 0);
+
+	rc = request_irq(plxdev->irq, plx_dma_isr, 0, KBUILD_MODNAME, plxdev);
 	if (rc)
 		goto free_plx;
 
@@ -545,7 +545,7 @@ static int plx_dma_create(struct pci_dev *pdev)
 
 put_device:
 	put_device(&pdev->dev);
-	free_irq(pci_irq_vector(pdev, 0),  plxdev);
+	free_irq(plxdev->irq, plxdev);
 free_plx:
 	kfree(plxdev);
 
@@ -594,7 +594,7 @@ static void plx_dma_remove(struct pci_dev *pdev)
 {
 	struct plx_dma_dev *plxdev = pci_get_drvdata(pdev);
 
-	free_irq(pci_irq_vector(pdev, 0),  plxdev);
+	free_irq(plxdev->irq, plxdev);
 
 	rcu_assign_pointer(plxdev->pdev, NULL);
 	synchronize_rcu();
