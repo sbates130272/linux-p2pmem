@@ -12,6 +12,7 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/pci.h>
 
 MODULE_DESCRIPTION("PLX ExpressLane PEX PCI Switch DMA Engine");
@@ -109,6 +110,14 @@ struct plx_dma_dev {
 	struct tasklet_struct desc_task;
 
 	spinlock_t ring_lock;
+	/*
+	 * Serializes prep_memcpy()/tx_submit() as one unit so descriptors
+	 * are always submitted (their valid bit set) in the same order
+	 * they were reserved in, since the hardware processes the ring
+	 * strictly in order and a reserved-but-not-yet-valid descriptor
+	 * ahead of a later valid one would stall it.
+	 */
+	struct mutex submit_lock;
 	bool ring_active;
 	int head;
 	int tail;
@@ -267,23 +276,24 @@ static void plx_dma_desc_task(struct tasklet_struct *t)
 static struct dma_async_tx_descriptor *plx_dma_prep_memcpy(struct dma_chan *c,
 		dma_addr_t dma_dst, dma_addr_t dma_src, size_t len,
 		unsigned long flags)
-	__acquires(plxdev->ring_lock)
+	__acquires(plxdev->submit_lock)
 {
 	struct plx_dma_dev *plxdev = chan_to_plx_dma_dev(c);
 	struct plx_dma_desc *plxdesc;
 
+	mutex_lock(&plxdev->submit_lock);
+
 	spin_lock_bh(&plxdev->ring_lock);
-	if (!plxdev->ring_active)
+	if (!plxdev->ring_active ||
+	    !CIRC_SPACE(plxdev->head, plxdev->tail, PLX_DMA_RING_COUNT) ||
+	    len > PLX_DESC_SIZE_MASK) {
+		spin_unlock_bh(&plxdev->ring_lock);
 		goto err_unlock;
-
-	if (!CIRC_SPACE(plxdev->head, plxdev->tail, PLX_DMA_RING_COUNT))
-		goto err_unlock;
-
-	if (len > PLX_DESC_SIZE_MASK)
-		goto err_unlock;
+	}
 
 	plxdesc = plx_dma_get_desc(plxdev, plxdev->head);
 	plxdev->head++;
+	spin_unlock_bh(&plxdev->ring_lock);
 
 	plxdesc->hw->dst_addr_lo = cpu_to_le32(lower_32_bits(dma_dst));
 	plxdesc->hw->dst_addr_hi = cpu_to_le16(upper_32_bits(dma_dst));
@@ -298,7 +308,7 @@ static struct dma_async_tx_descriptor *plx_dma_prep_memcpy(struct dma_chan *c,
 	plxdesc->hw->flags_and_size = cpu_to_le32(len);
 	plxdesc->txd.flags = flags;
 
-	/* return with the lock held, it will be released in tx_submit */
+	/* return with submit_lock held, it will be released in tx_submit */
 
 	return &plxdesc->txd;
 
@@ -307,14 +317,14 @@ err_unlock:
 	 * Keep sparse happy by restoring an even lock count on
 	 * this lock.
 	 */
-	__acquire(plxdev->ring_lock);
+	__acquire(plxdev->submit_lock);
 
-	spin_unlock_bh(&plxdev->ring_lock);
+	mutex_unlock(&plxdev->submit_lock);
 	return NULL;
 }
 
 static dma_cookie_t plx_dma_tx_submit(struct dma_async_tx_descriptor *desc)
-	__releases(plxdev->ring_lock)
+	__releases(plxdev->submit_lock)
 {
 	struct plx_dma_dev *plxdev = chan_to_plx_dma_dev(desc->chan);
 	struct plx_dma_desc *plxdesc = to_plx_desc(desc);
@@ -330,7 +340,7 @@ static dma_cookie_t plx_dma_tx_submit(struct dma_async_tx_descriptor *desc)
 
 	plxdesc->hw->flags_and_size |= cpu_to_le32(PLX_DESC_FLAG_VALID);
 
-	spin_unlock_bh(&plxdev->ring_lock);
+	mutex_unlock(&plxdev->submit_lock);
 
 	return cookie;
 }
@@ -533,6 +543,7 @@ static int plx_dma_create(struct pci_dev *pdev)
 		goto free_plx;
 
 	spin_lock_init(&plxdev->ring_lock);
+	mutex_init(&plxdev->submit_lock);
 	tasklet_setup(&plxdev->desc_task, plx_dma_desc_task);
 
 	RCU_INIT_POINTER(plxdev->pdev, pdev);
