@@ -165,11 +165,18 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
+		plxdev->tail++;
+
+		/*
+		 * Don't invoke the client callback with ring_lock held: it
+		 * may call back into this driver (e.g. to prepare and submit
+		 * a new transfer), which would deadlock on this same lock.
+		 */
+		spin_unlock_bh(&plxdev->ring_lock);
 		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
-		plxdev->tail++;
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
@@ -192,11 +199,13 @@ static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
+		plxdev->tail++;
+
+		spin_unlock_bh(&plxdev->ring_lock);
 		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
-		plxdev->tail++;
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
