@@ -404,6 +404,16 @@ free_and_exit:
 	return -ENOMEM;
 }
 
+static void plx_dma_free_desc(struct plx_dma_dev *plxdev)
+{
+	int i;
+
+	for (i = 0; i < PLX_DMA_RING_COUNT; i++)
+		kfree(plxdev->desc_ring[i]);
+
+	kfree(plxdev->desc_ring);
+}
+
 static int plx_dma_alloc_chan_resources(struct dma_chan *chan)
 {
 	struct plx_dma_dev *plxdev = chan_to_plx_dma_dev(chan);
@@ -424,7 +434,7 @@ static int plx_dma_alloc_chan_resources(struct dma_chan *chan)
 	if (!rcu_dereference(plxdev->pdev)) {
 		rcu_read_unlock();
 		rc = -ENODEV;
-		goto out_free_hw_ring;
+		goto out_free_desc;
 	}
 
 	writel(PLX_REG_CTRL_RESET_VAL, plxdev->bar + PLX_REG_CTRL);
@@ -443,6 +453,8 @@ static int plx_dma_alloc_chan_resources(struct dma_chan *chan)
 
 	return PLX_DMA_RING_COUNT;
 
+out_free_desc:
+	plx_dma_free_desc(plxdev);
 out_free_hw_ring:
 	dma_free_coherent(plxdev->dma_dev.dev, ring_sz, plxdev->hw_ring,
 			  plxdev->hw_ring_dma);
@@ -454,7 +466,6 @@ static void plx_dma_free_chan_resources(struct dma_chan *chan)
 	struct plx_dma_dev *plxdev = chan_to_plx_dma_dev(chan);
 	size_t ring_sz = PLX_DMA_RING_COUNT * sizeof(*plxdev->hw_ring);
 	int irq = -1;
-	int i;
 
 	spin_lock_bh(&plxdev->ring_lock);
 	plxdev->ring_active = false;
@@ -474,10 +485,7 @@ static void plx_dma_free_chan_resources(struct dma_chan *chan)
 
 	plx_dma_abort_desc(plxdev);
 
-	for (i = 0; i < PLX_DMA_RING_COUNT; i++)
-		kfree(plxdev->desc_ring[i]);
-
-	kfree(plxdev->desc_ring);
+	plx_dma_free_desc(plxdev);
 	dma_free_coherent(plxdev->dma_dev.dev, ring_sz, plxdev->hw_ring,
 			  plxdev->hw_ring_dma);
 
