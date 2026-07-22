@@ -134,6 +134,7 @@ static struct plx_dma_desc *plx_dma_get_desc(struct plx_dma_dev *plxdev, int i)
 
 static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 {
+	struct dmaengine_desc_callback cb;
 	struct dmaengine_result res;
 	struct plx_dma_desc *desc;
 	u32 flags;
@@ -165,11 +166,14 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
-		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
+		dmaengine_desc_get_callback(&desc->txd, &cb);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
 		plxdev->tail++;
+
+		spin_unlock_bh(&plxdev->ring_lock);
+		dmaengine_desc_callback_invoke(&cb, &res);
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
@@ -177,6 +181,7 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 
 static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 {
+	struct dmaengine_desc_callback cb;
 	struct dmaengine_result res;
 	struct plx_dma_desc *desc;
 
@@ -192,11 +197,14 @@ static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
-		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
+		dmaengine_desc_get_callback(&desc->txd, &cb);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
 		plxdev->tail++;
+
+		spin_unlock_bh(&plxdev->ring_lock);
+		dmaengine_desc_callback_invoke(&cb, &res);
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
