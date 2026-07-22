@@ -351,7 +351,7 @@ static void plx_dma_issue_pending(struct dma_chan *chan)
 	 */
 	wmb();
 
-	writew(PLX_REG_CTRL_START_VAL, plxdev->bar + PLX_REG_CTRL);
+	writel(PLX_REG_CTRL_START_VAL, plxdev->bar + PLX_REG_CTRL);
 
 	rcu_read_unlock();
 }
