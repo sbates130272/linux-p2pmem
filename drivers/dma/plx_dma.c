@@ -148,6 +148,12 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 		if (flags & PLX_DESC_FLAG_VALID)
 			break;
 
+		/*
+		 * Ensure the write-back status is read before the
+		 * completed transfer's payload.
+		 */
+		dma_rmb();
+
 		res.residue = desc->orig_size - (flags & PLX_DESC_SIZE_MASK);
 
 		if (flags & PLX_DESC_WB_SUCCESS)
