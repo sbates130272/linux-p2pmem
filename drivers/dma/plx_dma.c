@@ -108,6 +108,8 @@ struct plx_dma_dev {
 	void __iomem *bar;
 	struct tasklet_struct desc_task;
 
+	/* serializes descriptor completion and callback invocation */
+	spinlock_t complete_lock;
 	spinlock_t ring_lock;
 	bool ring_active;
 	int head;
@@ -132,11 +134,14 @@ static struct plx_dma_desc *plx_dma_get_desc(struct plx_dma_dev *plxdev, int i)
 	return plxdev->desc_ring[i & (PLX_DMA_RING_COUNT - 1)];
 }
 
-static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
+static void plx_dma_process_desc_unlocked(struct plx_dma_dev *plxdev)
 {
+	struct dmaengine_desc_callback cb;
 	struct dmaengine_result res;
 	struct plx_dma_desc *desc;
 	u32 flags;
+
+	lockdep_assert_held(&plxdev->complete_lock);
 
 	spin_lock_bh(&plxdev->ring_lock);
 
@@ -166,22 +171,35 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
-		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
+		dmaengine_desc_get_callback(&desc->txd, &cb);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
 		plxdev->tail++;
+
+		spin_unlock_bh(&plxdev->ring_lock);
+		dmaengine_desc_callback_invoke(&cb, &res);
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
 }
 
+static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
+{
+	spin_lock_bh(&plxdev->complete_lock);
+	plx_dma_process_desc_unlocked(plxdev);
+	spin_unlock_bh(&plxdev->complete_lock);
+}
+
 static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 {
+	struct dmaengine_desc_callback cb;
 	struct dmaengine_result res;
 	struct plx_dma_desc *desc;
 
-	plx_dma_process_desc(plxdev);
+	spin_lock_bh(&plxdev->complete_lock);
+
+	plx_dma_process_desc_unlocked(plxdev);
 
 	spin_lock_bh(&plxdev->ring_lock);
 
@@ -193,14 +211,18 @@ static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 
 		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
-		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
+		dmaengine_desc_get_callback(&desc->txd, &cb);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
-
 		plxdev->tail++;
+
+		spin_unlock_bh(&plxdev->ring_lock);
+		dmaengine_desc_callback_invoke(&cb, &res);
+		spin_lock_bh(&plxdev->ring_lock);
 	}
 
 	spin_unlock_bh(&plxdev->ring_lock);
+	spin_unlock_bh(&plxdev->complete_lock);
 }
 
 static void __plx_dma_stop(struct plx_dma_dev *plxdev)
@@ -337,7 +359,15 @@ static enum dma_status plx_dma_tx_status(struct dma_chan *chan,
 	if (ret == DMA_COMPLETE)
 		return ret;
 
-	plx_dma_process_desc(plxdev);
+	/*
+	 * If another context is already completing descriptors (possibly
+	 * a callback on this CPU that is polling the channel), let it
+	 * finish rather than waiting on it.
+	 */
+	if (spin_trylock_bh(&plxdev->complete_lock)) {
+		plx_dma_process_desc_unlocked(plxdev);
+		spin_unlock_bh(&plxdev->complete_lock);
+	}
 
 	return dma_cookie_status(chan, cookie, txstate);
 }
@@ -518,6 +548,7 @@ static int plx_dma_create(struct pci_dev *pdev)
 	if (!plxdev)
 		return -ENOMEM;
 
+	spin_lock_init(&plxdev->complete_lock);
 	spin_lock_init(&plxdev->ring_lock);
 	tasklet_setup(&plxdev->desc_task, plx_dma_desc_task);
 
